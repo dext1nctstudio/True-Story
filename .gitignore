@@ -6,6 +6,13 @@
 *.key
 service-account*.json
 gcp-credentials*.json
+# Google service account keys download under the project id, e.g.
+# gen-lang-client-0569749083-442d2bdcffc6.json
+gen-lang-client-*.json
+*-service-account*.json
+*credentials*.json
+secrets/
+
 
 # ── python ────────────────────────────────────────────────
 __pycache__/

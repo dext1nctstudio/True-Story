@@ -118,12 +118,29 @@ class CachedProvider(ResearchProvider):
         self.hits = 0
         self.misses = 0
 
+    def _usable(self, entry: dict[str, Any] | None) -> bool:
+        """Whether a cached entry may answer for the current mode.
+
+        Mock and live share one cache keyspace, so a single mock run seeds every
+        subject with a fixture. Because selection consults the cache before
+        anything else, those fixtures then answer every later live run for
+        nothing: no provider call, no spend, and verdicts that look real but
+        came from a fixture. A live run may only be served real provenance.
+        """
+        if entry is None:
+            return False
+        if settings.offline:
+            return True
+        return entry.get("provider") != "mock"
+
     def has(self, request: ResearchRequest) -> bool:
-        return self.backend.has(request.cache_key())
+        return self._usable(self.backend.get(request.cache_key()))
 
     async def investigate(self, request: ResearchRequest) -> Evidence:
         key = request.cache_key()
         hit = self.backend.get(key)
+        if not self._usable(hit):
+            hit = None
 
         if hit is not None:
             self.hits += 1
