@@ -182,6 +182,16 @@ class ClaimExtractor:
         source = span.context or span.surface_form
         sentences = [s.strip() for s in _split_sentences(source) if len(s.strip()) > 12]
 
+        # span.context is the surrounding scene text, not a window scoped to
+        # this entity, so without filtering, every claim-bearing span in the
+        # same scene reprocesses the identical sentences and each claim gets
+        # stamped with whichever span happened to be running, misattributing
+        # sentences to subjects that were never mentioned in them.
+        name_tokens = [t for t in span.surface_form.lower().split() if len(t) > 2]
+        if name_tokens:
+            scoped = [s for s in sentences if any(t in s.lower() for t in name_tokens)]
+            sentences = scoped or sentences[:1]
+
         claims: list[FactualClaim] = []
         for sentence in sentences[:6]:
             lowered = sentence.lower()

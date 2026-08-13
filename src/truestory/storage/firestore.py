@@ -288,7 +288,13 @@ def get_store() -> RunStore:
         _store = MemoryRunStore()
     else:
         try:
-            _store = FirestoreRunStore()
+            store = FirestoreRunStore()
+            # The client builds lazily, so construction succeeds even when the
+            # API is disabled or unreachable and the failure only lands on the
+            # first write, mid run, past this fallback. One cheap read here
+            # turns that into a clean degrade at startup.
+            next(iter(store.db.collections()), None)
+            _store = store
         except Exception as exc:  # noqa: BLE001
             log.warning("firestore unavailable, using memory store: %s", exc)
             _store = MemoryRunStore()

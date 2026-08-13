@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from truestory.agents.pipeline import ProjectConfig, RunState, TrueStoryPipeline
+from truestory.agents.report import ReportAgent
 from truestory.api.security import (
     Principal,
     apply_view,
@@ -209,6 +211,44 @@ async def create_project(
     }
 
 
+@app.get("/v1/projects/{project_id}/runs")
+async def list_runs(
+    project_id: str, principal: Principal = Depends(current_principal)
+) -> dict[str, Any]:
+    """Every run this project has seen, newest first.
+
+    There was previously no way to discover a run's id except being handed it
+    at upload time, so a run that finished while you were away from that URL
+    was effectively lost. `_RUNS` is in memory only, so this list is also
+    reset by every API restart, same as everything else in it.
+    """
+    _require_project(principal, project_id)
+    rows = [
+        {
+            "run_id": state.run_id,
+            "status": str(state.status),
+            "script_title": state.document.title if state.document else None,
+            "started_at": state.started_at.isoformat(),
+            "verdicts": (
+                {
+                    "green": state.summary.green,
+                    "amber": state.summary.amber,
+                    "red": state.summary.red,
+                    "grey": state.summary.grey,
+                }
+                if state.summary
+                else None
+            ),
+            "cost_usd": (state.summary.cost_cents / 100) if state.summary else None,
+            "error": state.error,
+        }
+        for state in _RUNS.values()
+        if state.project_id == project_id
+    ]
+    rows.sort(key=lambda r: r["started_at"], reverse=True)
+    return {"runs": rows}
+
+
 @app.get("/v1/projects/{project_id}/monitors")
 async def list_monitors(
     project_id: str, principal: Principal = Depends(current_principal)
@@ -262,17 +302,34 @@ async def upload_run(
     draft_version: str = "v1",
     principal: Principal = Depends(current_principal),
 ) -> dict[str, Any]:
-    """The drag and drop path. Accepts fdx, fountain, pdf and plain text."""
+    """The drag and drop path. Accepts fdx, fountain, pdf and plain text.
+
+    `_read_source` in the ingest agent routes on a file suffix, and the fdx
+    branch only strips FDX markup for that same suffix. Decoding straight to
+    UTF-8 text here loses both: a PDF's bytes are corrupted before pypdf ever
+    sees them, and an uploaded .fdx never gets its markup stripped, because
+    neither reaches ingest as a path with the original extension. A temp file
+    with the real suffix restores the same routing a CLI run gets for free.
+    """
     _require_project(principal, project_id)
 
     raw = await file.read()
-    text = raw.decode("utf-8", errors="replace")
+    suffix = Path(file.filename or "").suffix.lower()
 
     config = _PROJECTS.get(project_id) or ProjectConfig(project_id=project_id)
     run_id = f"run_{uuid.uuid4().hex[:16]}"
     _STREAMS[run_id] = asyncio.Queue()
 
-    background.add_task(_execute_run, config, run_id, text, draft_version, None)
+    source: Path | str
+    if suffix in {".pdf", ".fdx"}:
+        tmp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)  # noqa: SIM115
+        tmp.write(raw)
+        tmp.close()
+        source = Path(tmp.name)
+    else:
+        source = raw.decode("utf-8", errors="replace")
+
+    background.add_task(_execute_run, config, run_id, source, draft_version, None)
 
     return {
         "run_id": run_id,
@@ -285,7 +342,7 @@ async def upload_run(
 async def _execute_run(
     config: ProjectConfig,
     run_id: str,
-    source: str,
+    source: Path | str,
     draft_version: str,
     parent_run_id: str | None,
 ) -> None:
@@ -295,10 +352,21 @@ async def _execute_run(
         if queue is not None:
             await queue.put(payload)
 
+    def on_state(state: Any) -> None:
+        # Register as soon as ingest lands so the overlay, claims and counters
+        # are readable while the run is still going. Registering only on
+        # completion made every read 404 for the whole run, which the UI could
+        # not tell apart from a backend that was down.
+        _RUNS[run_id] = state
+
     pipeline = TrueStoryPipeline(config, on_progress=on_progress)
     try:
         state = await pipeline.run(
-            source, draft_version=draft_version, parent_run_id=parent_run_id, run_id=run_id
+            source,
+            draft_version=draft_version,
+            parent_run_id=parent_run_id,
+            run_id=run_id,
+            on_state=on_state,
         )
         _RUNS[run_id] = state
         get_store().create_run(config.project_id, run_id, state.to_dict())
@@ -309,6 +377,8 @@ async def _execute_run(
     finally:
         if queue is not None:
             await queue.put({"event": "stream_end"})
+        if isinstance(source, Path):
+            source.unlink(missing_ok=True)
 
 
 @app.get("/v1/runs/{run_id}")
@@ -370,6 +440,11 @@ async def get_overlay(
     if not can(principal, "overlay"):
         raise HTTPException(status_code=403, detail="role may not view the overlay")
     overlay = state.artifacts.get("report", {}).get("overlay", {})
+    if not overlay and state.document is not None:
+        # The report artifact only exists at stage 8. Build the overlay from
+        # current state so a run in flight renders the script and lights lines
+        # up as verdicts land, rather than returning {} for its whole duration.
+        overlay = ReportAgent().verdict_overlay(state.document, state.claims, state.elements)
     return apply_view(overlay, principal)
 
 
@@ -386,6 +461,20 @@ async def get_claims(
         if verdict is None or str(c.verdict) == verdict
     ]
     return apply_view({"claims": claims, "total": len(claims)}, principal)
+
+
+@app.get("/v1/runs/{run_id}/remedies")
+async def get_remedies(
+    run_id: str, principal: Principal = Depends(current_principal)
+) -> dict[str, Any]:
+    """Proposed rewrites, each re verified against the record before listing.
+
+    `apply_remedy` was the only remedy endpoint, so the frontend had a claim's
+    `remedy_id` and no way to fetch what that id actually proposed.
+    """
+    state = _state_or_404(run_id, principal)
+    remedies = [r.to_dict() for r in state.remedies]
+    return apply_view({"remedies": remedies, "total": len(remedies)}, principal)
 
 
 @app.get("/v1/runs/{run_id}/elements")

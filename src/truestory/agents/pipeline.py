@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from datetime import UTC, datetime
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -63,6 +64,9 @@ class RunState:
     run_id: str
     project_id: str
     status: RunStatus = RunStatus.QUEUED
+    # Nothing on this dataclass previously recorded when a run started, so a
+    # project level run list had no way to order or timestamp its rows.
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     document: ScriptDocument | None = None
     spans: list[Any] = field(default_factory=list)
@@ -159,6 +163,7 @@ class TrueStoryPipeline:
         draft_version: str = "v1",
         parent_run_id: str | None = None,
         run_id: str | None = None,
+        on_state: Callable[[RunState], None] | None = None,
     ) -> RunState:
         state = RunState(
             run_id=run_id or f"run_{uuid.uuid4().hex[:16]}",
@@ -169,6 +174,12 @@ class TrueStoryPipeline:
 
         try:
             await self._stage_ingest(state, source, draft_version)
+            # Publish the state object the moment there is a script to show.
+            # Every later stage mutates this same instance, so a caller that
+            # holds it can serve the overlay while the run is still going
+            # rather than after it ends.
+            if on_state is not None:
+                on_state(state)
             await self._stage_claims(state)
             await self._stage_ledger(state)
             await self._stage_route(state)

@@ -199,6 +199,16 @@ export interface BudgetSnapshot {
   warnings: string[];
 }
 
+export interface RunListItem {
+  run_id: string;
+  status: string;
+  script_title: string | null;
+  started_at: string;
+  verdicts: { green: number; amber: number; red: number; grey: number } | null;
+  cost_usd: number | null;
+  error: string | null;
+}
+
 export interface RunSummary {
   run_id: string;
   script_title: string;

@@ -128,9 +128,53 @@ class ParallelTaskProvider(ResearchProvider):
         # Deep processors may return a handle rather than a result. The webhook
         # receiver completes the record when the callback lands.
         if body.get("status") in {"queued", "running"} and "run_id" in body:
-            return self._pending(request, body["run_id"], timing["latency_ms"])
+            # ...but only if a callback can actually reach us. Every processor
+            # answers 202/queued, so without a reachable webhook the whole
+            # swarm parks on pending, reports a 100% failure rate and $0 spend,
+            # and the report comes out empty. Collect the result inline instead.
+            if self._webhook_reachable():
+                return self._pending(request, body["run_id"], timing["latency_ms"])
+            return await self._await_result(request, body["run_id"], timing["latency_ms"])
 
         return self.to_evidence(request, body, timing["latency_ms"])
+
+    @staticmethod
+    def _webhook_reachable() -> bool:
+        """A callback URL that is absent, a placeholder, or local is no callback."""
+        url = settings.parallel_webhook_url
+        if not url or "PLACEHOLDER" in url:
+            return False
+        return not any(host in url for host in ("localhost", "127.0.0.1"))
+
+    async def _await_result(
+        self, request: ResearchRequest, run_id: str, dispatch_ms: int
+    ) -> Evidence:
+        """Block on Parallel's result endpoint, which long polls server side."""
+        try:
+            resp = await self._http().get(
+                f"/v1/tasks/runs/{run_id}/result",
+                params={"timeout": int(settings.parallel_timeout_seconds)},
+                timeout=settings.parallel_timeout_seconds + 15,
+            )
+            if resp.status_code >= 400:
+                return Evidence.failed(
+                    request.subject_id,
+                    request.question,
+                    self._qualified_name(request.processor),
+                    f"result HTTP {resp.status_code}: {resp.text[:200]}",
+                )
+            return self.to_evidence(request, resp.json(), dispatch_ms)
+        except httpx.TimeoutException:
+            # Still running at the deadline: hand back the handle so the webhook
+            # path can finish it if one is ever configured.
+            return self._pending(request, run_id, dispatch_ms)
+        except Exception as exc:  # noqa: BLE001 - one subject, not the run
+            return Evidence.failed(
+                request.subject_id,
+                request.question,
+                self._qualified_name(request.processor),
+                f"result fetch failed: {type(exc).__name__}: {exc}",
+            )
 
     # ── payload ──────────────────────────────────────────────────────────────
     def _build_payload(self, request: ResearchRequest, processor: str) -> dict[str, Any]:
@@ -143,11 +187,13 @@ class ParallelTaskProvider(ResearchProvider):
                     "json_schema": request.output_schema,
                 }
             },
+            # Parallel validates metadata values as scalars, so a list here is
+            # a 422 for every subject in the swarm rather than a bad field.
             "metadata": {
                 "subject_id": request.subject_id,
                 "schema": request.schema_name,
                 "tier": str(request.tier),
-                "jurisdictions": list(request.jurisdictions),
+                "jurisdictions": ",".join(request.jurisdictions),
                 "env": settings.env_name,
             },
         }
