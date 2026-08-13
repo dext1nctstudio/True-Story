@@ -1,0 +1,328 @@
+# =============================================================================
+# THE LITIGATION SET
+# =============================================================================
+# Reconstructed published disputes, run blind through the pipeline.
+#
+# The eval is retrospective only. Every case here is a matter of public record,
+# already litigated and already reported. Nothing in this file speculates about
+# a pending matter, and nothing here concerns a private individual.
+#
+# The defence side cases matter as much as the plaintiff side ones. A system
+# that flags everything is useless, so correctly returning CLEAR or
+# CLEAR_WITH_CONDITIONS on expressive use that a court went on to protect is
+# scored exactly as heavily as catching the failures. That is the difference
+# between a clearance engine and a paranoia engine.
+#
+# HOW TO USE
+#   1. Each case carries a `reconstruction`: the offending element or claim as
+#      it appeared, embedded in a neutral scene we wrote.
+#   2. The pipeline runs over the reconstruction with no knowledge of the case.
+#   3. We record whether the specific item at issue was flagged, at what tier,
+#      with what verdict, and whether the evidence supports the correct call.
+#
+# WARNING
+#   Every factual field below must be confirmed against a primary source before
+#   it appears in a deliverable or on camera. Fields marked `verify: required`
+#   have not been confirmed in this repository. See the README TODO, item 9.
+# =============================================================================
+
+version: 1
+updated: "2026-08-12"
+
+scoring:
+  # A case is correct when the item at issue was flagged at the expected tier
+  # AND the verdict matches AND the evidence actually supports that call.
+  # Flagging the right line for the wrong reason is not a pass.
+  require_tier_match: true
+  require_verdict_match: true
+  require_evidence_support: true
+  partial_credit: false
+
+# =============================================================================
+# plaintiff side, the failures
+# =============================================================================
+
+cases:
+  - id: LS-001
+    name: "Unverified biographical claim in a single line of dialogue"
+    failure_mode: "A false factual claim about a real, living, named person."
+    subsystem_justified: "ClaimExtractor plus claim verification routing"
+    verify: required
+
+    reconstruction:
+      kind: claim
+      subject: "a real chess grandmaster active in the late 1960s"
+      claim_text: "She has never faced men."
+      polarity: negative
+      subject_alive: true
+      scene_context: |
+        A televised match. Two commentators talk over the board while the
+        players settle. The line is delivered as background colour.
+
+    expected:
+      flagged: true
+      tier: CRITICAL
+      verdict: CONTRADICTED
+      element_type: REAL_PERSON_DEPICTED
+      counsel_required: true
+
+    why_this_is_the_perfect_test: |
+      It is one line. It demonstrates the granularity of the system in a few
+      seconds, and any reader immediately grasps that a human reviewer could
+      plausibly miss what a machine checking every claim would not.
+
+  - id: LS-002
+    name: "Identifiable without being named"
+    failure_mode: >
+      A real person made identifiable through an attribute cluster, compounded
+      by a truth claim framing at the head of the production.
+    subsystem_justified: "REAL_PERSON_IDENTIFIABLE composite detector plus FindAll enumeration"
+    verify: required
+
+    reconstruction:
+      kind: element
+      element_type: REAL_PERSON_IDENTIFIABLE
+      attributes:
+        - "a woman in her late forties"
+        - "trained as a solicitor"
+        - "living in a named London borough"
+        - "known to have contacted a named public figure repeatedly"
+      named: false
+      project_truth_claim_framing: true
+      scene_context: |
+        The character appears across several scenes and is never named. The
+        production opens with a card asserting the story is true.
+
+    expected:
+      flagged: true
+      tier: CRITICAL
+      status: NEEDS_COUNSEL
+      identifiability_risk: high
+      counsel_required: true
+
+    the_sharp_lesson: |
+      The character was never named and it did not help. Identifiability, not
+      naming, is the legal trigger. Profession plus city plus description plus
+      relationship in combination is what resolves to a real person, and an
+      audience assembles that cluster within days of release.
+
+  - id: LS-003
+    name: "Unsupported conduct attributed to a named living person"
+    failure_mode: >
+      Not one provably false line, but a density of specific conduct claims the
+      record cannot support.
+    subsystem_justified: "Amber density rule, the person level escalation"
+    verify: required
+
+    reconstruction:
+      kind: person_rollup
+      subject: "a former prosecutor, living, a limited purpose public figure"
+      claims:
+        - text: "She ordered the interrogations to continue overnight."
+          polarity: negative
+          expected_verdict: UNSUPPORTED
+        - text: "She personally directed that the suspects be separated."
+          polarity: negative
+          expected_verdict: UNSUPPORTED
+        - text: "She said the case would make her career."
+          polarity: negative
+          claim_type: QUOTE
+          expected_verdict: UNSUPPORTED
+        - text: "She was the lead prosecutor on the case."
+          polarity: neutral
+          expected_verdict: VERIFIED
+
+    expected:
+      flagged: true
+      person_escalated: true
+      amber_density_exceeds_threshold: true
+      counsel_required: true
+
+    why_amber_matters: |
+      This is the category that settles. Not provably false, and therefore not
+      defensible either. A production can defend a true statement and can cut a
+      false one. It can do neither with a scene the record simply cannot speak
+      to, which is why density per named living person is itself a finding.
+
+  - id: LS-004
+    name: "Time boxed music licence lapsing after delivery"
+    failure_mode: "Rights that expired quietly, years after the report was filed."
+    subsystem_justified: "Monitor subsystem, and the subscription business model"
+    verify: required
+
+    reconstruction:
+      kind: element
+      element_type: MUSIC_CUE
+      title: "a licensed popular recording of the late 1970s"
+      licence_term_years: 10
+      scene_context: |
+        The cue plays under a scene. It was licensed for a limited term before
+        home video existed as a distribution channel.
+
+    expected:
+      flagged: true
+      tier: HIGH
+      status: NEEDS_LICENSE
+      monitor_created: true
+      monitor_reason_mentions_expiry: true
+
+    the_lesson: |
+      A clearance report is a photograph. Rights are a film. A series went out
+      in syndication with substituted music for three decades because nobody
+      was watching an expiry date that arrived after everyone had moved on.
+
+# =============================================================================
+# defence side, the cases the studios won
+# =============================================================================
+# These are scored just as heavily. Returning NOT_CLEAR on expressive use that
+# a court protected is a false positive, and a clearance tool that produces
+# them is one that productions learn to ignore.
+
+  - id: LS-101
+    name: "Expressive use of a real trade mark in a comedic scene"
+    failure_mode: null
+    outcome: "Studio prevailed. Artistic relevance, not explicitly misleading."
+    subsystem_justified: "trademark_v1 use assessment, the second limb"
+    verify: required
+
+    reconstruction:
+      kind: element
+      element_type: TRADEMARK_LOGO
+      mark: "a luxury goods brand referenced in dialogue"
+      depiction: "a character mispronounces the brand name as a joke"
+      prominence: featured
+
+    expected:
+      flagged: true
+      status: CLEAR_WITH_CONDITIONS
+      not_status: NOT_CLEAR
+      conditions_present: true
+
+    why_this_scores_equally: |
+      The correct answer is a qualified clear, not a block. A system that
+      cannot distinguish protected expressive use from infringement generates
+      noise that a production learns to ignore, and then it misses the one
+      that mattered.
+
+  - id: LS-102
+    name: "Composite character with a fictitious name"
+    failure_mode: null
+    outcome: >
+      Studio prevailed. The court cited the production's clearance practice,
+      composite characters given fictitious names, as appropriate steps taken
+      so that no one would be defamed.
+    subsystem_justified: "person_collision_v1 and the rename remedy"
+    verify: required
+
+    reconstruction:
+      kind: element
+      element_type: PERSON_NAME_FICTIONAL
+      name: "an invented surname given to a composite of several real colleagues"
+      occurrence_count: 12
+      character_conduct_negative: true
+
+    expected:
+      flagged: true
+      tier: HIGH
+      status: CLEAR_WITH_CONDITIONS
+      collision_risk_low: true
+
+    why_this_case_matters_most: |
+      This is the case that proves clearance works as a legal defence. The
+      court did not merely find for the studio, it pointed at the clearance
+      practice as the reason. That is the product's entire value proposition
+      stated by a court rather than by a vendor.
+
+  - id: LS-103
+    name: "Transformative portrayal of a real public figure"
+    failure_mode: null
+    outcome: "Portrayal held transformative and protected. Anti SLAPP relief granted."
+    subsystem_justified: "real_person_v2 public figure status, and the CLEAR path"
+    verify: required
+
+    reconstruction:
+      kind: element
+      element_type: REAL_PERSON_DEPICTED
+      subject: "a deceased film star, a public figure, portrayed in a docudrama"
+      depiction: "sympathetic, invented dialogue consistent with the documented record"
+
+    expected:
+      flagged: true
+      tier: CRITICAL
+      status: CLEAR_WITH_CONDITIONS
+      public_figure_status: public
+
+  - id: LS-104
+    name: "Protected expressive use of a real person's professional identity"
+    failure_mode: null
+    outcome: "Dismissal affirmed under anti SLAPP. The film was protected expressive speech."
+    subsystem_justified: "The CLEAR path for public interest expressive works"
+    verify: required
+
+    reconstruction:
+      kind: element
+      element_type: REAL_PERSON_IDENTIFIABLE
+      attributes:
+        - "a military specialist in a widely reported theatre of operations"
+        - "a role described in published journalism"
+      depiction: "fictionalised, drawn from published reporting"
+
+    expected:
+      flagged: true
+      status: CLEAR_WITH_CONDITIONS
+      not_status: NOT_CLEAR
+
+# =============================================================================
+# visual copyright pair
+# =============================================================================
+
+  - id: LS-201
+    name: "Replica of a copyrighted tattoo on a performer"
+    failure_mode: "Visible copyrighted artwork on a person, cleared by nobody."
+    outcome: >
+      Preliminary injunction denied but the defences were criticised from the
+      bench, and the matter settled within weeks. The production came close to
+      an injunction against a very large release.
+    subsystem_justified: "visual_copyright_v1 and the CRITICAL routing of TATTOO"
+    verify: required
+
+    reconstruction:
+      kind: element
+      element_type: TATTOO
+      description: "a distinctive facial tattoo replicated on a lead performer"
+      creator_known: true
+
+    expected:
+      flagged: true
+      tier: CRITICAL
+      status: NEEDS_LICENSE
+      recommendation_in:
+        - obtain_license
+        - replace_with_original_artwork
+        - digitally_alter
+
+  - id: LS-202
+    name: "Background artwork visible for seconds"
+    failure_mode: "Set dressing treated as an art department note rather than a rights question."
+    outcome: "Held not de minimis despite brief background appearance."
+    subsystem_justified: "ARTWORK_VISUAL on the CRITICAL path"
+    verify: required
+
+    reconstruction:
+      kind: element
+      element_type: ARTWORK_VISUAL
+      description: "a poster of a distinctive contemporary artwork on a set wall"
+      duration_seconds: 6
+      prominence: incidental_background
+
+    expected:
+      flagged: true
+      tier: CRITICAL
+      status_in: [NEEDS_LICENSE, NOT_CLEAR]
+      de_minimis_not_assumed: true
+
+    the_calibration_point: |
+      The system must not assume that brief visibility settles the question.
+      Courts have declined the de minimis defence on background artwork on
+      screen for a handful of seconds, so the correct behaviour is to flag and
+      let counsel decide, not to reason its way to a clear.

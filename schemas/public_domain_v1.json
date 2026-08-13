@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truestory.dev/schemas/public_domain_v1.json",
+  "title": "public_domain_v1",
+  "description": "Underlying source material. Whether the book, article, memoir, court transcript or archival document a production is adapting is free to use, licensed, or a chain of title problem. E&O carriers require a chain of title opinion and this is the research that feeds it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status"],
+  "properties": {
+    "work_title": { "type": ["string", "null"] },
+    "author": { "type": ["string", "null"] },
+    "first_publication_year": { "type": ["integer", "null"] },
+    "first_publication_country": { "type": ["string", "null"] },
+
+    "status": {
+      "type": "string",
+      "enum": ["public_domain", "in_copyright", "partially_public_domain", "disputed", "unknown"],
+      "description": "Partially public domain is common and dangerous: an early edition may be free while a later revision, translation or annotated edition is not."
+    },
+    "public_domain_in": {
+      "type": "array",
+      "description": "Territories where the work is free. Term rules differ enough that a US public domain work can be encumbered in Europe.",
+      "items": { "type": "string" }
+    },
+    "in_copyright_in": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "term_basis": {
+      "type": ["string", "null"],
+      "description": "Which rule produced the term. Life plus a period, a fixed publication term, a restored foreign copyright, and so on."
+    },
+
+    "rights_holder": { "type": ["string", "null"] },
+    "rights_contact": { "type": ["string", "null"] },
+
+    "derivative_layers": {
+      "type": "array",
+      "description": "Translations, illustrations, annotations, and later editions each carry their own term and their own holder. Missing a layer is a classic chain of title defect.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["layer"],
+        "properties": {
+          "layer": { "type": "string" },
+          "holder": { "type": ["string", "null"] },
+          "status": {
+            "type": ["string", "null"],
+            "enum": ["public_domain", "in_copyright", "unknown", null]
+          }
+        }
+      }
+    },
+
+    "registration_records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url"],
+        "properties": {
+          "registration_number": { "type": ["string", "null"] },
+          "url": { "type": "string", "format": "uri" },
+          "date": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "renewal_checked": {
+      "type": ["boolean", "null"],
+      "description": "For works of the renewal era, non renewal is what put a great many of them into the public domain, and the registry is the only place that answer lives."
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "title": { "type": ["string", "null"] },
+          "excerpt": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

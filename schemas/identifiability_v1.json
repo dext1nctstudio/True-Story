@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truestory.dev/schemas/identifiability_v1.json",
+  "title": "identifiability_v1",
+  "description": "The Baby Reindeer schema. A character is never named and viewers identify the real person within days anyway, from profession plus city plus physical description plus relationship. Identifiability, not naming, is the legal trigger, so this schema asks whether the attribute cluster in the script resolves to a locatable real person and how much work that took.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["identifiable", "matching_persons", "identifiability_risk"],
+  "properties": {
+    "identifiable": {
+      "type": "boolean",
+      "description": "Whether ordinary research resolves this cluster to one or a small number of real people."
+    },
+    "attribute_cluster": {
+      "type": "array",
+      "description": "The attributes taken from the script that were used to search. Echoed back so a reviewer can see exactly what the search was.",
+      "items": { "type": "string" }
+    },
+    "discriminating_attributes": {
+      "type": "array",
+      "description": "Which attributes actually narrowed the field. A rare profession in a named small city does almost all the work, and knowing which attribute is load bearing tells the writer exactly what to change.",
+      "items": { "type": "string" }
+    },
+    "matching_persons": {
+      "type": "array",
+      "description": "Real people the cluster resolves to. Rendered masked by default. Only counsel sees these unmasked, and the reveal is audited.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["match_strength"],
+        "properties": {
+          "name": { "type": ["string", "null"] },
+          "profession": { "type": ["string", "null"] },
+          "city": { "type": ["string", "null"] },
+          "alive": { "type": ["boolean", "null"] },
+          "public_figure_status": {
+            "type": ["string", "null"],
+            "enum": ["public", "limited_purpose", "private", "unknown", null]
+          },
+          "match_strength": {
+            "type": "string",
+            "enum": ["exact", "strong", "partial", "weak"]
+          },
+          "matched_on": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "source_url": { "type": ["string", "null"], "format": "uri" }
+        }
+      }
+    },
+    "search_effort": {
+      "type": ["string", "null"],
+      "enum": ["trivial", "moderate", "extensive", null],
+      "description": "How hard the identification was. Trivial identification is the dangerous answer: if a researcher found them in one query, so will an audience, and so will their lawyer."
+    },
+    "identifiability_risk": {
+      "type": "string",
+      "enum": ["none", "low", "medium", "high"]
+    },
+    "recommended_action": {
+      "type": ["string", "null"],
+      "enum": [
+        "clear",
+        "alter_discriminating_attributes",
+        "composite_character",
+        "obtain_release",
+        "counsel_review",
+        null
+      ],
+      "description": "Altering the discriminating attribute is usually cheaper than every other option and costs the script almost nothing."
+    },
+    "notes": { "type": ["string", "null"] }
+  }
+}

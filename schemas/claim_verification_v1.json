@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truestory.dev/schemas/claim_verification_v1.json",
+  "title": "claim_verification_v1",
+  "description": "The TRUE STORY workhorse. One atomic factual claim about a real person or event, checked against the public record. This schema is passed to Parallel Task as the output specification, which is why the verdict comes back with its supporting and contradicting facts already separated rather than blended into prose that the Adjudicator would have to re parse.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "claim_restated",
+    "verdict",
+    "supporting_facts",
+    "contradicting_facts",
+    "record_quality"
+  ],
+  "properties": {
+    "claim_restated": {
+      "type": "string",
+      "description": "The claim as the researcher understood it. A mismatch against the submitted claim text is itself a signal and is checked by the Adjudicator."
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["supported", "contradicted", "no_record", "not_a_factual_claim"],
+      "description": "Note that no_record is distinct from contradicted. Unsupported is not false, and collapsing the two is the exact error this product exists to prevent."
+    },
+    "supporting_facts": {
+      "type": "array",
+      "description": "Facts on the record that support the claim as stated.",
+      "items": { "$ref": "#/$defs/fact" }
+    },
+    "contradicting_facts": {
+      "type": "array",
+      "description": "Facts on the record that contradict the claim. A contradicted verdict requires at least one primary source here.",
+      "items": { "$ref": "#/$defs/fact" }
+    },
+    "subject_alive": {
+      "type": ["boolean", "null"],
+      "description": "Whether the subject is living. Drives the escalation cocktail rule in routing.yaml."
+    },
+    "subject_public_figure_status": {
+      "type": "string",
+      "enum": ["public", "limited_purpose", "private", "unknown"],
+      "description": "Determines the applicable defamation standard and whether the subject is masked by default."
+    },
+    "record_quality": {
+      "type": "string",
+      "enum": ["strong", "moderate", "thin"],
+      "description": "How well documented this subject is overall. A thin record makes no_record much weaker evidence of anything."
+    },
+    "temporal_scope": {
+      "type": ["string", "null"],
+      "description": "The period the claim concerns, when the claim is time bounded. A claim true in 1975 and false in 1968 is a different claim."
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "description": "Anything a human reviewer should know that does not fit the fields above."
+    }
+  },
+  "$defs": {
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fact", "source_url", "source_type"],
+      "properties": {
+        "fact": {
+          "type": "string",
+          "description": "One specific finding, stated plainly."
+        },
+        "source_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "source_type": {
+          "type": "string",
+          "enum": ["primary", "secondary", "tertiary"],
+          "description": "Primary means a record, a docket, a register, a contemporaneous document. A news article about a record is secondary."
+        },
+        "date": {
+          "type": ["string", "null"],
+          "description": "Publication or record date, ISO 8601 where known."
+        },
+        "excerpt": {
+          "type": ["string", "null"],
+          "description": "The passage relied on, quoted. This lands verbatim in the evidence appendix."
+        },
+        "publisher": {
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,244 @@
+# =============================================================================
+# TRUE STORY  ·  risk routing policy
+# =============================================================================
+# This file is the RiskRouter. There is no model in the routing path at all.
+#
+# Principle P1, determinism over discretion: the brief asks for a deterministic
+# multi step agent, and a legal product cannot have a language model
+# improvising control flow. Every subject in the script is matched against the
+# rules below in order, first match wins, and the result is a tier, a
+# processor, an output schema, and a list of side effects. Auditable, testable,
+# and explainable to a judge in one sentence.
+#
+# Rules are evaluated top to bottom. Put the specific ones first.
+# =============================================================================
+
+version: 1
+updated: "2026-08-12"
+
+defaults:
+  provider: parallel_task
+  processor: lite
+  tier: MEDIUM
+  schema: entity_v1
+
+# -----------------------------------------------------------------------------
+# rules
+# -----------------------------------------------------------------------------
+rules:
+
+  # ══ claims, the TRUE STORY core ═════════════════════════════════════════
+  # A negative assertion about a living person is the shape of every one of
+  # the three marquee lawsuits. It gets the deepest processor available and it
+  # cannot leave the pipeline green without a human confirming it.
+  - id: claim_negative_living
+    match: { kind: claim, polarity: negative, subject_alive: true }
+    tier: CRITICAL
+    processor: core
+    schema: claim_verification_v1
+    post: { if_not_verified: NEEDS_COUNSEL }
+    note: "Queen's Gambit, Baby Reindeer and Fairstein are all this rule."
+
+  # A quotation is a different research question from a fact. It has an
+  # earliest documented source or it does not, and misattribution is rampant.
+  - id: claim_quote
+    match: { kind: claim, type: QUOTE }
+    tier: HIGH
+    processor: base
+    schema: quote_attribution_v1
+
+  # Opinion is protected speech. Never research it, never colour it, never
+  # spend on it. This single rule removes roughly a fifth of the claim volume
+  # on a character driven script.
+  - id: claim_opinion
+    match: { kind: claim, type: CHARACTERIZATION }
+    tier: NONE
+    provider: none
+    note: "Defamation law protects opinion. Domain knowledge as a budget control."
+
+  - id: claim_default
+    match: { kind: claim }
+    tier: HIGH
+    processor: base
+    schema: claim_verification_v1
+
+  # ══ elements, the COVERAGE core ═════════════════════════════════════════
+  - id: real_person_depicted
+    match: { type: REAL_PERSON_DEPICTED }
+    tier: CRITICAL
+    processor: core
+    schema: real_person_v2
+    also: [findall_similar_persons, monitor]
+
+  # The Baby Reindeer rule. No name required. FindAll enumerates the real
+  # people who match the attribute cluster in the relevant territories.
+  - id: real_person_identifiable
+    match: { type: REAL_PERSON_IDENTIFIABLE }
+    tier: CRITICAL
+    processor: core
+    schema: identifiability_v1
+    also: [findall_matching_persons]
+    note: "The character was never named and it did not help. Identifiability is the trigger."
+
+  # Two separate rights per cue, composition and master, and both are time
+  # boxed. The monitor is not optional here.
+  - id: music_cue
+    match: { type: MUSIC_CUE }
+    tier: HIGH
+    processor: base
+    schema: music_rights_v1
+    also: [monitor]
+    note: "WKRP. Licences expire quietly, years after the report is filed."
+
+  - id: marks
+    match: { type: [BUSINESS_NAME, TRADEMARK_LOGO, BRAND_PRODUCT] }
+    tier: HIGH
+    processor: base
+    schema: trademark_v1
+    also: [findall_registered_entities, monitor]
+
+  # Whitmill came within days of enjoining a half billion dollar release over
+  # a tattoo, and Ringgold found a poster visible for seconds was not de
+  # minimis. Visible artwork is a CRITICAL path, not a set dressing note.
+  - id: visual_copyright
+    match: { type: [ARTWORK_VISUAL, TATTOO, FILM_CLIP] }
+    tier: CRITICAL
+    processor: core
+    schema: visual_copyright_v1
+    also: [extract_evidence_page]
+
+  - id: source_material
+    match: { type: SOURCE_MATERIAL }
+    tier: HIGH
+    processor: base
+    schema: public_domain_v1
+
+  # A depicted real event carries factual claims of its own, independent of any
+  # person. It is researched as an entity here, and the assertions made about
+  # it are decomposed and routed separately through the claim rules above.
+  - id: real_event
+    match: { type: REAL_EVENT }
+    tier: HIGH
+    processor: base
+    schema: claim_verification_v1
+    also: [monitor]
+
+  # A fictional name repeated through the script is a name an audience will
+  # search. Above five occurrences it is treated as a lead character.
+  - id: fictional_name_recurring
+    match: { type: PERSON_NAME_FICTIONAL, occurrence_count: { gte: 5 } }
+    tier: HIGH
+    processor: base
+    schema: person_collision_v1
+    also: [findall_registered_entities]
+
+  - id: fictional_name
+    match: { type: PERSON_NAME_FICTIONAL }
+    tier: MEDIUM
+    processor: lite
+    schema: person_collision_v1
+
+  - id: places_and_orgs
+    match: { type: [REAL_LOCATION, ORGANIZATION, STREET_ADDRESS] }
+    tier: MEDIUM
+    processor: lite
+    schema: entity_v1
+
+  - id: defamatory_reference
+    match: { type: [DEFAMATORY_REF, TRADE_LIBEL] }
+    tier: CRITICAL
+    processor: core
+    schema: claim_verification_v1
+    post: { if_not_verified: NEEDS_COUNSEL }
+
+  # The 555 convention and its equivalents. Rules, not research. Zero spend.
+  - id: deterministic
+    match: { type: [PHONE_NUMBER, VEHICLE_PLATE, URL_HANDLE] }
+    tier: LOW
+    provider: deterministic_rules
+
+  # ══ roadmap, AI provenance layer ════════════════════════════════════════
+  # Inert until the taxonomy ships. Present so the routing shape is settled.
+  - id: ai_asset
+    match: { type: [AI_GENERATED_ASSET, DIGITAL_REPLICA] }
+    tier: CRITICAL
+    processor: core
+    schema: ai_provenance_v1
+    enabled: false
+    note: "Roadmap. Training data provenance and consent instrument capture."
+
+# -----------------------------------------------------------------------------
+# escalations
+# -----------------------------------------------------------------------------
+# One line of configuration implementing a doctrine that two federal courts
+# applied. A production that says "this is a true story" changes the legal
+# standard applied to every line about a real person, because the framing
+# itself became evidence bearing on reckless disregard. That is a computable,
+# project level rule and this is it.
+escalations:
+  truth_claim_framing:
+    when: "project.truth_claim_framing == true"
+    action: escalate_tier
+    steps: 1
+    applies_to: person_adjacent
+    note: "Baby Reindeer, C.D. Cal. 2024. Also weighed in Queen's Gambit."
+
+  living_private_individual:
+    when: "subject.public_figure_status == 'private' and subject.alive == true"
+    action: mask
+    note: "Privacy by default. Stored, not displayed. Reveal is role gated and audited."
+
+  conflicting_sources:
+    when: "evidence.sources_conflict == true"
+    action: needs_counsel
+    note: "Both sides surfaced side by side. The system never picks a winner silently."
+
+# -----------------------------------------------------------------------------
+# budget policy
+# -----------------------------------------------------------------------------
+# Principle P4, cost is a governed runtime resource, not a hope. The governor
+# degrades depth before it fails a run, and CRITICAL work is protected by a
+# reserve that ordinary subjects can never draw down.
+budget_policy:
+  per_script_ceiling_usd: 5.00
+  reserve_for_critical_usd: 1.50
+  on_exceed: degrade_tier          # core -> base -> lite, then fail honestly
+  degrade_order: [core, base, lite]
+  never_degrade_tiers: [CRITICAL]
+  warn_at_fraction: 0.80
+
+# -----------------------------------------------------------------------------
+# concurrency
+# -----------------------------------------------------------------------------
+# Parallel's Task API supports roughly two thousand requests per minute. Our
+# own budget governance is the binding constraint, not their limits.
+concurrency:
+  max_in_flight: 32
+  per_provider:
+    parallel_task: 32
+    parallel_findall: 4            # roughly twenty five per hour, be gentle
+    parallel_search: 16
+    parallel_extract: 8
+  retry:
+    max_attempts: 3
+    backoff_seconds: [2, 8, 30]
+    retry_on: [429, 500, 502, 503, 504]
+
+# -----------------------------------------------------------------------------
+# monitoring cadence
+# -----------------------------------------------------------------------------
+# A clearance report is a photograph. Rights are a film.
+monitors:
+  default_cadence: monthly
+  by_type:
+    MUSIC_CUE: quarterly           # cadence tightens inside the expiry window
+    REAL_PERSON_DEPICTED: monthly  # deaths change publicity rights by state
+    TRADEMARK_LOGO: quarterly
+    BUSINESS_NAME: quarterly
+  expiry_window_days: 180          # inside this window, escalate to weekly
+  watch_for:
+    - new_litigation_naming_subject
+    - subject_death
+    - trademark_registration_change
+    - licence_term_expiry
+    - new_record_contradicting_verified_claim

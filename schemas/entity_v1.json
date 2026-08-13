@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truestory.dev/schemas/entity_v1.json",
+  "title": "entity_v1",
+  "description": "The general purpose schema for locations, organisations and addresses. Cheapest tier, lite processor, and the largest share of subjects on a typical script. Its job is to answer whether the named thing exists, whether it is depicted in a way its owner would object to, and whether an address or building is real enough to attract a complaint from whoever lives there.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["entity_exists", "risk"],
+  "properties": {
+    "entity_exists": { "type": "boolean" },
+    "canonical_name": { "type": ["string", "null"] },
+    "entity_kind": {
+      "type": ["string", "null"],
+      "enum": ["business", "institution", "government_body", "venue", "address", "region", "other", null]
+    },
+    "jurisdiction": { "type": ["string", "null"] },
+    "still_operating": { "type": ["boolean", "null"] },
+
+    "depiction_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tone": {
+          "type": ["string", "null"],
+          "enum": ["neutral", "positive", "unflattering", "defamatory", null]
+        },
+        "associates_with_crime": {
+          "type": ["boolean", "null"],
+          "description": "A real address where a fictional murder happens is a complaint from the current occupant, which is the most common version of this problem."
+        },
+        "identifiable_occupants": {
+          "type": ["boolean", "null"]
+        }
+      }
+    },
+
+    "risk": {
+      "type": "string",
+      "enum": ["none", "low", "medium", "high"]
+    },
+    "recommended_action": {
+      "type": ["string", "null"],
+      "enum": [
+        "clear",
+        "clear_with_conditions",
+        "obtain_location_release",
+        "substitute_fictional",
+        "counsel_review",
+        null
+      ]
+    },
+    "conditions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "notes": { "type": ["string", "null"] },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "title": { "type": ["string", "null"] },
+          "excerpt": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

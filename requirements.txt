@@ -1,0 +1,46 @@
+# -----------------------------------------------------------------------------
+# Convenience mirror of the runtime dependencies declared in pyproject.toml.
+# Cloud Run and Agent Engine build from this file. For local development
+# prefer:  pip install -e ".[dev]"
+# -----------------------------------------------------------------------------
+
+# orchestration
+google-cloud-aiplatform[agent_engines,adk]>=1.101.0
+google-genai>=1.0.0
+
+# partner
+parallel-web>=0.1.0
+
+# tool boundary
+mcp>=1.2.0
+
+# google cloud runtime
+google-cloud-firestore>=2.19.0
+google-cloud-storage>=2.18.0
+google-cloud-bigquery>=3.25.0
+google-cloud-pubsub>=2.23.0
+google-cloud-tasks>=2.16.0
+google-cloud-scheduler>=2.13.0
+google-cloud-secret-manager>=2.20.0
+google-cloud-logging>=3.11.0
+opentelemetry-exporter-gcp-trace>=1.7.0
+
+# service tier
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+sse-starlette>=2.1.0
+httpx>=0.27.0
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+python-dotenv>=1.0.0
+pyyaml>=6.0.2
+jsonschema>=4.23.0
+
+# ingest and artifacts
+pypdf>=5.0.0
+reportlab>=4.2.0
+jinja2>=3.1.4
+
+# cli
+typer>=0.12.0
+rich>=13.8.0

@@ -1,0 +1,21 @@
+[
+  { "name": "run_id", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "project_id", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "evidence_id", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "subject_id", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "subject_kind", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "element_type", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "claim_type", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "risk_tier", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "provider", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "processor", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "schema_version", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "cost_cents", "type": "FLOAT", "mode": "REQUIRED" },
+  { "name": "latency_ms", "type": "INTEGER", "mode": "REQUIRED" },
+  { "name": "confidence", "type": "FLOAT", "mode": "NULLABLE" },
+  { "name": "citation_count", "type": "INTEGER", "mode": "NULLABLE" },
+  { "name": "cached", "type": "BOOLEAN", "mode": "REQUIRED" },
+  { "name": "is_fallback", "type": "BOOLEAN", "mode": "REQUIRED" },
+  { "name": "errored", "type": "BOOLEAN", "mode": "REQUIRED" },
+  { "name": "retrieved_at", "type": "TIMESTAMP", "mode": "REQUIRED" }
+]
