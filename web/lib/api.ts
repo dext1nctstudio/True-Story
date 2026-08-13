@@ -15,7 +15,9 @@ import type {
   ClearableElement,
   Overlay,
   PersonRollup,
+  Remedy,
   Role,
+  RunListItem,
   RunSummary,
   StreamEvent,
 } from "./types";
@@ -74,11 +76,17 @@ export const getClaims = (runId: string, verdict?: string) =>
     `/v1/runs/${runId}/claims${verdict ? `?verdict=${verdict}` : ""}`,
   );
 
+export const getRemedies = (runId: string) =>
+  get<{ remedies: Remedy[]; total: number }>(`/v1/runs/${runId}/remedies`);
+
 export const getElements = (runId: string) =>
   get<{ elements: ClearableElement[]; total: number }>(`/v1/runs/${runId}/elements`);
 
 export const getRegister = (runId: string) =>
   get<{ persons: PersonRollup[]; note: string }>(`/v1/runs/${runId}/register`);
+
+export const listRuns = (projectId: string) =>
+  get<{ runs: RunListItem[] }>(`/v1/projects/${projectId}/runs`);
 
 export const getRun = (runId: string) =>
   get<{ run_id: string; status: string; summary: RunSummary | null }>(`/v1/runs/${runId}`);
@@ -91,6 +99,31 @@ export const getMonitors = (projectId: string) =>
 
 export const getReviewQueue = () =>
   get<{ items: unknown[] }>(`/v1/review_queue`);
+
+/** The drag and drop path. Multipart, so content-type is left to the browser
+ * to set with its own boundary rather than reusing the JSON headers() helper. */
+export async function uploadRun(
+  projectId: string,
+  file: File,
+  draftVersion = "v1",
+): Promise<{ run_id: string; filename: string; bytes: number; stream: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(
+    `${BASE}/v1/projects/${projectId}/runs/upload?draft_version=${draftVersion}`,
+    {
+      method: "POST",
+      headers: {
+        "x-truestory-role": activeRole,
+        "x-truestory-subject": "demo@truestory.dev",
+        "x-truestory-projects": projectId,
+      },
+      body: form,
+    },
+  );
+  if (!response.ok) throw new ApiError(response.status, await response.text());
+  return response.json();
+}
 
 // ── writes ───────────────────────────────────────────────────────────────────
 

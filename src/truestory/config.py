@@ -15,6 +15,7 @@ container image, or this repository.
 
 from __future__ import annotations
 
+import os
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -63,6 +64,7 @@ class Settings(BaseSettings):
     # ── google cloud ─────────────────────────────────────────────────────────
     gcp_project: str = Field(default="", alias="GOOGLE_CLOUD_PROJECT")
     gcp_location: str = Field(default="us-central1", alias="GOOGLE_CLOUD_LOCATION")
+    google_credentials: str = Field(default="", alias="GOOGLE_APPLICATION_CREDENTIALS")
     use_vertex: bool = Field(default=True, alias="GOOGLE_GENAI_USE_VERTEXAI")
 
     model_ingest: str = Field(default="gemini-2.5-pro", alias="TRUESTORY_MODEL_INGEST")
@@ -137,6 +139,25 @@ class Settings(BaseSettings):
         if self.parallel_use_fast and tier_processor in {"lite", "base", "core"}:
             return f"{tier_processor}-fast"
         return tier_processor
+
+    @model_validator(mode="after")
+    def _export_google_credentials(self) -> Settings:
+        """Publish the key path into the process environment.
+
+        google-auth reads `GOOGLE_APPLICATION_CREDENTIALS` from os.environ and
+        knows nothing about this settings object, so a path that lives only in
+        .env never reaches it. Without this, local Vertex auth fails with
+        "default credentials were not found" while the value sits right there
+        in the file. An explicit env var still wins: it is never overwritten.
+        """
+        if self.google_credentials and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            key = Path(self.google_credentials).expanduser()
+            if not key.is_file():
+                raise ValueError(
+                    f"GOOGLE_APPLICATION_CREDENTIALS points at {key}, which does not exist."
+                )
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(key)
+        return self
 
     @model_validator(mode="after")
     def _guard_live_mode(self) -> Settings:
