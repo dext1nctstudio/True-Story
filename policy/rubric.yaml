@@ -1,0 +1,166 @@
+# =============================================================================
+# TRUE STORY  ·  adjudication rubric
+# =============================================================================
+# The deterministic post checks applied AFTER the model, never by it.
+#
+# The Adjudicator is a language model with forced function calling, so it can
+# only emit a verdict together with evidence identifiers and a confidence. What
+# it cannot do is decide when its own uncertainty is unacceptable. That is this
+# file, and it runs as plain code over the model's output.
+#
+# Every threshold here is a product decision that a clearance attorney should
+# be able to read, argue with, and change without touching Python.
+# =============================================================================
+
+version: 1
+updated: "2026-08-12"
+
+# -----------------------------------------------------------------------------
+# confidence gates
+# -----------------------------------------------------------------------------
+confidence:
+  # Below this, the machine does not get the last word.
+  counsel_threshold: 0.75
+
+  # A grounded fallback answer is worth having and must never present as equal
+  # to a fully cited research run. Principle P5, degrade honestly.
+  fallback_cap: 0.60
+
+  # A CRITICAL subject that comes back clean still needs a human to agree
+  # before it renders green in a document an underwriter will rely on.
+  critical_clear_requires_human: true
+
+  # Minimum citations before a verdict may be recorded at all, by tier.
+  min_citations:
+    CRITICAL: 2
+    HIGH: 1
+    MEDIUM: 1
+    LOW: 0
+    NONE: 0
+
+  # A CONTRADICTED verdict is the most consequential thing this system says.
+  # It requires a primary source, not a blog aggregating one.
+  contradicted_requires_primary_source: true
+
+# -----------------------------------------------------------------------------
+# mandatory escalations
+# -----------------------------------------------------------------------------
+# These fire regardless of how confident the model was.
+escalate_always:
+  - id: contradicted_living_subject
+    when: "verdict == 'CONTRADICTED' and subject_alive == true"
+    action: NEEDS_COUNSEL
+    reason: "A false factual claim about a living person. This is the claim that gets filed."
+
+  - id: sources_conflict
+    when: "evidence.conflict_detected == true"
+    action: NEEDS_COUNSEL
+    reason: "Sources disagree. Both are surfaced side by side and a human decides."
+
+  - id: no_usable_evidence
+    when: "evidence.usable_count == 0 and verdict != 'OPINION'"
+    action: NEEDS_COUNSEL
+    reason: "Research failed or returned nothing citable. Never guess in this position."
+
+  - id: unverifiable_private_fact
+    when: "verdict == 'UNVERIFIABLE' and subject.public_figure_status == 'private'"
+    action: NEEDS_COUNSEL
+    reason: "A private fact about a private person. Outside what public record research can settle."
+
+  - id: identifiability_hit
+    when: "element_type == 'REAL_PERSON_IDENTIFIABLE' and findall.match_count > 0"
+    action: NEEDS_COUNSEL
+    reason: "The attribute cluster resolves to real people. The Baby Reindeer failure mode."
+
+# -----------------------------------------------------------------------------
+# the Fairstein rule
+# -----------------------------------------------------------------------------
+# When They See Us did not turn on one provably false line. It turned on a set
+# of scenes attributing specific conduct to a named living person that the
+# record could not support. Amber is not "probably fine", amber is the category
+# that settles: not provably false, and therefore not defensible either.
+#
+# So the system escalates the PERSON, not just the line, once density crosses.
+amber_density:
+  enabled: true
+  threshold: 0.30                 # share of researched claims that are amber
+  min_claims: 4                   # below this the ratio is noise
+  applies_to: named_living_persons
+  action: NEEDS_COUNSEL
+  surface_in_ui: true             # the per person meter in the overlay
+  reason: "Unsupported conduct density about a named living person."
+
+# -----------------------------------------------------------------------------
+# verdict language
+# -----------------------------------------------------------------------------
+# The epistemics are load bearing. UNSUPPORTED is not FALSE. Collapsing that
+# distinction would be exactly the careless assertion about a real person that
+# this product exists to prevent, so the wording is fixed here and both the UI
+# and the PDF read from it. Nobody gets to improvise it in a template.
+language:
+  VERIFIED:
+    label: "Verified"
+    ui: "Supported by the public record."
+    report: "The public record supports this assertion as written."
+    color: green
+  UNSUPPORTED:
+    label: "Unsupported"
+    ui: "No record found either way. This is not a finding of falsity."
+    report: "Research located no record supporting or contradicting this assertion. This is not a finding that the assertion is false."
+    color: amber
+  CONTRADICTED:
+    label: "Contradicted"
+    ui: "The record shows otherwise. See sources."
+    report: "The public record contradicts this assertion. Contradicting sources are listed in the evidence appendix."
+    color: red
+  UNVERIFIABLE:
+    label: "Unverifiable"
+    ui: "A private fact with no public record. Counsel review."
+    report: "This assertion concerns a matter with no public record and cannot be verified by open source research."
+    color: amber
+  OPINION:
+    label: "Opinion"
+    ui: "Not a factual assertion. Not researched."
+    report: "Characterisation rather than a verifiable factual assertion. Not researched."
+    color: grey
+
+# -----------------------------------------------------------------------------
+# element status language
+# -----------------------------------------------------------------------------
+status_language:
+  CLEAR: "No exposure identified on the available record."
+  CLEAR_WITH_CONDITIONS: "Usable subject to the conditions listed. Common for expressive use protected under the First Amendment."
+  NOT_CLEAR: "Exposure identified. A remedy is proposed below."
+  NEEDS_LICENSE: "Rights exist and must be licensed. Rights holder contacts are listed."
+  NEEDS_COUNSEL: "Escalated to production counsel. The system declines to make this call."
+  RESEARCH_FAILED: "Research did not complete. Counted against coverage quality on the front page."
+
+# -----------------------------------------------------------------------------
+# remedy loop
+# -----------------------------------------------------------------------------
+remedy:
+  max_iterations: 3
+  require_verified_before_presenting: true   # this is the whole point
+  preserve_dramatic_function: true
+  alternate_names_offered: 3                 # matched on syllables, period, phonetics
+  exclude_failed_candidates: true
+
+  # Encoded from the terms of an actual settlement: the fictionalisation
+  # disclaimer was moved to the start of every episode. Position and prominence
+  # were the negotiated remedy, so they are the recommendation shape here.
+  disclaimer:
+    default_position: "start of each episode, before the first scene"
+    default_text: "Certain characters, incidents, locations, dialogue and names are fictionalised for dramatic purposes."
+    trigger: "project.truth_claim_framing == true"
+
+# -----------------------------------------------------------------------------
+# coverage quality
+# -----------------------------------------------------------------------------
+# The report always states its own quality on the front page. An underwriter,
+# and a judge, prefers a caveated report to a confident wrong one.
+coverage:
+  warn_if_fallback_rate_above: 0.10
+  warn_if_research_failed_above: 0.02
+  warn_if_budget_degraded: true
+  warn_if_any_scene_skipped: true
+  front_page_statement: true

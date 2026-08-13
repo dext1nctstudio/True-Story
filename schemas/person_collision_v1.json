@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truestory.dev/schemas/person_collision_v1.json",
+  "title": "person_collision_v1",
+  "description": "A fictional character name is a clearance question because a real person who shares the name, the profession and the locale can bring a false light or defamation claim. This is the oldest job in script clearance and the reason vendors advertise alternate names free within the original report.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["real_persons_matching", "collision_risk", "recommended_action"],
+  "properties": {
+    "real_persons_matching": {
+      "type": "array",
+      "description": "Real people bearing the name. Living private individuals here are masked in every surface until counsel unmasks them.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "city": { "type": ["string", "null"] },
+          "region": { "type": ["string", "null"] },
+          "profession": { "type": ["string", "null"] },
+          "alive": { "type": ["boolean", "null"] },
+          "prominence": {
+            "type": ["string", "null"],
+            "enum": ["low", "medium", "high", null]
+          },
+          "source_url": { "type": ["string", "null"], "format": "uri" }
+        }
+      }
+    },
+    "same_profession_same_locale": {
+      "type": "boolean",
+      "description": "The combination that turns a coincidence into a claim. A dentist named in a script set among dentists in the same city is the textbook collision."
+    },
+    "collision_risk": {
+      "type": "string",
+      "enum": ["none", "low", "medium", "high"]
+    },
+    "character_conduct_negative": {
+      "type": ["boolean", "null"],
+      "description": "Whether the fictional character does anything reputationally damaging. A collision with a saintly character is a footnote and a collision with a murderer is a problem."
+    },
+    "recommended_action": {
+      "type": "string",
+      "enum": ["clear", "rename", "add_disclaimer", "counsel_review"]
+    },
+    "alternate_names": {
+      "type": "array",
+      "description": "Cleared substitutes, matched to the original on syllable count, period plausibility, cultural origin and phonetics, so the change costs the script nothing. Each one is itself run back through this schema before it is offered.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "syllable_match": { "type": ["boolean", "null"] },
+          "period_plausible": { "type": ["boolean", "null"] },
+          "collision_checked": { "type": ["boolean", "null"] },
+          "notes": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "search_jurisdictions": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

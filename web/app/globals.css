@@ -1,0 +1,611 @@
+/* ============================================================================
+   TRUE STORY  ·  design tokens
+   ============================================================================
+   Restraint is the design language. A script drowning in highlights reads as
+   noise, so verified is a quiet underline, opinion is left completely
+   untouched, and red is loud precisely because it is rare.
+
+   The screenplay itself renders in proper Courier at industry margins. Judges
+   from the industry notice when it does not, and the fidelity is what makes
+   the overlay read as a real production tool rather than a text viewer.
+   ============================================================================ */
+
+:root {
+  color-scheme: light dark;
+
+  /* surface */
+  --bg: #fbfbfa;
+  --bg-panel: #ffffff;
+  --bg-sunken: #f4f4f2;
+  --border: #e3e3df;
+  --border-strong: #cfcfc9;
+
+  /* type */
+  --text: #1a1a18;
+  --text-muted: #6b6b64;
+  --text-faint: #94948c;
+
+  /* verdicts */
+  --verdict-green: #2f7d4f;
+  --verdict-green-bg: #eaf5ee;
+  --verdict-amber: #b07206;
+  --verdict-amber-bg: #fdf3e0;
+  --verdict-red: #b3261e;
+  --verdict-red-bg: #fdeceb;
+  --verdict-pending: #c9c9c2;
+
+  --accent: #1f4e79;
+  --accent-bg: #eaf0f6;
+
+  /* screenplay geometry, in inches, as the industry measures it */
+  --script-font: "Courier New", "Courier Prime", Courier, monospace;
+  --script-size: 12pt;
+  --script-line: 1.05;
+  --script-width: 6.0in;
+  --script-dialogue-indent: 1.0in;
+  --script-cue-indent: 2.2in;
+  --script-paren-indent: 1.6in;
+
+  --radius: 6px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14140f;
+    --bg-panel: #1c1c18;
+    --bg-sunken: #232320;
+    --border: #32322c;
+    --border-strong: #45453e;
+
+    --text: #ececd8;
+    --text-muted: #9d9d92;
+    --text-faint: #6d6d64;
+
+    --verdict-green: #6fbe8a;
+    --verdict-green-bg: #17271d;
+    --verdict-amber: #dfa93c;
+    --verdict-amber-bg: #2b2214;
+    --verdict-red: #f08079;
+    --verdict-red-bg: #2e1817;
+    --verdict-pending: #3a3a34;
+
+    --accent: #7fb0dd;
+    --accent-bg: #16232e;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── layout ───────────────────────────────────────────────────────────────── */
+
+.shell {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  overflow: hidden;
+}
+
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+  .rail {
+    display: none;
+  }
+}
+
+/* ── header ───────────────────────────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.brand {
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.script-title {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* The escalation banner. One boolean that changes the risk tier of every
+   person adjacent subject in the script, and it says so on screen. */
+.framing-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: var(--verdict-amber-bg);
+  color: var(--verdict-amber);
+  border: 1px solid currentColor;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+/* ── counters ─────────────────────────────────────────────────────────────── */
+
+.counters {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.counter {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.counter-value {
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.counter-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+
+.counter.green .counter-value { color: var(--verdict-green); }
+.counter.amber .counter-value { color: var(--verdict-amber); }
+.counter.red   .counter-value { color: var(--verdict-red); }
+
+/* ── cost meter ───────────────────────────────────────────────────────────── */
+
+.cost-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 150px;
+}
+
+.cost-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cost-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  font-size: 15px;
+}
+
+.cost-bar {
+  height: 3px;
+  background: var(--bg-sunken);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.cost-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 240ms ease-out;
+}
+
+.cost-fill.warn { background: var(--verdict-amber); }
+.cost-fill.over { background: var(--verdict-red); }
+
+/* ── screenplay ───────────────────────────────────────────────────────────── */
+
+.script-pane {
+  overflow-y: auto;
+  padding: 28px 0 120px;
+}
+
+.script-page {
+  width: var(--script-width);
+  margin: 0 auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 0.75in 0.5in 0.75in 0.75in;
+  box-shadow: var(--shadow);
+  font-family: var(--script-font);
+  font-size: var(--script-size);
+  line-height: var(--script-line);
+  white-space: pre-wrap;
+}
+
+.scene-heading {
+  font-weight: 700;
+  text-transform: uppercase;
+  margin: 1.5em 0 0.6em;
+}
+
+.scene-heading:first-child { margin-top: 0; }
+
+.script-line {
+  position: relative;
+  padding: 1px 0;
+  border-radius: 2px;
+}
+
+.script-line.dialogue { margin-left: var(--script-dialogue-indent); }
+.script-line.cue      { margin-left: var(--script-cue-indent); font-weight: 700; }
+.script-line.paren    { margin-left: var(--script-paren-indent); color: var(--text-muted); }
+
+/* Verdict states. Green is quiet, amber is visible, red is unmissable, and
+   opinion gets nothing at all because defamation law protects it. */
+.annotated {
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.annotated.green {
+  border-bottom: 1.5px solid var(--verdict-green);
+}
+
+.annotated.amber {
+  border-bottom: 1.5px solid var(--verdict-amber);
+  background: var(--verdict-amber-bg);
+}
+
+.annotated.red {
+  border-bottom: 2px solid var(--verdict-red);
+  background: var(--verdict-red-bg);
+  font-weight: 600;
+}
+
+.annotated.pending {
+  border-bottom: 1.5px dashed var(--verdict-pending);
+  opacity: 0.75;
+}
+
+.annotated.grey { cursor: default; }
+
+.annotated:hover:not(.grey) { filter: brightness(0.97); }
+
+.annotated.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.citation-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--verdict-red);
+  color: #fff;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 9.5px;
+  font-weight: 700;
+  vertical-align: super;
+}
+
+.mask-chip {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  border: 1px dashed var(--border-strong);
+  color: var(--text-muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+}
+
+/* ── rail and panels ──────────────────────────────────────────────────────── */
+
+.rail {
+  border-left: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-title {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-faint);
+  margin: 0 0 10px;
+  font-weight: 650;
+}
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  flex: 1;
+  padding: 10px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+/* ── evidence ─────────────────────────────────────────────────────────────── */
+
+.verdict-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.verdict-pill {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.verdict-pill.green { background: var(--verdict-green-bg); color: var(--verdict-green); }
+.verdict-pill.amber { background: var(--verdict-amber-bg); color: var(--verdict-amber); }
+.verdict-pill.red   { background: var(--verdict-red-bg);   color: var(--verdict-red); }
+.verdict-pill.grey  { background: var(--bg-sunken);        color: var(--text-muted); }
+
+.confidence {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.claim-text {
+  font-family: var(--script-font);
+  font-size: 12.5px;
+  background: var(--bg-sunken);
+  padding: 9px 11px;
+  border-radius: var(--radius);
+  border-left: 3px solid var(--border-strong);
+  margin: 8px 0;
+}
+
+/* This sentence carries most of the epistemic weight in the product. */
+.verdict-language {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 8px 0 12px;
+  font-style: italic;
+}
+
+.citation {
+  border-top: 1px solid var(--border);
+  padding: 9px 0;
+}
+
+.citation-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  display: block;
+}
+
+.citation-title:hover { text-decoration: underline; }
+
+.citation-meta {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+.citation-excerpt {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 5px;
+  padding-left: 9px;
+  border-left: 2px solid var(--border);
+  max-height: 88px;
+  overflow: hidden;
+}
+
+.source-tag {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--bg-sunken);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 5px;
+}
+
+.source-tag.primary { background: var(--accent-bg); color: var(--accent); }
+
+/* ── remedy ───────────────────────────────────────────────────────────────── */
+
+.remedy {
+  margin-top: 12px;
+  padding: 11px;
+  border: 1px solid var(--verdict-green);
+  border-radius: var(--radius);
+  background: var(--verdict-green-bg);
+}
+
+.remedy-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--verdict-green);
+  font-weight: 700;
+}
+
+.remedy-proposal {
+  font-family: var(--script-font);
+  font-size: 12.5px;
+  margin: 7px 0;
+}
+
+button.apply {
+  padding: 6px 13px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--verdict-green);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.apply:disabled {
+  background: var(--border-strong);
+  cursor: not-allowed;
+}
+
+/* ── amber density meter, the Fairstein rule on screen ────────────────────── */
+
+.person-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.person-name {
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.density-track {
+  height: 5px;
+  background: var(--bg-sunken);
+  border-radius: 3px;
+  margin: 6px 0 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.density-fill {
+  height: 100%;
+  background: var(--verdict-amber);
+  transition: width 300ms ease-out;
+}
+
+.density-fill.over { background: var(--verdict-red); }
+
+.density-threshold {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--text-faint);
+}
+
+.person-meta {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── misc ─────────────────────────────────────────────────────────────────── */
+
+.role-select {
+  padding: 5px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12.5px;
+}
+
+.counsel-flag {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.warning {
+  padding: 9px 11px;
+  border-radius: var(--radius);
+  background: var(--verdict-amber-bg);
+  color: var(--verdict-amber);
+  font-size: 11.5px;
+  margin-bottom: 9px;
+}
+
+.disclaimer {
+  padding: 12px 16px;
+  font-size: 11px;
+  color: var(--text-faint);
+  border-top: 1px solid var(--border);
+  line-height: 1.45;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.legend-item { display: flex; align-items: center; gap: 5px; }
+
+.legend-swatch {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}

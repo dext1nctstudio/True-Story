@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truestory.dev/schemas/music_rights_v1.json",
+  "title": "music_rights_v1",
+  "description": "Every music cue is two separate rights, the composition and the master, held by different people and licensed separately. E&O carriers require both licences plus a complete cue sheet before they bind. The typical licence term field is what drives the Monitor cadence, because a licence that lapses quietly years after delivery is how a show ends up in syndication with sound alikes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["public_domain_status"],
+  "properties": {
+    "title_of_record": { "type": ["string", "null"] },
+    "writers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "performer": { "type": ["string", "null"] },
+    "publication_year": { "type": ["integer", "null"] },
+
+    "composition_rights_holder": {
+      "type": ["string", "null"],
+      "description": "Publisher or writer share holders. This is the synchronisation side."
+    },
+    "master_rights_holder": {
+      "type": ["string", "null"],
+      "description": "Label or master owner. This is the master use side. Different party, separate negotiation, separate fee."
+    },
+    "pro_affiliation": {
+      "type": ["string", "null"],
+      "description": "Performing rights organisation, where identifiable."
+    },
+
+    "public_domain_status": {
+      "type": "string",
+      "enum": ["pd", "in_copyright", "disputed", "unknown"],
+      "description": "Public domain in one territory is not public domain in all of them, which is why territories_verified exists as a separate field."
+    },
+    "territories_verified": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+
+    "sync_contact": { "type": ["string", "null"] },
+    "master_contact": { "type": ["string", "null"] },
+
+    "typical_license_term_years": {
+      "type": ["integer", "null"],
+      "description": "Drives Monitor cadence. Inside the expiry window the watch tightens from quarterly to weekly so the production is alerted before the licence lapses rather than after."
+    },
+    "estimated_fee_range_usd": {
+      "type": ["string", "null"],
+      "description": "Indicative only. Presented as a range and labelled as an estimate, never as a quote."
+    },
+    "alternatives": {
+      "type": "array",
+      "description": "Period appropriate cues with cleaner rights positions, offered when the requested cue is expensive or encumbered.",
+      "items": { "type": "string" }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "title": { "type": ["string", "null"] },
+          "excerpt": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

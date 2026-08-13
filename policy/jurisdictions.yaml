@@ -1,0 +1,158 @@
+# =============================================================================
+# TRUE STORY  ·  jurisdiction rulebook
+# =============================================================================
+# Clearance risk is not uniform across territories, and post mortem publicity
+# terms in particular vary enormously by the domicile of the depicted person at
+# death. This file is a real product surface, not a config detail: it decides
+# whether a deceased subject is a research question or a non issue.
+#
+# Everything here is a starting scaffold for the build. Nothing in this file is
+# legal advice, and every term must be confirmed by production counsel for the
+# specific title before it appears in a deliverable.
+# =============================================================================
+
+version: 1
+updated: "2026-08-12"
+
+defaults:
+  jurisdictions: [US]
+  research_language: en
+  anti_slapp_available: false
+  post_mortem_publicity_years: 0
+
+# -----------------------------------------------------------------------------
+# United States, by state
+# -----------------------------------------------------------------------------
+# Post mortem right of publicity is state law and the spread is the whole
+# point: the same depiction of the same deceased person is a licence
+# negotiation in one state and free in another.
+us_states:
+  CA:
+    name: California
+    post_mortem_publicity_years: 70
+    statute: "Cal. Civ. Code 3344.1"
+    anti_slapp_available: true
+    digital_replica_statutes: [AB_1836, AB_2602]
+    notes: "AB 1836 covers deceased performers' digital replicas. Statutory damages floor applies."
+  NY:
+    name: New York
+    post_mortem_publicity_years: 40
+    statute: "N.Y. Civ. Rights Law 50-f"
+    anti_slapp_available: true
+    digital_replica_statutes: [CIV_RIGHTS_50F]
+    notes: "Applies to deceased personalities. Registration requirement should be checked."
+  TN:
+    name: Tennessee
+    post_mortem_publicity_years: 10
+    statute: "Tenn. Code Ann. 47-25-1103"
+    anti_slapp_available: true
+    digital_replica_statutes: [ELVIS_ACT]
+    notes: "Term is renewable with continued commercial use. ELVIS Act extends publicity to AI voice clones."
+  IL:
+    name: Illinois
+    post_mortem_publicity_years: 50
+    statute: "765 ILCS 1075"
+    anti_slapp_available: true
+    digital_replica_statutes: [HB_4875]
+  TX:
+    name: Texas
+    post_mortem_publicity_years: 50
+    statute: "Tex. Prop. Code ch. 26"
+    anti_slapp_available: true
+  FL:
+    name: Florida
+    post_mortem_publicity_years: 40
+    statute: "Fla. Stat. 540.08"
+    anti_slapp_available: true
+  GA:
+    name: Georgia
+    post_mortem_publicity_years: 0
+    statute: "common law"
+    anti_slapp_available: true
+    notes: "Common law right recognised, term not fixed by statute. Counsel question."
+  NV:
+    name: Nevada
+    post_mortem_publicity_years: 50
+    statute: "Nev. Rev. Stat. 597.770"
+    anti_slapp_available: true
+  WA:
+    name: Washington
+    post_mortem_publicity_years: 75
+    statute: "Wash. Rev. Code 63.60"
+    anti_slapp_available: true
+    notes: "One of the longest terms in the country. Check current scope, it has been litigated."
+
+# -----------------------------------------------------------------------------
+# Territories outside the United States
+# -----------------------------------------------------------------------------
+# The case law this system encodes is US centric, which is a known gap. A
+# production shooting or distributing outside the US faces a materially
+# different risk profile, most obviously in the UK where truth is the defence
+# and there is no equivalent of the actual malice standard.
+territories:
+  US:
+    name: United States
+    defamation_standard: "actual malice for public figures, negligence for private"
+    truth_is_defence: true
+    fiction_immunity: false
+    notes: "Fictional works are not immune from defamation where they disparage identifiable real people."
+  GB:
+    name: United Kingdom
+    defamation_standard: "serious harm threshold, Defamation Act 2013"
+    truth_is_defence: true
+    fiction_immunity: false
+    notes: "No actual malice standard. Materially higher exposure than the US for the same script."
+  CA_COUNTRY:
+    name: Canada
+    defamation_standard: "provincial, responsible communication defence"
+    truth_is_defence: true
+  AU:
+    name: Australia
+    defamation_standard: "uniform defamation acts, serious harm threshold since 2021"
+    truth_is_defence: true
+  EU:
+    name: European Union
+    defamation_standard: "member state law, plus GDPR exposure on personal data"
+    truth_is_defence: true
+    notes: "Personality rights and data protection interact. AI transparency obligations apply to synthetic media."
+
+# -----------------------------------------------------------------------------
+# Research territory expansion
+# -----------------------------------------------------------------------------
+# When a project declares its shoot and distribution territories, these map to
+# the jurisdiction set attached to every element, which in turn shapes the
+# question sent to Parallel. "Every registered business named X" is a different
+# question in Illinois than it is worldwide.
+expansion:
+  shoot_territory_weight: 1.0
+  distribution_territory_weight: 1.0
+  always_include: [US]
+  max_jurisdictions_per_subject: 5     # cost control, widest exposure first
+
+# -----------------------------------------------------------------------------
+# Federal and supranational instruments tracked
+# -----------------------------------------------------------------------------
+# Status fields marked verify_before_citing must be confirmed against a primary
+# source before they appear in any deliverable or on camera. Trackers disagree
+# and these move.
+instruments:
+  - id: NO_FAKES_ACT
+    name: "NO FAKES Act"
+    scope: "federal licensable right against unauthorised AI voice and likeness replicas"
+    status: verify_before_citing
+  - id: TAKE_IT_DOWN_ACT
+    name: "TAKE IT DOWN Act"
+    scope: "nonconsensual intimate deepfakes, rapid takedown obligation"
+    status: enacted
+  - id: ELVIS_ACT
+    name: "Tennessee ELVIS Act"
+    scope: "right of publicity extended to AI voice clones"
+    status: in_force
+  - id: EU_AI_ACT
+    name: "EU AI Act"
+    scope: "transparency obligations for AI generated or manipulated media"
+    status: verify_before_citing
+  - id: USCO_AI_REPORT
+    name: "US Copyright Office, Copyright and Artificial Intelligence"
+    scope: "human authorship requirement, disclosure of more than de minimis AI content"
+    status: published

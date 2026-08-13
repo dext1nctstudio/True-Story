@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truestory.dev/schemas/visual_copyright_v1.json",
+  "title": "visual_copyright_v1",
+  "description": "Artwork, posters, murals, photographs, tattoos and film clips visible on screen. This path is CRITICAL for two reasons drawn from the record: a replica tattoo came within days of enjoining a very large release, and a story quilt poster visible as background dressing for a few seconds was held not to be de minimis. Set dressing is a rights question, not an art department question.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["work_identified", "copyright_status", "clearance_recommendation"],
+  "properties": {
+    "work_identified": {
+      "type": "boolean",
+      "description": "Whether the described visual maps to an identifiable existing work."
+    },
+    "work_title": { "type": ["string", "null"] },
+    "creator": { "type": ["string", "null"] },
+    "creation_year": { "type": ["integer", "null"] },
+    "rights_holder": {
+      "type": ["string", "null"],
+      "description": "Frequently not the creator, and for tattoos frequently not the person wearing it, which is the point the Whitmill dispute made expensively."
+    },
+
+    "copyright_status": {
+      "type": "string",
+      "enum": ["in_copyright", "public_domain", "orphan_work", "disputed", "unknown"]
+    },
+    "public_domain_year": { "type": ["integer", "null"] },
+
+    "on_screen_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "duration_seconds": { "type": ["number", "null"] },
+        "prominence": {
+          "type": ["string", "null"],
+          "enum": ["incidental_background", "clearly_visible", "featured", "plot_critical", null]
+        },
+        "recognisable": {
+          "type": ["boolean", "null"],
+          "description": "Whether enough of the work is visible to be recognised. This is the de minimis question and it is decided on observation, not on intent."
+        },
+        "de_minimis_likely": {
+          "type": ["boolean", "null"],
+          "description": "Flagged as likely only, never as settled. Courts have declined the de minimis defence on very brief background appearances."
+        }
+      }
+    },
+
+    "clearance_recommendation": {
+      "type": "string",
+      "enum": [
+        "clear",
+        "clear_with_conditions",
+        "obtain_license",
+        "replace_with_original_artwork",
+        "digitally_alter",
+        "counsel_review"
+      ],
+      "description": "Replacing with commissioned original artwork is usually cheaper and faster than licensing, and it is the recommendation the art department can act on immediately."
+    },
+    "conditions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "license_contact": { "type": ["string", "null"] },
+    "estimated_fee_range_usd": { "type": ["string", "null"] },
+
+    "evidence_page_captured": {
+      "type": ["boolean", "null"],
+      "description": "Whether the registry or archive page was captured into the evidence pack via Extract. A visual rights finding that cites a page which later changes is worth much less at claim time."
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "title": { "type": ["string", "null"] },
+          "excerpt": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

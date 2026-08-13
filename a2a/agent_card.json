@@ -1,0 +1,146 @@
+{
+  "$comment": "A2A AgentCard. Shipped as a documented specification in this build. A2A belongs at organisational boundaries, where an insurer, a studio or a law firm agent calls this system from outside our trust boundary. Using it for internal control flow would add latency and buy nothing, which is why the pipeline itself is ADK and the tool layer is MCP.",
+
+  "protocolVersion": "0.2.0",
+  "name": "TRUE STORY",
+  "description": "A fact and rights engine for based on a true story productions. Verifies every factual claim about every real person in a screenplay against the public record, and clears every rights bearing element to the standard errors and omissions carriers require. Decision support for a clearance attorney, not legal advice.",
+  "version": "0.1.0",
+  "provider": {
+    "organization": "dxt1nction studio",
+    "url": "https://github.com/GIND123/True-Story"
+  },
+  "documentationUrl": "https://github.com/GIND123/True-Story/blob/main/docs/ARCHITECTURE.md",
+  "url": "https://PLACEHOLDER_service_url/a2a",
+
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": true,
+    "stateTransitionHistory": true
+  },
+
+  "defaultInputModes": ["text/plain", "application/pdf", "application/xml"],
+  "defaultOutputModes": ["application/json", "application/pdf", "text/csv"],
+
+  "securitySchemes": {
+    "oauth2": {
+      "type": "oauth2",
+      "description": "Google identity token. The caller's role is read from a verified custom claim, never from a request header.",
+      "flows": {
+        "clientCredentials": {
+          "tokenUrl": "https://oauth2.googleapis.com/token",
+          "scopes": {
+            "truestory.assess": "Submit a script for assessment",
+            "truestory.status": "Read the status and results of a run",
+            "truestory.monitors": "Read active Living Clearance watches"
+          }
+        }
+      }
+    }
+  },
+  "security": [{ "oauth2": ["truestory.assess", "truestory.status"] }],
+
+  "skills": [
+    {
+      "id": "truestory.assess",
+      "name": "Assess a screenplay",
+      "description": "Run the full eight stage pipeline over a draft. Extracts every clearable element and decomposes every factual claim about every real person, researches each against the live public record with citations, adjudicates under a published rubric, proposes and verifies remedies, and returns the errors and omissions format report package.",
+      "tags": ["clearance", "fact-verification", "errors-and-omissions", "defamation", "rights"],
+      "examples": [
+        "Assess this draft for distribution in the US and the UK with a five dollar research ceiling.",
+        "This production asserts it is a true story. Escalate accordingly and report the amber claim density per named living person."
+      ],
+      "inputModes": ["text/plain", "application/pdf", "application/xml"],
+      "outputModes": ["application/json", "application/pdf"],
+      "parameters": {
+        "type": "object",
+        "required": ["script"],
+        "properties": {
+          "script": {
+            "type": "string",
+            "description": "The draft, as fountain, Final Draft XML, PDF or plain text."
+          },
+          "draft_version": { "type": "string", "default": "v1" },
+          "shoot_territories": {
+            "type": "array",
+            "items": { "type": "string" },
+            "default": ["US"]
+          },
+          "distribution_territories": {
+            "type": "array",
+            "items": { "type": "string" },
+            "default": ["US"],
+            "description": "Materially changes the result. The same script carries a different exposure profile in a jurisdiction with no actual malice standard."
+          },
+          "truth_claim_framing": {
+            "type": ["boolean", "null"],
+            "description": "Normally detected from the script itself. When true, every person adjacent element is escalated one full risk tier, because courts have treated the truth claim framing as bearing on reckless disregard for falsity."
+          },
+          "budget_usd": {
+            "type": "number",
+            "default": 5.0,
+            "description": "Hard research ceiling. Exceeding it degrades depth rather than failing the run, and critical work draws on a protected reserve."
+          },
+          "parent_run_id": {
+            "type": ["string", "null"],
+            "description": "Chains lineage for a revision. Identifiers are content hashes, so only the delta is researched."
+          }
+        }
+      }
+    },
+    {
+      "id": "truestory.status",
+      "name": "Read run status and results",
+      "description": "Return the verdict summary, the claim register with per person amber density, the clearance ledger, the counsel queue, and links to the report artifacts. Masked identities remain masked unless the caller holds the counsel role.",
+      "tags": ["status", "results", "reporting"],
+      "outputModes": ["application/json"],
+      "parameters": {
+        "type": "object",
+        "required": ["run_id"],
+        "properties": {
+          "run_id": { "type": "string" },
+          "include_evidence": {
+            "type": "boolean",
+            "default": false,
+            "description": "Evidence is available to counsel and to the underwriter. Other roles receive verdicts without the research behind them."
+          }
+        }
+      }
+    },
+    {
+      "id": "truestory.monitors",
+      "name": "Read Living Clearance watches",
+      "description": "List the active watches held for a title. A clearance report is a photograph and rights are a film, so monitors run for the commercial life of the production and watch licence expiry windows, depicted person deaths that change publicity rights by state, new litigation naming a subject, and new records bearing on a claim already marked verified.",
+      "tags": ["monitoring", "living-clearance", "rights-expiry"],
+      "outputModes": ["application/json"],
+      "parameters": {
+        "type": "object",
+        "required": ["project_id"],
+        "properties": {
+          "project_id": { "type": "string" },
+          "active_only": { "type": "boolean", "default": true }
+        }
+      }
+    }
+  ],
+
+  "peers": [
+    {
+      "id": "counsel-agent",
+      "name": "CounselAgent",
+      "description": "The external escalation peer, operated by production counsel and sitting outside this system's trust boundary. Subjects the pipeline declines to decide are handed to it rather than guessed at. This is the reason A2A is the right protocol here and MCP is not: the counterparty is a different organisation.",
+      "status": "specified"
+    },
+    {
+      "id": "underwriter-agent",
+      "name": "Underwriter intake",
+      "description": "A carrier or broker agent consuming the finished clearance package read only and watermarked.",
+      "status": "specified"
+    }
+  ],
+
+  "constraints": {
+    "not_legal_advice": "Output is decision support for a qualified clearance attorney. Every clearance report in this industry is reviewed by counsel before a policy is bound. This system automates the research and the document, not the judgement.",
+    "privacy": "Living private individuals are masked by default. Identifying detail is stored and never displayed until counsel unmasks it, and every reveal is audited with the acting principal recorded.",
+    "epistemics": "Unsupported is not false. The distinction between an assertion the record contradicts and one the record cannot speak to is preserved in every surface this system produces, because collapsing it would be the exact careless assertion about a real person that the product exists to prevent."
+  }
+}

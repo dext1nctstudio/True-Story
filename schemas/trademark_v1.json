@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truestory.dev/schemas/trademark_v1.json",
+  "title": "trademark_v1",
+  "description": "Marks, brands and business names appearing in dialogue or in signage. The controlling question is rarely whether the mark is registered, which it usually is, but whether the use is artistically relevant and not explicitly misleading, and whether the depiction is unflattering enough to attract a dilution or disparagement theory.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mark_registered", "use_assessment"],
+  "properties": {
+    "mark_of_record": { "type": ["string", "null"] },
+    "mark_registered": { "type": "boolean" },
+    "owner": { "type": ["string", "null"] },
+    "registration_numbers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "nice_classes": {
+      "type": "array",
+      "description": "Classes of goods and services. A mark registered for software is not infringed by a bar of the same name on screen.",
+      "items": { "type": "integer" }
+    },
+    "territories": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "status": {
+      "type": ["string", "null"],
+      "enum": ["live", "dead", "pending", "opposed", "unknown", null]
+    },
+
+    "use_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["depiction_tone"],
+      "properties": {
+        "artistically_relevant": {
+          "type": ["boolean", "null"],
+          "description": "The first limb of the expressive use test that has protected film uses repeatedly."
+        },
+        "explicitly_misleading": {
+          "type": ["boolean", "null"],
+          "description": "The second limb. Suggesting sponsorship or endorsement is what loses these cases."
+        },
+        "depiction_tone": {
+          "type": "string",
+          "enum": ["neutral", "positive", "unflattering", "defamatory"],
+          "description": "An unflattering depiction of a real product is where trade libel theories start, and it changes the recommendation even where the mark use itself is protected."
+        },
+        "prominence": {
+          "type": ["string", "null"],
+          "enum": ["background", "featured", "plot_critical", null]
+        }
+      }
+    },
+
+    "clearance_recommendation": {
+      "type": ["string", "null"],
+      "enum": [
+        "clear",
+        "clear_with_conditions",
+        "obtain_permission",
+        "substitute_fictional_mark",
+        "counsel_review",
+        null
+      ]
+    },
+    "conditions": {
+      "type": "array",
+      "description": "Art department instructions where the use is clear but constrained. Blur the logo, do not show the mark in the same frame as the assault, and so on.",
+      "items": { "type": "string" }
+    },
+    "known_enforcement_posture": {
+      "type": ["string", "null"],
+      "description": "Whether this owner is known to pursue production uses. A litigious owner changes the calculus even on a defensible use."
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "title": { "type": ["string", "null"] },
+          "excerpt": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

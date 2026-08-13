@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truestory.dev/schemas/ai_provenance_v1.json",
+  "title": "ai_provenance_v1",
+  "description": "Roadmap schema, disabled in routing.yaml until the taxonomy ships. It captures what an underwriter would need before writing affirmative coverage on AI assisted content: which model produced the asset, whether the training data was licensed, what human authorship exists, and for a digital replica, which consent instrument authorises it in which jurisdiction. The same pipeline that verifies a true story script produces this dossier, and adapted reality productions are exactly where digital replicas are heading.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["asset_kind"],
+  "properties": {
+    "asset_kind": {
+      "type": "string",
+      "enum": ["ai_generated_asset", "digital_replica", "ai_assisted_human_work"]
+    },
+
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model_name": { "type": ["string", "null"] },
+        "model_version": { "type": ["string", "null"] },
+        "vendor": { "type": ["string", "null"] },
+        "generation_date": { "type": ["string", "null"] },
+        "prompt_retained": { "type": ["boolean", "null"] }
+      }
+    },
+
+    "training_data": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provenance_documented": { "type": ["boolean", "null"] },
+        "licensed_corpus": {
+          "type": ["boolean", "null"],
+          "description": "Content generated from a model trained on unlicensed sources is the exposure carriers are now excluding by endorsement."
+        },
+        "vendor_indemnity_offered": { "type": ["boolean", "null"] },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+
+    "human_authorship": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "human_contribution_described": { "type": ["string", "null"] },
+        "more_than_de_minimis": {
+          "type": ["boolean", "null"],
+          "description": "Human authorship is the bedrock requirement of copyright, and prompts alone have been held insufficient. Only the human contribution is protectable."
+        },
+        "disclosure_required": { "type": ["boolean", "null"] },
+        "registrable": { "type": ["boolean", "null"] },
+        "authorship_log_reference": { "type": ["string", "null"] }
+      }
+    },
+
+    "digital_replica": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "subject_name": { "type": ["string", "null"] },
+        "subject_alive": { "type": ["boolean", "null"] },
+        "consent_instrument": {
+          "type": ["string", "null"],
+          "description": "The signed authorisation. For a deceased subject this runs through the estate and is governed by the post mortem statute of the domicile."
+        },
+        "consent_scope": { "type": ["string", "null"] },
+        "governing_jurisdiction": { "type": ["string", "null"] },
+        "post_mortem_term_applies": { "type": ["boolean", "null"] },
+        "union_agreement_applies": { "type": ["boolean", "null"] }
+      }
+    },
+
+    "insurability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "known_exclusion_triggered": { "type": ["boolean", "null"] },
+        "exclusion_reference": { "type": ["string", "null"] },
+        "affirmative_coverage_available": { "type": ["boolean", "null"] },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "title": { "type": ["string", "null"] },
+          "excerpt": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

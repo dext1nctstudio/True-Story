@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truestory.dev/schemas/quote_attribution_v1.json",
+  "title": "quote_attribution_v1",
+  "description": "A quotation put in the mouth of a real person is a different research question from a fact about them. It has an earliest documented source or it does not, and misattribution is common enough that a separate schema pays for itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["quote_documented", "commonly_misattributed"],
+  "properties": {
+    "quote_documented": {
+      "type": "boolean",
+      "description": "Whether any contemporaneous record shows the purported speaker saying this."
+    },
+    "earliest_source": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string", "format": "uri" },
+        "date": { "type": ["string", "null"] },
+        "context": {
+          "type": ["string", "null"],
+          "description": "Where and to whom it was said. A private remark and a public speech carry different clearance implications."
+        },
+        "exact_wording": {
+          "type": ["string", "null"],
+          "description": "The wording of record, which is frequently not the wording in circulation."
+        }
+      }
+    },
+    "commonly_misattributed": {
+      "type": "boolean",
+      "description": "Whether this quotation is widely attributed to someone who did not say it."
+    },
+    "actual_originator": {
+      "type": ["string", "null"],
+      "description": "Who said it, where the attribution is wrong."
+    },
+    "attribution_confidence": {
+      "type": ["string", "null"],
+      "enum": ["high", "medium", "low", null]
+    },
+    "paraphrase_distance": {
+      "type": ["string", "null"],
+      "enum": ["verbatim", "close_paraphrase", "loose_paraphrase", "invented", null],
+      "description": "How far the script line sits from the documented wording. Invented dialogue attributed to a named living person is a clearance issue even when the sentiment is accurate."
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "title": { "type": ["string", "null"] },
+          "date": { "type": ["string", "null"] },
+          "excerpt": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

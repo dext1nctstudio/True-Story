@@ -1,0 +1,203 @@
+{
+  "_comment": "SCAFFOLD. Correct shape, real but incomplete entries. This is not yet a two person labelling of the screenplay and the recall figures it produces are not publishable. Completing it is item 9 in the README TODO. See README.md in this directory for the protocol.",
+
+  "script": "demo/screenplay/the_long_shadow.fountain",
+  "script_version": "v1",
+  "labelled_by": ["PENDING_labeller_one", "PENDING_labeller_two"],
+  "adjudicated_by": "PENDING_adjudicator",
+  "labelled_at": null,
+  "status": "scaffold",
+
+  "expected_dedup_ratio": 6.5,
+  "_dedup_note": "Every mention becomes a span and the ledger collapses them. A character named through eight scenes is one research subject with many occurrence pointers, and the ratio is the single biggest lever on both cost and report readability.",
+
+  "elements": [
+    {
+      "canonical_form": "Margaret Holloway",
+      "element_type": "REAL_PERSON_DEPICTED",
+      "aliases": ["MARGARET"],
+      "pages": ["1", "1 4/8", "2", "3 2/8"],
+      "note": "Lead. Invented, but tagged as depicted because the production asserts a true story."
+    },
+    {
+      "canonical_form": "Arthur Penn",
+      "element_type": "REAL_PERSON_DEPICTED",
+      "aliases": ["ARTHUR"],
+      "pages": ["1 2/8", "2", "2 6/8", "4"]
+    },
+    {
+      "canonical_form": "Chief Engineer Davies",
+      "element_type": "REAL_PERSON_DEPICTED",
+      "aliases": ["DAVIES"],
+      "pages": ["1 6/8", "2 1/8"]
+    },
+    {
+      "canonical_form": "Catherine",
+      "element_type": "REAL_PERSON_DEPICTED",
+      "pages": ["3 2/8"]
+    },
+    {
+      "canonical_form": "Miss Ellis",
+      "element_type": "REAL_PERSON_DEPICTED",
+      "pages": ["4"]
+    },
+    {
+      "canonical_form": "The Way You Look Tonight",
+      "element_type": "MUSIC_CUE",
+      "pages": ["2 6/8"],
+      "note": "Two separate rights, composition and master. Drives a monitor with an expiry window."
+    },
+    {
+      "canonical_form": "Fred Astaire",
+      "element_type": "REAL_PERSON_DEPICTED",
+      "pages": ["2 6/8"],
+      "note": "Named performer, deceased, public figure. Post mortem publicity term is the live question."
+    },
+    {
+      "canonical_form": "1935 Schneider Trophy poster",
+      "element_type": "ARTWORK_VISUAL",
+      "pages": ["1 3/8"],
+      "note": "Background set dressing. Brief visibility does not settle the de minimis question."
+    },
+    {
+      "canonical_form": "framed photograph, three children on a beach",
+      "element_type": "ARTWORK_VISUAL",
+      "pages": ["3 2/8"],
+      "note": "Low prominence, deliberately included as a second visual element."
+    },
+    {
+      "canonical_form": "Air Ministry",
+      "element_type": "ORGANIZATION",
+      "pages": ["1 6/8"]
+    },
+    {
+      "canonical_form": "Croydon",
+      "element_type": "REAL_LOCATION",
+      "pages": ["1 4/8"]
+    },
+    {
+      "canonical_form": "Le Bourget",
+      "element_type": "REAL_LOCATION",
+      "pages": ["1 4/8"]
+    },
+    {
+      "canonical_form": "THIS IS A TRUE STORY",
+      "element_type": "TRUTH_CLAIM_FRAMING",
+      "pages": ["1"],
+      "note": "Project level. Escalates every person adjacent subject one full tier."
+    }
+  ],
+
+  "claims": [
+    {
+      "claim_text": "The Air Ministry refused her a licence in 1931.",
+      "subject": "Margaret Holloway",
+      "claim_type": "STATUS",
+      "polarity": "negative"
+    },
+    {
+      "claim_text": "They refused her twice.",
+      "subject": "Margaret Holloway",
+      "claim_type": "STATUS",
+      "polarity": "negative"
+    },
+    {
+      "claim_text": "She was never refused, she withdrew.",
+      "subject": "Margaret Holloway",
+      "claim_type": "CONDUCT",
+      "polarity": "neutral"
+    },
+    {
+      "claim_text": "She was the first woman to hold a first class navigator's certificate in this country in 1933.",
+      "subject": "Margaret Holloway",
+      "claim_type": "ACHIEVEMENT",
+      "polarity": "positive"
+    },
+    {
+      "claim_text": "She has never flown a night leg alone.",
+      "subject": "Margaret Holloway",
+      "claim_type": "CONDUCT",
+      "polarity": "negative"
+    },
+    {
+      "claim_text": "She flew Croydon to Le Bourget in November, in the dark, alone.",
+      "subject": "Margaret Holloway",
+      "claim_type": "CONDUCT",
+      "polarity": "positive"
+    },
+    {
+      "claim_text": "She did not make Cairo.",
+      "subject": "Margaret Holloway",
+      "claim_type": "CONDUCT",
+      "polarity": "negative"
+    },
+    {
+      "claim_text": "She was an impossible woman.",
+      "subject": "Margaret Holloway's mother",
+      "claim_type": "CHARACTERIZATION",
+      "polarity": "negative"
+    },
+    {
+      "claim_text": "Margaret Holloway's Karachi record stood for thirty one years.",
+      "subject": "Margaret Holloway",
+      "claim_type": "ACHIEVEMENT",
+      "polarity": "positive"
+    }
+  ],
+
+  "seeded_claims": [
+    {
+      "id": "SEED-001",
+      "claim_text": "The Air Ministry refused her a licence in 1931.",
+      "expected_verdict": "CONTRADICTED",
+      "why": "Planted falsehood. Contradicted on the page by Davies, and by the record. This is the red line the demo clicks.",
+      "expected_tier": "CRITICAL",
+      "expected_counsel": true
+    },
+    {
+      "id": "SEED-002",
+      "claim_text": "They refused her twice.",
+      "expected_verdict": "CONTRADICTED",
+      "why": "Atomic decomposition. The count is a separate claim from the refusal and must verify independently, exactly as a complaint itemises alleged falsehoods.",
+      "expected_tier": "CRITICAL"
+    },
+    {
+      "id": "SEED-003",
+      "claim_text": "She has never flown a night leg alone.",
+      "expected_verdict": "UNSUPPORTED",
+      "why": "Plausible, and the record says nothing either way. Amber, and the category that settles.",
+      "expected_tier": "CRITICAL"
+    },
+    {
+      "id": "SEED-004",
+      "claim_text": "She was the first woman to hold a first class navigator's certificate in this country in 1933.",
+      "expected_verdict": "VERIFIED",
+      "why": "True and surprising. Proves the system is not a paranoia engine.",
+      "expected_tier": "HIGH"
+    },
+    {
+      "id": "SEED-005",
+      "claim_text": "She flew Croydon to Le Bourget in November, in the dark, alone.",
+      "expected_verdict": "VERIFIED",
+      "why": "Directly rebuts SEED-003 within the scene. Two claims about the same subject reaching different verdicts is the granularity the product sells.",
+      "expected_tier": "HIGH"
+    },
+    {
+      "id": "SEED-006",
+      "claim_text": "She was an impossible woman.",
+      "expected_verdict": "OPINION",
+      "why": "Characterisation. Defamation law protects opinion, so it must be classified, coloured grey, and never researched. Spending a cent on this is a failure.",
+      "expected_tier": "NONE",
+      "expected_research_cost": 0
+    }
+  ],
+
+  "expected_summary": {
+    "_comment": "Approximate targets for the labelled script. Dense enough to impress, sparse enough that every red line on screen is legible and damning.",
+    "claims": "40 to 70",
+    "elements": "25 to 40",
+    "red": "2 to 4",
+    "amber": "8 to 18",
+    "monitors": "3 to 6"
+  }
+}

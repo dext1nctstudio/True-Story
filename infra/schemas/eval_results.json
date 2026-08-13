@@ -1,0 +1,18 @@
+[
+  { "name": "eval_run_id", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "suite", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "case_id", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "case_name", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "expected_flagged", "type": "BOOLEAN", "mode": "NULLABLE" },
+  { "name": "actual_flagged", "type": "BOOLEAN", "mode": "NULLABLE" },
+  { "name": "expected_verdict", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "actual_verdict", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "expected_tier", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "actual_tier", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "correct", "type": "BOOLEAN", "mode": "REQUIRED" },
+  { "name": "evidence_supports", "type": "BOOLEAN", "mode": "NULLABLE" },
+  { "name": "rubric_version", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "routing_version", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "notes", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "run_at", "type": "TIMESTAMP", "mode": "REQUIRED" }
+]

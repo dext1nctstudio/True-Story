@@ -1,0 +1,14 @@
+[
+  { "name": "precedent_id", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "element_type", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "jurisdiction", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "canonical_form", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "question", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "status_or_verdict", "type": "STRING", "mode": "REQUIRED" },
+  { "name": "rationale", "type": "STRING", "mode": "NULLABLE" },
+  { "name": "conditions", "type": "STRING", "mode": "REPEATED" },
+  { "name": "confidence", "type": "FLOAT", "mode": "NULLABLE" },
+  { "name": "counsel_confirmed", "type": "BOOLEAN", "mode": "NULLABLE" },
+  { "name": "embedding", "type": "FLOAT", "mode": "REPEATED" },
+  { "name": "recorded_at", "type": "TIMESTAMP", "mode": "REQUIRED" }
+]
