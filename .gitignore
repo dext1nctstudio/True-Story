@@ -75,6 +75,7 @@ crash.log
 # ── runtime artifacts ─────────────────────────────────────
 .cache/
 .truestory_cache/
+.truestory_cache.*/
 runs/
 artifacts/
 *.pdf
