@@ -89,7 +89,11 @@ RECORD_VERDICT_DECLARATION: dict[str, Any] = {
                 ),
             },
             "sources_conflict": {"type": "boolean"},
-            "subject_alive": {"type": ["boolean", "null"]},
+            # Gemini function declarations take a single type plus `nullable`,
+            # not a JSON Schema union. A ["boolean", "null"] here is rejected
+            # before the call is made, so every claim falls back to UNSUPPORTED
+            # and the whole report comes out amber with no verdict behind it.
+            "subject_alive": {"type": "boolean", "nullable": True},
             "subject_public_figure_status": {
                 "type": "string",
                 "enum": ["public", "limited_purpose", "private", "unknown"],

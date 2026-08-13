@@ -1,0 +1,53 @@
+{
+  "evidence_id": "ev_2a4cb812d0093e7d2275",
+  "subject_id": "cl_d2dc0a4f5d0fc2db7ff5:remedy:1",
+  "question": "Verify this factual claim about a real person or event against the public record.\n\nSUBJECT: Margaret Holloway\nCLAIM: They said a framed photograph on the mantel: three\nchildren on a beach, badly faded.\nJURISDICTIONS IN SCOPE: US\n\nDetermine whether the public record supports the claim exactly as stated, contradicts it, or is silent. Treat these as three distinct outcomes and do not treat silence as contradiction. Where the claim is time bounded, verify it for the period stated rather than for the subject's whole life. Prefer primary sources: registers, dockets, contemporaneous reporting, official records. Also establish whether the subject is living and whether they are a public figure, a limited purpose public figure, or a private individual.",
+  "finding": {
+    "claim_restated": "Synthesised restatement of the submitted claim.",
+    "verdict": "supported",
+    "supporting_facts": [
+      {
+        "fact": "Synthesised supporting fact.",
+        "source_url": "https://example.invalid/record/9959",
+        "source_type": "primary"
+      }
+    ],
+    "contradicting_facts": [],
+    "subject_alive": true,
+    "subject_public_figure_status": "private",
+    "record_quality": "strong"
+  },
+  "citations": [
+    {
+      "url": "https://example.invalid/record/9959",
+      "title": "Synthesised record, mock provider",
+      "excerpt": "This envelope was produced by MockProvider and carries no research value. It exists so the pipeline can be exercised end to end with no credentials and no spend.",
+      "accessed_at": "2026-08-13T17:45:28.904789+00:00",
+      "source_type": "primary",
+      "publisher": null,
+      "published_at": null,
+      "reliability": null
+    },
+    {
+      "url": "https://example.invalid/mock",
+      "title": "MockProvider",
+      "excerpt": "Offline fixture. No real source was consulted.",
+      "accessed_at": "2026-08-13T17:45:28.904789+00:00",
+      "source_type": "tertiary",
+      "publisher": null,
+      "published_at": null,
+      "reliability": null
+    }
+  ],
+  "reasoning": "Synthesised by MockProvider. Not a research finding. Set TRUESTORY_MODE=live for real verification.",
+  "confidence": 0.91,
+  "effective_confidence": 0.91,
+  "provider": "mock",
+  "schema_version": "claim_verification_v1",
+  "is_fallback": false,
+  "cost_cents": 0.0,
+  "latency_ms": 120,
+  "cached": false,
+  "retrieved_at": "2026-08-13T17:45:28.904789+00:00",
+  "error": null
+}

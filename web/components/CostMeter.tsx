@@ -80,15 +80,19 @@ export function VerdictCounters({
   red,
   grey,
   counsel,
+  pending = 0,
 }: {
   green: number;
   amber: number;
   red: number;
   grey: number;
   counsel: number;
+  /** Claims extracted but not yet adjudicated. Only meaningful mid run. */
+  pending?: number;
 }) {
   return (
     <div className="counters">
+      {pending > 0 && <Counter value={pending} label="researching" />}
       <Counter value={green} label="verified" tone="green" />
       <Counter value={amber} label="unsupported" tone="amber" />
       <Counter value={red} label="contradicted" tone="red" />
