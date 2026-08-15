@@ -73,7 +73,12 @@ function tooltip(budget: BudgetSnapshot): string {
   return lines.join("\n");
 }
 
-/** Header counters. These are the numbers on screen during the demo. */
+/**
+ * Header counters. These are the numbers on screen during the demo, and each
+ * verdict count doubles as a filter: click "4 verified" to dim every other
+ * line in the script pane down to just the green ones, click again to clear.
+ * Counsel has no colour of its own in the overlay, so it stays informational.
+ */
 export function VerdictCounters({
   green,
   amber,
@@ -81,6 +86,8 @@ export function VerdictCounters({
   grey,
   counsel,
   pending = 0,
+  activeFilter = null,
+  onFilter,
 }: {
   green: number;
   amber: number;
@@ -89,14 +96,41 @@ export function VerdictCounters({
   counsel: number;
   /** Claims extracted but not yet adjudicated. Only meaningful mid run. */
   pending?: number;
+  activeFilter?: string | null;
+  onFilter?: (color: string | null) => void;
 }) {
+  const toggle = (color: string) => onFilter?.(activeFilter === color ? null : color);
+
   return (
     <div className="counters">
       {pending > 0 && <Counter value={pending} label="researching" />}
-      <Counter value={green} label="verified" tone="green" />
-      <Counter value={amber} label="unsupported" tone="amber" />
-      <Counter value={red} label="contradicted" tone="red" />
-      <Counter value={grey} label="opinion" />
+      <Counter
+        value={green}
+        label="verified"
+        tone="green"
+        active={activeFilter === "green"}
+        onClick={onFilter && green > 0 ? () => toggle("green") : undefined}
+      />
+      <Counter
+        value={amber}
+        label="unsupported"
+        tone="amber"
+        active={activeFilter === "amber"}
+        onClick={onFilter && amber > 0 ? () => toggle("amber") : undefined}
+      />
+      <Counter
+        value={red}
+        label="contradicted"
+        tone="red"
+        active={activeFilter === "red"}
+        onClick={onFilter && red > 0 ? () => toggle("red") : undefined}
+      />
+      <Counter
+        value={grey}
+        label="opinion"
+        active={activeFilter === "grey"}
+        onClick={onFilter && grey > 0 ? () => toggle("grey") : undefined}
+      />
       <Counter value={counsel} label="counsel" />
     </div>
   );
@@ -106,15 +140,30 @@ function Counter({
   value,
   label,
   tone = "",
+  active = false,
+  onClick,
 }: {
   value: number;
   label: string;
   tone?: string;
+  active?: boolean;
+  onClick?: () => void;
 }) {
+  const className = `counter ${tone} ${active ? "active" : ""} ${onClick ? "clickable" : ""}`.trim();
+
+  if (!onClick) {
+    return (
+      <div className={className}>
+        <span className="counter-value">{value}</span>
+        <span className="counter-label">{label}</span>
+      </div>
+    );
+  }
+
   return (
-    <div className={`counter ${tone}`}>
+    <button className={className} onClick={onClick} title={`Show only ${label} lines`}>
       <span className="counter-value">{value}</span>
       <span className="counter-label">{label}</span>
-    </div>
+    </button>
   );
 }

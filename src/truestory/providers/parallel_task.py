@@ -251,6 +251,14 @@ class ParallelTaskProvider(ResearchProvider):
         confidence = self._confidence_from_basis(basis)
         reasoning = self._reasoning_from_basis(basis)
 
+        # Several schemas carry their own `sources` array rather than relying
+        # on Parallel's per field basis: entity_v1 is the main one, and it is
+        # what every clearance element is researched under. Reading only the
+        # basis left those elements with zero citations, so a research pass
+        # that had genuinely succeeded was recorded as RESEARCH_FAILED.
+        if not citations and isinstance(content, dict):
+            citations = self._citations_from_sources(content.get("sources"))
+
         return Evidence(
             evidence_id=Evidence.make_id(
                 request.subject_id, request.question, self._qualified_name(request.processor)
@@ -286,6 +294,35 @@ class ParallelTaskProvider(ResearchProvider):
                         publisher=cit.get("publisher"),
                     )
                 )
+        return citations
+
+    @staticmethod
+    def _citations_from_sources(sources: Any) -> list[Citation]:
+        """Citations carried in the finding's own `sources` array.
+
+        Same shape as a basis citation, one level up: schemas that ask the
+        model for its sources directly put them here instead.
+        """
+        if not isinstance(sources, list):
+            return []
+        citations: list[Citation] = []
+        seen: set[str] = set()
+        for src in sources:
+            if not isinstance(src, dict):
+                continue
+            url = src.get("url") or src.get("source_url")
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            citations.append(
+                Citation(
+                    url=url,
+                    title=src.get("title") or url,
+                    excerpt=(src.get("excerpt") or "")[:1200],
+                    source_type=src.get("source_type", "secondary"),
+                    publisher=src.get("publisher"),
+                )
+            )
         return citations
 
     @staticmethod

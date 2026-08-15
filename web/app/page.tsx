@@ -18,13 +18,14 @@ import { ClaimDashboard } from "@/components/ClaimDashboard";
 import { CostMeter, VerdictCounters } from "@/components/CostMeter";
 import { EvidencePanel } from "@/components/EvidencePanel";
 import { CAPABILITIES, RoleSwitcher } from "@/components/RoleSwitcher";
-import { RunList } from "@/components/RunList";
-import { UploadZone } from "@/components/UploadZone";
+import { Dashboard } from "@/components/Dashboard";
+import { ReviewQueue } from "@/components/ReviewQueue";
 import { VerdictOverlay } from "@/components/VerdictOverlay";
 import {
   ApiError,
   getClaims,
   getOverlay,
+  getElements,
   getRegister,
   getRemedies,
   getRun,
@@ -36,6 +37,7 @@ import type {
   Annotation,
   BudgetSnapshot,
   Claim,
+  ClearableElement,
   Overlay,
   PersonRollup,
   Remedy,
@@ -62,10 +64,15 @@ export default function Workspace() {
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [claims, setClaims] = useState<Claim[]>([]);
   const [remedies, setRemedies] = useState<Remedy[]>([]);
+  const [elements, setElements] = useState<ClearableElement[]>([]);
   const [persons, setPersons] = useState<PersonRollup[]>([]);
   const [summary, setSummary] = useState<RunSummary | null>(null);
   const [budget, setBudget] = useState<BudgetSnapshot | null>(null);
   const [selected, setSelected] = useState<Annotation | null>(null);
+  // Set by clicking a header counter. Dims every script line whose verdict
+  // does not match, rather than hiding them, so scanning "every red line"
+  // does not lose the surrounding scene structure.
+  const [verdictFilter, setVerdictFilter] = useState<string | null>(null);
   const [tab, setTab] = useState<"evidence" | "persons">("evidence");
   const [stage, setStage] = useState<string>("");
   const [runStatus, setRunStatus] = useState<string>("");
@@ -94,6 +101,7 @@ export default function Workspace() {
     else url.searchParams.delete("run");
     window.history.pushState(null, "", url);
     setRunIdState(id);
+    setVerdictFilter(null);
   }, []);
 
   // Resolves the real ?run= value once mounted, then keeps it in sync with
@@ -154,20 +162,23 @@ export default function Workspace() {
   const load = useCallback(async () => {
     if (!runId) return;
     try {
-      const [overlayData, claimData, run, remedyData] = await Promise.all([
+      const [overlayData, claimData, run, remedyData, elementData] = await Promise.all([
         getOverlay(runId),
         getClaims(runId),
         getRun(runId),
-        // Remedies exist only from stage 7 on. A miss there is expected for
-        // most of the run's life, not a real error, so it is swallowed below
-        // rather than joined into the same catch as the required reads.
+        // Remedies and elements only exist from later stages. A miss there is
+        // expected for most of the run's life, not a real error, so both are
+        // swallowed rather than joined into the same catch as the required
+        // reads.
         getRemedies(runId).catch(() => ({ remedies: [] as Remedy[] })),
+        getElements(runId).catch(() => ({ elements: [] as ClearableElement[] })),
       ]);
       // A run that has not reached the report stage can answer with {}, which
       // is truthy and would render an overlay with no script behind it.
       setOverlay(overlayData?.script ? overlayData : null);
       setClaims(claimData.claims);
       setRemedies(remedyData.remedies);
+      setElements(elementData.elements ?? []);
       setSummary(run.summary);
       setRunStatus(run.status);
       setJustStarted(false);
@@ -183,16 +194,21 @@ export default function Workspace() {
         setPersons([]);
       }
     } catch (exc) {
-      // A 404 is the ordinary "not ready yet" case: runs register on
-      // completion, so the whole live pass reads as missing. Saying the
-      // backend is down there sends you debugging a healthy server.
-      setError(
-        exc instanceof ApiError
-          ? exc.status === 404
-            ? `Run ${runId} is not available yet. A live run registers when it completes; this page retries every few seconds. Open another with ?run=<id>.`
-            : `API returned ${exc.status} for run ${runId}. Is the backend running on port 8080?`
-          : String(exc),
-      );
+      // A 404 before ingest lands is the ordinary startup window, not a
+      // failure: the run is registered the moment the script is parsed, so
+      // this clears itself within a few seconds. Showing an error banner and
+      // a `?run=` workaround there reads like something broke when nothing
+      // has. Only a genuine non-404 is surfaced as an error.
+      if (exc instanceof ApiError && exc.status === 404) {
+        setJustStarted(true);
+        setError(null);
+      } else {
+        setError(
+          exc instanceof ApiError
+            ? `API returned ${exc.status} for run ${runId}. Is the backend running on port 8080?`
+            : String(exc),
+        );
+      }
     }
   }, [runId]);
 
@@ -241,6 +257,13 @@ export default function Workspace() {
     [claims, selected],
   );
 
+  // An annotation is either a claim or a clearance element; the evidence panel
+  // needs whichever one it is to show that subject's research.
+  const selectedElement = useMemo(
+    () => elements.find((e) => e.element_id === selected?.id) ?? null,
+    [elements, selected],
+  );
+
   const selectedRemedy = useMemo(
     () => remedies.find((r) => r.remedy_id === selectedClaim?.remedy_id) ?? null,
     [remedies, selectedClaim],
@@ -267,72 +290,82 @@ export default function Workspace() {
   return (
     <div className="shell">
       <header className="header">
-        <button
-          className="brand"
-          onClick={() => openRun(null)}
-          title="Back to the run dashboard"
-        >
-          True Story
-        </button>
-
-        {overlay && (
-          <span className="script-title">
-            {overlay.script.title} · {overlay.script.draft_version} ·{" "}
-            {overlay.script.page_count} pages
-          </span>
-        )}
-
-        {/* The escalation banner. This production tells its audience the story
-            is true, which raises the risk tier of every person adjacent
-            subject in the script. */}
-        {overlay?.script.truth_claim_framing && (
-          <span
-            className="framing-banner"
-            title={overlay.script.truth_claim_evidence ?? undefined}
+        <div className="header-group">
+          <button
+            className="brand"
+            onClick={() => openRun(null)}
+            title="Back to the docket"
           >
-            TRUE STORY ASSERTED · all person adjacent elements escalated one tier
-          </span>
-        )}
+            <span className="brand-mark">True Story</span>
+            <span className="brand-kicker">Clearance &amp; Fact Engine</span>
+          </button>
+
+          {overlay && (
+            <span className="script-title">
+              {overlay.script.title} · {overlay.script.draft_version} ·{" "}
+              {overlay.script.page_count} pages
+            </span>
+          )}
+
+          {/* The escalation banner. This production tells its audience the story
+              is true, which raises the risk tier of every person adjacent
+              subject in the script. */}
+          {overlay?.script.truth_claim_framing && (
+            <span
+              className="framing-banner"
+              title={overlay.script.truth_claim_evidence ?? undefined}
+            >
+              TRUE STORY ASSERTED · all person adjacent elements escalated one tier
+            </span>
+          )}
+        </div>
 
         <span className="spacer" />
 
-        {/* Stage events only arrive for transitions seen while connected, so a
-            page opened mid run has none. The polled status covers that gap. */}
-        {runId && (stage || (runStatus && runStatus !== "COMPLETE")) && (
-          <span className="counter-label">
-            {(stage || runStatus).toLowerCase().replace(/_/g, " ")}
-          </span>
-        )}
+        <div className="header-actions">
+          {/* Stage events only arrive for transitions seen while connected, so a
+              page opened mid run has none. The polled status covers that gap. */}
+          {runId && (stage || (runStatus && runStatus !== "COMPLETE")) && (
+            <span className="counter-label">
+              {(stage || runStatus).toLowerCase().replace(/_/g, " ")}
+            </span>
+          )}
 
-        {runId && <VerdictCounters {...counts} />}
-        {runId && <CostMeter budget={budget} visible={capabilities.cost} />}
-        <label className="upload-trigger">
-          New draft
-          <input
-            type="file"
-            accept=".fountain,.fdx,.pdf,.txt"
-            hidden
-            disabled={uploading}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void startRun(file);
-              event.target.value = "";
-            }}
-          />
-        </label>
-        <RoleSwitcher role={role} onChange={setRoleState} />
+          {runId && (
+            <VerdictCounters
+              {...counts}
+              activeFilter={verdictFilter}
+              onFilter={setVerdictFilter}
+            />
+          )}
+          {runId && <CostMeter budget={budget} visible={capabilities.cost} />}
+          <label className="btn btn-primary">
+            New draft
+            <input
+              type="file"
+              accept=".fountain,.fdx,.pdf,.txt"
+              hidden
+              disabled={uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void startRun(file);
+                event.target.value = "";
+              }}
+            />
+          </label>
+          <RoleSwitcher role={role} onChange={setRoleState} />
+        </div>
       </header>
 
       {!runId ? (
         <div className="workspace-single">
-          {uploading ? (
-            <div className="empty">Uploading and starting the run.</div>
-          ) : (
-            <>
-              <UploadZone onFile={startRun} uploading={uploading} error={uploadError} />
-              <RunList runs={runs} onOpen={openRun} />
-            </>
-          )}
+          <Dashboard
+            runs={runs}
+            onOpen={openRun}
+            onFile={startRun}
+            uploading={uploading}
+            uploadError={uploadError}
+          />
         </div>
       ) : (
       <div className="workspace">
@@ -343,13 +376,21 @@ export default function Workspace() {
             <VerdictOverlay
               overlay={overlay}
               selectedId={selected?.id ?? null}
+              filterColor={verdictFilter}
               onSelect={(annotation) => {
                 setSelected(annotation);
                 setTab("evidence");
               }}
             />
           ) : justStarted ? (
-            <div className="empty">Run started. Ingesting the script.</div>
+            <div className="starting">
+              <div className="starting-spinner" />
+              <p className="starting-title">Parsing the screenplay</p>
+              <p className="starting-sub">
+                The script appears here as soon as ingest finishes, then lines light
+                up as verdicts land.
+              </p>
+            </div>
           ) : (
             !error && <div className="empty">Loading the draft.</div>
           )}
@@ -372,14 +413,30 @@ export default function Workspace() {
           </div>
 
           {tab === "evidence" ? (
-            <EvidencePanel
-              runId={runId}
-              annotation={selected}
-              claim={selectedClaim}
-              remedy={selectedRemedy}
-              canSeeEvidence={capabilities.evidence}
-              canUnmask={capabilities.unmask}
-            />
+            selected ? (
+              <EvidencePanel
+                runId={runId}
+                annotation={selected}
+                claim={selectedClaim}
+                element={selectedElement}
+                remedy={selectedRemedy}
+                canSeeEvidence={capabilities.evidence}
+                canUnmask={capabilities.unmask}
+              />
+            ) : (
+              // Nothing selected. The resting state is the work queue rather
+              // than an instruction to go clicking.
+              <ReviewQueue
+                claims={claims}
+                elements={elements}
+                onSelectClaim={(claimId) => {
+                  const found = Object.values(overlay?.annotations ?? {})
+                    .flat()
+                    .find((a) => a.id === claimId);
+                  if (found) setSelected(found);
+                }}
+              />
+            )
           ) : (
             <ClaimDashboard persons={persons} />
           )}
