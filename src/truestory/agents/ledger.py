@@ -244,6 +244,32 @@ class LedgerAgent:
             if not any(c.claim_id == claim.claim_id for c in target.claims):
                 target.claims.append(claim)
 
+        # Re identification above can collide two claims that were distinct
+        # when the extractor deduped them: one sentence reached through two
+        # spans resolves to one canonical element, and both then hash to the
+        # same id. The per element list is already guarded, but the caller's
+        # list is not, so the run would serve the same claim_id twice.
+        self._collapse_claims(claims)
+
+    @staticmethod
+    def _collapse_claims(claims: list[FactualClaim]) -> None:
+        """Collapse claims that share an id after re identification, in place.
+
+        Occurrences are merged rather than dropped: the same assertion made in
+        two places is one research subject and two places to light up.
+        """
+        merged: dict[str, FactualClaim] = {}
+        for claim in claims:
+            existing = merged.get(claim.claim_id)
+            if existing is None:
+                merged[claim.claim_id] = claim
+                continue
+            for occurrence in claim.asserted_in:
+                if occurrence not in existing.asserted_in:
+                    existing.asserted_in.append(occurrence)
+        if len(merged) != len(claims):
+            claims[:] = list(merged.values())
+
     # ── re collapse after retyping ───────────────────────────────────────────
     def _remerge(self, elements: list[ClearableElement]) -> list[ClearableElement]:
         merged: dict[str, ClearableElement] = {}
