@@ -95,9 +95,46 @@ class ReportAgent:
         """
         by_line: dict[str, list[dict[str, Any]]] = {}
 
+        # Line numbers reaching this point can be approximate: a claim whose
+        # wording the model rephrased falls back to the line of the span it
+        # came from, and an element carries its raw span line. Either can be a
+        # blank separator line, which renders as a highlight floating in empty
+        # space with no text to explain it. Snapping to the nearest line that
+        # actually has words keeps every annotation attached to something
+        # readable.
+        lines_by_scene = {s.scene_no: s.text.split("\n") for s in document.scenes}
+
+        def anchor(scene_no: int, line_no: int) -> int:
+            lines = lines_by_scene.get(scene_no)
+            if not lines or line_no >= len(lines) or lines[line_no].strip():
+                return line_no
+            for offset in range(1, 4):
+                for candidate in (line_no - offset, line_no + offset):
+                    if 0 <= candidate < len(lines) and lines[candidate].strip():
+                        return candidate
+            return line_no
+
+        def locate_element(scene_no: int, line_no: int, surface: str) -> int:
+            """Anchor an element to a line that actually contains its name.
+
+            An element's line comes from whichever span survived grouping, and
+            after coreference merging that can be a different mention than the
+            one being rendered — which is how "Eiffel Tower" ended up
+            highlighting a bare character cue. The element's own surface form
+            is the reliable signal, so prefer the nearest line containing it.
+            """
+            lines = lines_by_scene.get(scene_no)
+            needle = (surface or "").strip().lower()
+            if not lines or not needle:
+                return anchor(scene_no, line_no)
+            matches = [i for i, text in enumerate(lines) if needle in text.lower()]
+            if not matches:
+                return anchor(scene_no, line_no)
+            return min(matches, key=lambda i: abs(i - line_no))
+
         for claim in claims:
             for occurrence in claim.asserted_in:
-                key = f"{occurrence.scene_no}:{occurrence.line_no}"
+                key = f"{occurrence.scene_no}:{anchor(occurrence.scene_no, occurrence.line_no)}"
                 by_line.setdefault(key, []).append(
                     {
                         "kind": "claim",
@@ -120,7 +157,10 @@ class ReportAgent:
 
         for element in elements:
             for occurrence in element.occurrences:
-                key = f"{occurrence.scene_no}:{occurrence.line_no}"
+                key = (
+                    f"{occurrence.scene_no}:"
+                    f"{locate_element(occurrence.scene_no, occurrence.line_no, occurrence.surface_form)}"
+                )
                 by_line.setdefault(key, []).append(
                     {
                         "kind": "element",
