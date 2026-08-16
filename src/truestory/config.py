@@ -175,7 +175,7 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "TRUESTORY_MODE=live requires: "
                     + ", ".join(missing)
-                    + ". See the TODO section of the README for how to obtain each."
+                    + ". See the build status section of the README for how to obtain each."
                 )
         return self
 

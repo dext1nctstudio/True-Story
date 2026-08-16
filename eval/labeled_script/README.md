@@ -66,5 +66,6 @@ python eval/run_eval.py --suite labeled_script --out eval/results
 `ground_truth.json` in this directory is a **scaffold**. It carries the correct
 shape and a small number of real entries so the harness runs end to end, and it
 is not a complete two person labelling of the screenplay. Completing it is item
-9 in the README TODO, and until it is done the recall figures this suite
-reports are not publishable.
+9 of the README build status, and until it is done the recall figures this suite
+reports are not publishable. Today the suite reports zero claim recall, because
+the offline extractor does not recover the seeded claims.

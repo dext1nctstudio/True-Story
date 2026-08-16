@@ -73,7 +73,7 @@ resource "google_firestore_database" "main" {
 # src/truestory/api/security.py and deployed with:
 #   firebase deploy --only firestore:rules
 # An authorisation check that exists only in application code is one deploy
-# away from being bypassed, so this step is not optional. README TODO item 5.
+# away from being bypassed, so this step is not optional. README build status, item 5.
 
 # -----------------------------------------------------------------------------
 # storage

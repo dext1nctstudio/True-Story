@@ -23,7 +23,12 @@
 # WARNING
 #   Every factual field below must be confirmed against a primary source before
 #   it appears in a deliverable or on camera. Fields marked `verify: required`
-#   have not been confirmed in this repository. See the README TODO, item 9.
+#   have not been confirmed in this repository. See the README build status, item 11.
+#
+#   Note also that the harness currently scores these cases against the routing
+#   table alone. Until `_run_case` runs each reconstruction through the full
+#   pipeline blind, the accuracy figure this file produces is a policy self test
+#   and must be described as one. README build status, item 10.
 # =============================================================================
 
 version: 1
