@@ -27,7 +27,7 @@ from truestory.config import settings
 from truestory.mcp.tools import ClearanceTools
 from truestory.models.claims import FactualClaim
 from truestory.models.elements import ClearableElement
-from truestory.models.enums import ElementType, Polarity
+from truestory.models.enums import ClearanceStatus, ElementType, Polarity
 from truestory.models.evidence import Evidence
 from truestory.providers import ProviderRegistry
 from truestory.providers.budget import BudgetExhausted
@@ -92,6 +92,22 @@ class ResearchSwarm:
         self.on_progress = on_progress
 
     # ── entry point ──────────────────────────────────────────────────────────
+    @staticmethod
+    def _is_opinion_element(element: ClearableElement, opinion_text: set[str]) -> bool:
+        """Whether this element is a characterisation the claim stage settled.
+
+        Checked against the element's own words rather than its attached
+        claims: coreference frequently lifts a characterisation into its own
+        element with nothing attached, which is exactly the case that was
+        slipping through and getting researched.
+        """
+        if element.claims and all(c.is_opinion for c in element.claims):
+            return True
+        surface = _normalise(element.display_form())
+        if not surface or len(surface) < 8:
+            return False
+        return any(surface in text for text in opinion_text)
+
     async def run(
         self, claims: list[FactualClaim], elements: list[ClearableElement]
     ) -> SwarmResult:
@@ -106,8 +122,30 @@ class ResearchSwarm:
                 continue  # settled at routing, never dispatched
             tasks.append(self._guarded(semaphore, self._research_claim(claim, result)))
 
+        # Text the claim stage already settled as opinion. Coreference means a
+        # characterisation is often lifted into its own element with no claims
+        # attached to it, so matching on the element's own words is what
+        # actually catches it.
+        opinion_text = {_normalise(c.claim_text) for c in claims if c.is_opinion}
+
         for element in elements:
             if element.element_type in _NO_RESEARCH:
+                continue
+            # Defamation law protects opinion, which is why the claim loop
+            # above skips it. The element path had no equivalent guard, so a
+            # characterisation like "impossible woman to work for" was
+            # dispatched at CRITICAL tier on the most expensive processor. A
+            # web search on a value judgement cannot return anything
+            # probative: it came back with an unrelated 1988 film, then with
+            # a stranger's employment lawsuit, and both read as evidence.
+            if self._is_opinion_element(element, opinion_text):
+                element.status = ClearanceStatus.CLEAR
+                element.confidence = 1.0
+                element.rationale = (
+                    "Characterisation rather than a factual assertion. Defamation law "
+                    "protects opinion, so this is classified rather than researched."
+                )
+                log.debug("skipping opinion element %s", element.element_id)
                 continue
             tasks.append(self._guarded(semaphore, self._research_element(element, result)))
 
@@ -315,6 +353,10 @@ _NO_RESEARCH = frozenset(
         ElementType.TRUTH_CLAIM_FRAMING,
     }
 )
+
+
+def _normalise(text: str) -> str:
+    return " ".join((text or "").lower().split()).strip(" .,\"'")
 
 
 def _rehydrate(payload: dict[str, Any], subject_id: str, question: str) -> Evidence:

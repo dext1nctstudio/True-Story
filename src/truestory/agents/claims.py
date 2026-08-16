@@ -31,7 +31,7 @@ from typing import Any
 from truestory.config import settings
 from truestory.models.claims import FactualClaim
 from truestory.models.enums import CLAIM_BEARING, ClaimType, Polarity
-from truestory.models.spans import RawSpan, Scene
+from truestory.models.spans import Occurrence, RawSpan, Scene
 
 log = logging.getLogger("truestory.claims")
 
@@ -92,7 +92,7 @@ class ClaimExtractor:
     # ── the model pass ───────────────────────────────────────────────────────
     async def extract(self, span: RawSpan, scene: Scene | None) -> list[FactualClaim]:
         if settings.offline:
-            return self._extract_deterministic(span)
+            return self._extract_deterministic(span, scene)
 
         from google.genai import types
 
@@ -118,9 +118,9 @@ class ClaimExtractor:
             )
         except Exception as exc:  # noqa: BLE001
             log.warning("claim extraction failed for span %s: %s", span.span_id, exc)
-            return self._extract_deterministic(span)
+            return self._extract_deterministic(span, scene)
 
-        return self._claims_from_response(span, getattr(response, "text", "") or "")
+        return self._claims_from_response(span, scene, getattr(response, "text", "") or "")
 
     def _genai(self) -> Any:
         if self._client is None:
@@ -133,7 +133,54 @@ class ClaimExtractor:
             )
         return self._client
 
-    def _claims_from_response(self, span: RawSpan, text: str) -> list[FactualClaim]:
+    def _locate(self, span: RawSpan, scene: Scene | None, claim_text: str) -> Occurrence:
+        """Find which line of the scene a claim's own sentence actually sits on.
+
+        Every claim used to inherit `span.to_occurrence()` wholesale: the
+        originating span's line, not the line the extracted sentence came
+        from. A scene with several claim-bearing spans (several characters,
+        say) then collapsed every claim from every one of them onto whichever
+        few lines those spans themselves sat on, so the overlay stacked
+        unrelated claims — a location claim, a person claim, an opinion — on
+        one line and the highest severity one buried the rest from view.
+        """
+        base = span.to_occurrence()
+        if scene is None:
+            return base
+
+        words = {w for w in _tokens(claim_text) if len(w) > 3}
+        if not words:
+            return base
+
+        # Substring matching fails the moment the model rephrases a claim,
+        # which it usually does — "walked on the Moon in July 1969" against a
+        # script line reading "was the first person to walk on the Moon, in
+        # July 1969". Scoring shared words instead tolerates the rewrite, and
+        # requiring a real overlap stops a short line matching by accident.
+        best_line, best_score = -1, 0.0
+        for line_no, line in enumerate(scene.text.split("\n")):
+            line_words = {w for w in _tokens(line) if len(w) > 3}
+            if not line_words:
+                continue
+            overlap = len(words & line_words) / len(words)
+            if overlap > best_score:
+                best_line, best_score = line_no, overlap
+
+        if best_line < 0 or best_score < 0.34:
+            return base
+        return Occurrence(
+            scene_no=base.scene_no,
+            page=base.page,
+            line_no=best_line,
+            modality=base.modality,
+            surface_form=base.surface_form,
+            context=base.context,
+            character_cue=base.character_cue,
+        )
+
+    def _claims_from_response(
+        self, span: RawSpan, scene: Scene | None, text: str
+    ) -> list[FactualClaim]:
         try:
             payload = json.loads(text)
         except json.JSONDecodeError:
@@ -165,13 +212,13 @@ class ClaimExtractor:
                     claim_text=claim_text,
                     claim_type=claim_type,
                     polarity=polarity,
-                    asserted_in=[span.to_occurrence()],
+                    asserted_in=[self._locate(span, scene, claim_text)],
                 )
             )
         return out
 
     # ── offline path ─────────────────────────────────────────────────────────
-    def _extract_deterministic(self, span: RawSpan) -> list[FactualClaim]:
+    def _extract_deterministic(self, span: RawSpan, scene: Scene | None = None) -> list[FactualClaim]:
         """Sentence splitting plus keyword classification.
 
         Far weaker than the model pass and honest about it. Its purpose is to
@@ -214,7 +261,7 @@ class ClaimExtractor:
                     claim_text=sentence,
                     claim_type=claim_type,
                     polarity=polarity,
-                    asserted_in=[span.to_occurrence()],
+                    asserted_in=[self._locate(span, scene, sentence)],
                 )
             )
         return claims
@@ -238,6 +285,13 @@ class ClaimExtractor:
                 if occurrence not in existing.asserted_in:
                     existing.asserted_in.append(occurrence)
         return list(merged.values())
+
+
+def _tokens(text: str) -> set[str]:
+    """Lowercase word set, punctuation stripped. Used for line matching."""
+    import re
+
+    return set(re.findall(r"[a-z0-9']+", text.lower()))
 
 
 def _split_sentences(text: str) -> list[str]:

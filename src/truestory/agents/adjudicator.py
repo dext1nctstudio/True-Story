@@ -336,6 +336,15 @@ class Adjudicator:
 
         usable = [e for e in evidence if e.is_usable]
         if not usable:
+            # An element the swarm deliberately declined to research, because
+            # it is a characterisation that defamation law protects, has not
+            # failed anything. It arrives here already settled as CLEAR with
+            # its reason written. Overwriting that as a research failure would
+            # misstate what happened and count against coverage quality on the
+            # front page of the report.
+            if element.status is ClearanceStatus.CLEAR and element.rationale:
+                return
+
             element.status = ClearanceStatus.RESEARCH_FAILED
             element.rationale = (
                 "Research did not complete or returned no citable source. Counted "

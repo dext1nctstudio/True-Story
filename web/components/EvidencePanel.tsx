@@ -14,12 +14,16 @@
 
 import { useState } from "react";
 import { applyRemedy, unmaskElement } from "@/lib/api";
-import type { Annotation, Claim, Evidence, Remedy } from "@/lib/types";
+import type { Annotation, Claim, ClearableElement, Evidence, Remedy } from "@/lib/types";
 
 interface Props {
   runId: string;
   annotation: Annotation | null;
   claim: Claim | null;
+  /** The selected subject when the annotation is a clearance element rather
+   *  than a claim. Without it an element opened with "no evidence records
+   *  attached" even when its research had returned sources. */
+  element?: ClearableElement | null;
   remedy: Remedy | null;
   canSeeEvidence: boolean;
   canUnmask: boolean;
@@ -30,6 +34,7 @@ export function EvidencePanel({
   runId,
   annotation,
   claim,
+  element,
   remedy,
   canSeeEvidence,
   canUnmask,
@@ -67,7 +72,9 @@ export function EvidencePanel({
     );
   }
 
-  const evidence = claim?.evidence ?? [];
+  // A selected line is either a decomposed claim or a clearance element, and
+  // each carries its own evidence records.
+  const evidence = claim?.evidence ?? element?.evidence ?? [];
 
   async function apply() {
     if (!remedy || !claim) return;
