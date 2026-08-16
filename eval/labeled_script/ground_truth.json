@@ -1,5 +1,5 @@
 {
-  "_comment": "SCAFFOLD. Correct shape, real but incomplete entries. This is not yet a two person labelling of the screenplay and the recall figures it produces are not publishable. Completing it is item 9 in the README TODO. See README.md in this directory for the protocol.",
+  "_comment": "SCAFFOLD. Correct shape, real but incomplete entries. This is not yet a two person labelling of the screenplay and the recall figures it produces are not publishable. Completing it is item 9 of the README build status. See README.md in this directory for the protocol.",
 
   "script": "demo/screenplay/the_long_shadow.fountain",
   "script_version": "v1",

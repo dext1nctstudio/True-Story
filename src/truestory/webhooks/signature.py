@@ -53,7 +53,7 @@ def verify(
     if not secret:
         raise SignatureError(
             "no webhook signing secret is configured. Refusing to accept unverified "
-            "callbacks. See the TODO section of the README, item 3."
+            "callbacks. See the build status section of the README, item 3."
         )
     if not signature_header or not timestamp_header:
         raise SignatureError("missing signature or timestamp header")

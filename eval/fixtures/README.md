@@ -77,4 +77,4 @@ pipeline runs and every branch is exercised including contradiction, conflict,
 low confidence and outright research failure. Those synthesised envelopes are
 clearly labelled and carry no research value at all.
 
-Recording the real fixture set is item 8 in the README TODO.
+Recording the real fixture set is item 8 of the README build status.

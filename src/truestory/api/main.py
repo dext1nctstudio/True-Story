@@ -98,8 +98,8 @@ async def current_principal(
     raise HTTPException(
         status_code=501,
         detail=(
-            "Identity token verification is not wired yet. See the TODO section "
-            "of the README, item 4."
+            "Identity token verification is not wired yet. See the build status "
+            "section of the README, item 4."
         ),
     )
 

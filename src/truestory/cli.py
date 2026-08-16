@@ -310,20 +310,20 @@ def doctor() -> None:
     row(
         "parallel api key",
         bool(settings.parallel_api_key) and not settings.parallel_api_key.startswith("PLACEHOLDER"),
-        "README TODO item 1",
+        "README build status, item 1",
     )
     row(
         "google cloud project",
         bool(settings.gcp_project) and not settings.gcp_project.startswith("PLACEHOLDER"),
-        "README TODO item 2",
+        "README build status, item 2",
     )
     row(
         "webhook secret",
         bool(settings.parallel_webhook_secret)
         and not settings.parallel_webhook_secret.startswith("PLACEHOLDER"),
-        "README TODO item 3",
+        "README build status, item 3",
     )
-    row("agent engine", bool(settings.agent_engine_resource), "README TODO item 6")
+    row("agent engine", bool(settings.agent_engine_resource), "README build status, item 6")
 
     try:
         policy = load_routing()
@@ -341,7 +341,7 @@ def doctor() -> None:
     console.print(table)
     console.print(
         "\n[dim]Mock mode needs none of the above. Every red row is a live mode "
-        "prerequisite and each maps to a numbered item in the README TODO.[/dim]"
+        "prerequisite and each maps to a numbered item in the README build status.[/dim]"
     )
 
 
