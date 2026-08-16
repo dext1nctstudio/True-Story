@@ -120,8 +120,8 @@ function ScriptLine({
 
   // The header counters count claim verdicts, so the filters they drive must
   // only ever match claims. Elements share the same colour space for an
-  // entirely different question — green on an element means the rights are
-  // cleared, not that anything is true — and matching those made the line
+  // entirely different question, green on an element means the rights are
+  // cleared, not that anything is true, and matching those made the line
   // "The Eiffel Tower is in London" light up as verified because the Eiffel
   // Tower is cleared to depict. In a defamation tool that is the worst
   // possible way to be wrong.
@@ -152,8 +152,8 @@ function ScriptLine({
         .join(" ")}
       /* Opinion lines used to be inert, on the reasoning that an opinion is
          never researched so there is nothing to show. But the panel does have
-         something to say — the decomposed claim and why it was classified as
-         characterisation rather than fact — and a line that visibly carries a
+         something to say, the decomposed claim and why it was classified as
+         characterisation rather than fact, and a line that visibly carries a
          verdict but refuses to open reads as broken. */
       onClick={() => onSelect(dominant)}
       onKeyDown={(event) => {
@@ -201,6 +201,6 @@ function classifyIndent(line: string): string {
 function annotationTitle(annotation: Annotation): string {
   const verdict = annotation.verdict ?? annotation.status ?? "pending";
   const confidence = `${Math.round(annotation.confidence * 100)}% confidence`;
-  const counsel = annotation.needs_counsel ? " · counsel review" : "";
-  return `${verdict} · ${annotation.citation_count} sources · ${confidence}${counsel}`;
+  const counsel = annotation.needs_counsel ? ", counsel review" : "";
+  return `${verdict}, ${annotation.citation_count} sources, ${confidence}${counsel}`;
 }

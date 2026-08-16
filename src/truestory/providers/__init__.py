@@ -20,8 +20,8 @@ from truestory.providers.base import (
 )
 from truestory.providers.budget import BudgetExhausted, BudgetGovernor, Ledger
 from truestory.providers.cached import (
-    CachedProvider,
     CacheBackend,
+    CachedProvider,
     GcsCacheBackend,
     LocalCacheBackend,
 )

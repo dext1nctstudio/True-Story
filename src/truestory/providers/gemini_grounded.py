@@ -72,10 +72,8 @@ class GeminiGroundedProvider(ResearchProvider):
                         safety_settings=_permissive_analysis_safety(types),
                     ),
                 )
-            except Exception as exc:  # noqa: BLE001
-                return Evidence.failed(
-                    request.subject_id, request.question, self.name, str(exc)
-                )
+            except Exception as exc:
+                return Evidence.failed(request.subject_id, request.question, self.name, str(exc))
 
         finding = _parse_json(getattr(response, "text", "") or "")
         citations = _citations_from_grounding(response)
@@ -115,9 +113,7 @@ def _permissive_analysis_safety(types: Any) -> list[Any]:
         "HARM_CATEGORY_SEXUALLY_EXPLICIT",
         "HARM_CATEGORY_DANGEROUS_CONTENT",
     ]
-    return [
-        types.SafetySetting(category=c, threshold="BLOCK_ONLY_HIGH") for c in categories
-    ]
+    return [types.SafetySetting(category=c, threshold="BLOCK_ONLY_HIGH") for c in categories]
 
 
 def _parse_json(text: str) -> dict[str, Any]:

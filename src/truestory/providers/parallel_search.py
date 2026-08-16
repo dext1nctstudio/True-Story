@@ -76,10 +76,8 @@ class ParallelSearchProvider(ResearchProvider):
                 body = resp.json()
             except RateLimited:
                 raise
-            except Exception as exc:  # noqa: BLE001
-                return Evidence.failed(
-                    request.subject_id, request.question, self.name, str(exc)
-                )
+            except Exception as exc:
+                return Evidence.failed(request.subject_id, request.question, self.name, str(exc))
 
         results = body.get("results", [])
         citations = [

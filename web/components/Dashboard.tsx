@@ -7,7 +7,7 @@
  * what the book has cost, how the record has broken across every claim ever
  * adjudicated in this process, and how many runs are in motion right now.
  * Everything here is derived from the same run list the dashboard already
- * polls — no separate aggregate endpoint, so there is nothing here that can
+ * polls, no separate aggregate endpoint, so there is nothing here that can
  * drift from what the run rows below it show.
  */
 
@@ -84,9 +84,12 @@ export function Dashboard({ runs, onOpen, onFile, uploading, uploadError }: Prop
           <span className="stat-card-sub">across every run below</span>
         </div>
 
-        <div className="stat-card" style={{ gridColumn: "span 2" }}>
+        <div className="stat-card stat-card-wide">
           <span className="stat-card-label">Verdict record</span>
           <span className="stat-card-value">{stats.claimTotal}</span>
+          {stats.claimTotal === 0 && (
+            <span className="stat-card-sub">nothing adjudicated yet</span>
+          )}
           {stats.claimTotal > 0 && (
             <>
               <div className="verdict-bar">

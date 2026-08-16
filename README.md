@@ -122,14 +122,14 @@ make install          # pip install -e ".[dev]", and copies .env.example to .env
 make pipeline         # full eight stage run over the demo screenplay
 ```
 
-This is the exact output of that command on commit `dbe41da`:
+This is the exact output of that command on commit `79940b6`:
 
 ```
   ingest    7 scenes, 23 spans TRUE STORY ASSERTED
   claims    41 extracted, 1 opinions filtered
   ledger    13 elements (1.77x reduction)
   routing   48 subjects, projected $1.12
-  verdicts  29 green · 8 amber · 3 red · 1 grey · 49 counsel
+  verdicts  25 green · 7 amber · 3 red · 1 grey · 43 counsel
   remedies  7 verified of 7 proposed
 ```
 
@@ -535,7 +535,7 @@ sweep endpoint, and deploy the Firestore security rules.
 
 ## 14. Build status: done and outstanding
 
-Audited **15 August 2026** against commit `dbe41da` on `main`. Every row was
+Audited **16 August 2026** against commit `79940b6` on `main`. Every row was
 checked by running the thing rather than by reading the code, and the command
 that produced the evidence is named. Where an earlier version of this section
 claimed something that is no longer true, the row says so.
@@ -551,13 +551,13 @@ claimed something that is no longer true, the row says so.
 
 | Area | What exists | State | Evidence, or what is left |
 |---|---|---|---|
-| Eight stage pipeline | Ingest, claims, ledger, router, swarm, adjudicator, remedy, report, running end to end | **Done** | `truestory run demo/screenplay/the_long_shadow.fountain` produces 7 scenes, 23 spans, 41 claims, 13 elements, 48 researched subjects, 29/8/3/1 verdicts, 7 verified remedies, every artifact |
-| Test suite | 95 tests, no network, no spend | **Done** | `pytest` — 95 passed |
+| Eight stage pipeline | Ingest, claims, ledger, router, swarm, adjudicator, remedy, report, running end to end | **Done** | `truestory run demo/screenplay/the_long_shadow.fountain` produces 7 scenes, 23 spans, 41 claims, 13 elements, 48 researched subjects, 25/7/3/1 verdicts, 7 verified remedies, every artifact |
+| Test suite | 95 tests, no network, no spend | **Done** | `pytest`, 95 passed |
 | Domain models | Frozen contracts for spans, claims, elements, evidence, enums. The no verdict without evidence invariant is enforced in the model as well as by forced function calling | **Done** | `tests/test_evidence_invariant.py`, 18 tests |
 | Policy as data | `routing.yaml` including the truth claim escalation, `rubric.yaml`, `jurisdictions.yaml`, plus a validating loader | **Done** | `python -m truestory.policy.loader --validate`, green in CI |
 | Output schemas | Eleven JSON schemas, `claim_verification_v1` the workhorse | **Done** | `--validate-schemas`, green in CI |
 | Provider layer | Task, Search, FindAll, Extract and Monitor over `httpx`, plus a Gemini grounded fallback, a content addressed cache and a mock. Registry resolves cache, policy, budget, health in that fixed order | **Offline only** | Selection, degradation and fallback are unit tested. **No provider has been called against the live Parallel API** |
-| Budget governor | Depth degradation, an untouchable CRITICAL reserve, coverage warnings printed on the report front page | **Done** | `tests/test_pipeline.py` — degradation, reserve, exhaustion and pre spend projection |
+| Budget governor | Depth degradation, an untouchable CRITICAL reserve, coverage warnings printed on the report front page | **Done** | `tests/test_pipeline.py`, covering degradation, reserve, exhaustion and pre spend projection |
 | MCP tool boundary | Fourteen domain tools returning one uniform Evidence envelope, over HTTP and stdio | **Offline only** | `src/truestory/mcp/server.py`. The tools are exercised in process by the swarm; neither transport has been started as a server, and no MCP client has connected |
 | Four language model decision points | Ingest, claim extraction, adjudication, remedy proposal. Every prompt in one file | **Offline only** | The deterministic fallbacks run and are tested. **No prompt has been executed against Gemini**, so none is tuned |
 | ADK wrapper | `build_adk_pipeline` maps the same eight stages onto `SequentialAgent`, `ParallelAgent` and `LoopAgent` | **Offline only** | Code is present and one to one with the local pipeline. The tree has never been constructed: not even `deploy/deploy_agent_engine.py --dry-run` has been run |
@@ -567,31 +567,34 @@ claimed something that is no longer true, the row says so.
 | Area | What exists | State | Evidence, or what is left |
 |---|---|---|---|
 | REST and SSE API | Projects, runs, upload, live stream, overlay, claims, elements, remedies, register, report, CSV, PDF, apply remedy, override, unmask, review queue | **Offline only** | Every endpoint is implemented and role gated. Run state is an in process dict, so a restart loses every run, and the service has only ever been driven by the pipeline rather than by a running server |
-| Verdict overlay UI | Overlay, evidence panel, claim dashboard, cost meter, role switcher, drag and drop upload, run list | **Done** | The `web build` CI job is green. Supersedes the previous item 12: the remedy payload is wired (`selectedRemedy` in [web/app/page.tsx](web/app/page.tsx) resolves a real remedy) and the upload path exists |
+| Verdict overlay UI | Docket, overlay, evidence panel, claim dashboard, counsel queue, cost meter, role switcher, drag and drop upload, run list | **Done** | `npm run build` and `next lint` both clean, and the whole surface was driven against a live mock run: upload, stream, overlay, evidence, remedy. Supersedes the previous item 12, which called the remedy payload a placeholder |
+| Design system | Dark chrome around a light paper script, one accent, hairline rules, an integer type scale, no gradients and no hover lifts. Screenplay set at US Letter with a 1.5in binding margin, so a line never wraps mid sentence | **Done** | `web/app/globals.css`. Verified in a browser against a completed run |
 | Artifacts | Verdict overlay JSON, claim register, E&O report as JSON and PDF, clearance log CSV, monitor manifest | **Done** | `truestory run --report`; `tests/test_pipeline.py` asserts valid CSV, a rendering PDF and a watermarked underwriter copy |
 | Roles, masking, audit | Four roles, a view matrix, default masking of living private individuals, counsel only unmask with a reason, audit records | **Done** | `tests/test_security.py`, 20 tests including no global override and no leak of a masked name through serialisation |
 | Webhook receiver | Signed callback receiver for task completion and monitor events, with event classification and alert dispatch | **Offline only** | Signature verification is fully tested, including replay and tampering. **No real callback has ever been received** |
 | A2A AgentCard | 146 line card, served at `/.well-known/agent.json` | **Done** | Shipped as a specification by design. The live A2A endpoint remains roadmap |
 | CLI | `run`, `explain`, `warm-cache`, `doctor`, `version` | **Done** | `truestory doctor` prints exactly which prerequisites are wired |
 
-### 14.3 What is broken right now
+### 14.3 What was broken, and what still is
 
-These are the rows a judge can see from outside the repository. They come first.
+These are the rows a judge can see from outside the repository, so they come
+first. The three marked fixed were repaired during this audit.
 
-| # | Problem | Impact | Fix |
+| # | Problem | Impact | State |
 |---|---|---|---|
-| **B1** | **CI has never been green.** Every run on `main` has failed | The repository shows a red badge on a public submission | Two independent causes, below |
-| **B2** | `ruff check src tests eval` reports **61 errors**, and `ruff format --check` wants **31 files** reformatted | Fails both the 3.11 and 3.12 python jobs before the tests ever run | 52 are auto fixable: `make fmt`, then hand fix 6 `N803`, 2 `SIM102`, 1 `SIM114`. Bulk of the rest is 38 stale `# noqa` comments |
-| **B3** | `infra/main.tf` lines 267, 273 and 278 use `replication { auto {} }`, which is invalid HCL | `terraform validate` fails, so **`make infra-apply` cannot run and no Google Cloud resource has ever been created** | Expand to a multi line `replication { auto {} }` block |
-| **B4** | The working `.env` on the build machine points `GOOGLE_APPLICATION_CREDENTIALS` at an absolute path belonging to one developer, and sets `TRUESTORY_MODE=live` | Settings validation rejects a credential path that does not exist, so on any other machine the package **fails to import** and nothing runs until `.env` is edited. `.env` is correctly gitignored and has never been committed, so a fresh clone is unaffected | Keep the credential path empty and the mode `mock` in any shared `.env`, exactly as `.env.example` has it |
-| **B5** | Open PR **#3** carries 1,619 additions including live pipeline fixes and two new UI components, and is not merged | `main`, the branch a judge clones, is not the current state of the work | Land or close it, and re run the audit afterwards |
+| **B1** | **CI had never been green.** Every run on `main` failed | A red badge on a public submission | **Fixed** by B2 and B3 |
+| **B2** | `ruff check` reported 61 errors and `ruff format --check` wanted 31 files reformatted | Failed both the 3.11 and 3.12 python jobs before the tests ever ran | **Fixed.** 52 were auto fixable; the rest were 6 `N803` in the PDF helpers, 2 collapsible `if` statements, and one deliberately grouped `__all__` that now carries its reason. `ruff check` and `ruff format --check` are both clean |
+| **B3** | `infra/main.tf` used `replication { auto {} }`, invalid HCL, in three places | `terraform validate` failed, so `make infra-apply` could not run and no Google Cloud resource had ever been created | **Fixed.** Expanded to multi line blocks. Terraform is not installed on the audit machine, so this is confirmed against the reported parse error rather than by a local `validate` |
+| **B4** | A working `.env` pointing `GOOGLE_APPLICATION_CREDENTIALS` at one developer's absolute path, with `TRUESTORY_MODE=live` | Settings validation rejects a credential path that does not exist, so on that machine the package fails to import and nothing runs until `.env` is edited. `.env` is correctly gitignored and has never been committed, so a fresh clone is unaffected | **Open.** Keep the credential path empty and the mode `mock` in any shared `.env`, exactly as `.env.example` has it |
+| **B5** | PR **#3**, 1,619 additions of live pipeline fixes and two new UI components, was unmerged | `main`, the branch a judge clones, was not the current state of the work | **Fixed.** Merged as `79940b6`. It moved the verdict mix, which is why the numbers in section 3 changed |
+| **B6** | `web/package-lock.json` was out of sync with `package.json`, so `npm ci` refused to install | Hidden by the `npm ci \|\| npm install` fallback in CI, which meant every web build silently resolved dependencies afresh rather than from the lock | **Fixed.** Lockfile regenerated. `npm ci` now exits 0, and the build and lint both pass from that install |
 
 ### 14.4 What is outstanding, in dependency order
 
 | # | Item | State | Why it matters | Where |
 |---|---|---|---|---|
 | **1** | Parallel API key, and the credit allowance email | **Not built** | Nothing about the partner integration is proven until one real call returns a citation | `PARALLEL_API_KEY`, and Secret Manager as `truestory-parallel-api-key` |
-| **2** | Google Cloud project, billing, the $300 trial and the $100 hackathon credit | **Not built** | One to five business days of lead time on the credit form. It gates everything below | `make infra-apply` — blocked on **B3** |
+| **2** | Google Cloud project, billing, the $300 trial and the $100 hackathon credit | **Not built** | One to five business days of lead time on the credit form. It gates everything below | `make infra-apply`, unblocked by the **B3** fix |
 | **3** | Webhook signing secret | **Not built** | Until it exists the receiver refuses every callback, deliberately. An unauthenticated endpoint that accepts research findings lets a stranger write into a legal deliverable | Secret Manager as `truestory-parallel-webhook-secret` |
 | **4** | Identity token verification | **Not built** | `current_principal` trusts request headers in local mode and raises `501` otherwise. **Do not deploy publicly until this is done** | [src/truestory/api/main.py](src/truestory/api/main.py) |
 | **5** | Firestore security rules deployed | **Not built** | The rules exist only as the `FIRESTORE_RULES` string constant. Per project isolation belongs in the rules, not only in the application | [src/truestory/api/security.py](src/truestory/api/security.py) → `firestore.rules` |
@@ -607,7 +610,8 @@ These are the rows a judge can see from outside the repository. They come first.
 | **15** | Cost model verification | **Not built** | Several figures date to the Task API launch post. The projection printed on screen is only as good as these | `Processor.usd_per_run`, then `truestory explain` |
 | **16** | Cloud Tasks and Cloud Scheduler client code | **Not built** | Both are provisioned in Terraform and neither is called. `/internal/sweep` returns a canned response and sweeps nothing, so a lost callback still leaves a subject pending forever | `webhooks/main.py` |
 | **17** | Async research path closed | **Offline only** | A task completion callback writes evidence to Firestore but never resumes the parked run's adjudication. In practice `_webhook_reachable()` returns false and the swarm awaits inline, which is why the demo works. The async plane is not proven | `parallel_task.py`, `webhooks/main.py` |
-| **18** | Hosted URL and the three minute video | **Not built** | Both are hard submission requirements | — |
+| **18** | Hosted URL and the three minute video | **Not built** | Both are hard submission requirements | none yet |
+| **19** | Framework advisory | **Not built** | Next.js 15.1.0 carries a published advisory (CVE-2025-66478). Low risk for a demo behind an identity token, but a judge who runs `npm install` sees the warning | Bump Next and re run the build. Left alone here because a framework bump wants its own verification pass |
 
 ### 14.5 Deliberately deferred
 
@@ -620,20 +624,20 @@ These are the rows a judge can see from outside the repository. They come first.
 | `parallel-web` SDK | Declared as a dependency and never imported. Every Parallel call is raw `httpx`, which is a legitimate integration; the unused dependency and the two docstrings that claim otherwise should be corrected |
 | Licence | MIT, complete and auto detectable at the root. The build specification preferred Apache 2.0 for the patent grant. Swapping it is a one file change |
 
-### 14.6 The four things that decide the submission
+### 14.6 The three things that decide the submission
 
-Everything above is real work. These four are the ones that change the outcome.
+Everything above is real work. These three are the ones that change the outcome.
 
-1. **Turn CI green** (B1 to B3). It is roughly an hour, and it is the first thing
-   a judge sees.
-2. **Make one live Parallel call return a citation into the overlay.** Every
+1. **Make one live Parallel call return a citation into the overlay.** Every
    claim this project makes about its partner integration rests on a path that
    has never been executed.
-3. **Fix the demo subject** (item 12). A fact verification demonstration whose
+2. **Fix the demo subject** (item 12). A fact verification demonstration whose
    subject has no public record cannot show a green verdict with receipts, which
    is the money shot.
-4. **Make Eval B a real blind run** (item 10). It is the differentiator nobody
+3. **Make Eval B a real blind run** (item 10). It is the differentiator nobody
    else can replicate in the final week, and today it measures a YAML file.
+
+Turning CI green was the fourth, and it is done.
 
 ---
 

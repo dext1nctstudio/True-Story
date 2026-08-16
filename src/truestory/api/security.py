@@ -66,20 +66,44 @@ class Principal:
 #: What each role receives from the same underlying run document.
 VIEW_MATRIX: dict[Role, dict[str, bool]] = {
     Role.COUNSEL: {
-        "overlay": True, "evidence": True, "unmasked": True, "cost": True,
-        "review_queue": True, "reports": True, "monitors": True, "override": True,
+        "overlay": True,
+        "evidence": True,
+        "unmasked": True,
+        "cost": True,
+        "review_queue": True,
+        "reports": True,
+        "monitors": True,
+        "override": True,
     },
     Role.PRODUCER: {
-        "overlay": True, "evidence": False, "unmasked": False, "cost": True,
-        "review_queue": True, "reports": True, "monitors": True, "override": False,
+        "overlay": True,
+        "evidence": False,
+        "unmasked": False,
+        "cost": True,
+        "review_queue": True,
+        "reports": True,
+        "monitors": True,
+        "override": False,
     },
     Role.WRITER: {
-        "overlay": True, "evidence": False, "unmasked": False, "cost": False,
-        "review_queue": False, "reports": False, "monitors": False, "override": False,
+        "overlay": True,
+        "evidence": False,
+        "unmasked": False,
+        "cost": False,
+        "review_queue": False,
+        "reports": False,
+        "monitors": False,
+        "override": False,
     },
     Role.UNDERWRITER: {
-        "overlay": False, "evidence": True, "unmasked": False, "cost": False,
-        "review_queue": False, "reports": True, "monitors": True, "override": False,
+        "overlay": False,
+        "evidence": True,
+        "unmasked": False,
+        "cost": False,
+        "review_queue": False,
+        "reports": True,
+        "monitors": True,
+        "override": False,
     },
 }
 
@@ -145,9 +169,11 @@ def _enforce_masking(payload: dict[str, Any]) -> dict[str, Any]:
             for evidence in element.get("evidence", []) or []:
                 evidence["finding"] = {"withheld": True}
 
-    for entry in payload.get("elements_by_status", {}).values() if isinstance(
-        payload.get("elements_by_status"), dict
-    ) else []:
+    for entry in (
+        payload.get("elements_by_status", {}).values()
+        if isinstance(payload.get("elements_by_status"), dict)
+        else []
+    ):
         for item in entry:
             if item.get("masked"):
                 item["element"] = _masked_label(item)

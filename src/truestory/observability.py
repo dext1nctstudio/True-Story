@@ -92,7 +92,7 @@ def configure_tracing() -> Any:
         )
         trace.set_tracer_provider(provider)
         _TRACER = trace.get_tracer("truestory")
-    except Exception as exc:  # noqa: BLE001 - observability never breaks a run
+    except Exception as exc:
         logging.getLogger("truestory.observability").debug("tracing unavailable: %s", exc)
     return _TRACER
 
@@ -159,7 +159,11 @@ class RunMetrics:
 
 
 def log_adjudication(
-    subject_id: str, verdict: str, confidence: float, evidence_ids: list[str], principal: str = "system"
+    subject_id: str,
+    verdict: str,
+    confidence: float,
+    evidence_ids: list[str],
+    principal: str = "system",
 ) -> None:
     """Every adjudication is logged with the evidence behind it.
 

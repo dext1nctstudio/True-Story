@@ -59,11 +59,11 @@ export function UploadZone({ onFile, uploading, error }: Props) {
         }}
       />
       {uploading ? (
-        <p>Uploading and starting the run…</p>
+        <p className="upload-status">Uploading, and starting the run.</p>
       ) : (
         <>
-          <p className="upload-title">Drop a screenplay here, or click to browse.</p>
-          <p className="upload-hint">Fountain, Final Draft, PDF or plain text.</p>
+          <p className="upload-title">Drop a screenplay here, or click to browse</p>
+          <p className="upload-hint">Fountain, Final Draft, PDF or plain text</p>
         </>
       )}
       {error && <p className="warning">{error}</p>}

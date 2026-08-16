@@ -4,8 +4,8 @@
  * The counsel queue, shown when no single line is selected.
  *
  * The header counts "9 counsel" but until now nothing in the product listed
- * what those nine items actually were, and clearance elements — the names,
- * locations, songs and events that carry rights rather than facts — had no
+ * what those nine items actually were, and clearance elements, the names,
+ * locations, songs and events that carry rights rather than facts, had no
  * view at all. This is that list: every item a human has to look at, with the
  * reason it was escalated, so the panel's resting state is the work queue
  * rather than an instruction to go clicking.
@@ -39,7 +39,9 @@ export function ReviewQueue({ claims, elements, onSelectClaim }: Props) {
 
   return (
     <div className="panel">
-      <p className="panel-title">needs counsel · {total}</p>
+      <p className="panel-title">
+        Needs counsel <span className="queue-count">{total}</span>
+      </p>
 
       {flaggedClaims.length > 0 && (
         <div className="queue-group">

@@ -77,7 +77,7 @@ class ParallelTaskProvider(ResearchProvider):
         try:
             resp = await self._http().get("/v1/health", timeout=5.0)
             self._healthy = resp.status_code < 500
-        except Exception:  # noqa: BLE001 - health probes never raise upward
+        except Exception:
             self._healthy = False
         return self._healthy
 
@@ -117,7 +117,7 @@ class ParallelTaskProvider(ResearchProvider):
                     self._qualified_name(request.processor),
                     str(exc),
                 )
-            except Exception as exc:  # noqa: BLE001 - one bad subject, not one bad run
+            except Exception as exc:
                 return Evidence.failed(
                     request.subject_id,
                     request.question,
@@ -168,7 +168,7 @@ class ParallelTaskProvider(ResearchProvider):
             # Still running at the deadline: hand back the handle so the webhook
             # path can finish it if one is ever configured.
             return self._pending(request, run_id, dispatch_ms)
-        except Exception as exc:  # noqa: BLE001 - one subject, not the run
+        except Exception as exc:
             return Evidence.failed(
                 request.subject_id,
                 request.question,
@@ -202,12 +202,14 @@ class ParallelTaskProvider(ResearchProvider):
 
         # Async dispatch for the deep processors. The receiver verifies the
         # signature on every inbound callback before it touches run state.
-        if request.processor in (Processor.CORE, Processor.PRO, Processor.ULTRA):
-            if settings.parallel_webhook_url:
-                payload["webhook"] = {
-                    "url": settings.parallel_webhook_url,
-                    "event_types": ["task_run.status"],
-                }
+        if (
+            request.processor in (Processor.CORE, Processor.PRO, Processor.ULTRA)
+            and settings.parallel_webhook_url
+        ):
+            payload["webhook"] = {
+                "url": settings.parallel_webhook_url,
+                "event_types": ["task_run.status"],
+            }
         return payload
 
     def _pending(self, request: ResearchRequest, run_id: str, latency_ms: int) -> Evidence:
@@ -344,8 +346,6 @@ class ParallelTaskProvider(ResearchProvider):
     @staticmethod
     def _reasoning_from_basis(basis: list[dict[str, Any]]) -> str:
         parts = [
-            f"{fb.get('field', 'output')}: {fb['reasoning']}"
-            for fb in basis
-            if fb.get("reasoning")
+            f"{fb.get('field', 'output')}: {fb['reasoning']}" for fb in basis if fb.get("reasoning")
         ]
         return "\n".join(parts) if parts else "No reasoning trace returned."

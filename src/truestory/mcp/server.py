@@ -42,8 +42,14 @@ _SCHEMAS: dict[str, dict[str, Any]] = {
         "required": ["subject_id", "subject", "claim"],
         "properties": {
             "subject_id": {"type": "string", "description": "Stable claim identifier."},
-            "subject": {"type": "string", "description": "The real person or event the claim is about."},
-            "claim": {"type": "string", "description": "One atomic assertion. Decompose compound claims before calling."},
+            "subject": {
+                "type": "string",
+                "description": "The real person or event the claim is about.",
+            },
+            "claim": {
+                "type": "string",
+                "description": "One atomic assertion. Decompose compound claims before calling.",
+            },
             "polarity": {"type": "string", "enum": ["positive", "neutral", "negative"]},
             "subject_alive": {"type": ["boolean", "null"]},
             "jurisdiction": {"type": ["string", "null"]},
@@ -223,7 +229,7 @@ class ClearanceToolServer:
             return result if isinstance(result, dict) else {"results": result}
         except TypeError as exc:
             return {"error": f"bad arguments for {name}: {exc}"}
-        except Exception as exc:  # noqa: BLE001 - a bad subject is not a bad server
+        except Exception as exc:
             log.exception("tool %s failed", name)
             return {"error": f"{type(exc).__name__}: {exc}", "tool": name}
 
@@ -316,7 +322,7 @@ def build_http_app(server: ClearanceToolServer) -> Any:
 def main() -> None:
     parser = argparse.ArgumentParser(description="TRUE STORY clearance tool server")
     parser.add_argument("--port", type=int, default=8081)
-    parser.add_argument("--host", default="0.0.0.0")  # noqa: S104 - container binding
+    parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument(
         "--transport",
         choices=["http", "stdio"],

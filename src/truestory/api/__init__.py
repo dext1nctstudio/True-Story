@@ -16,8 +16,8 @@ from truestory.api.security import (
 
 __all__ = [
     "FIRESTORE_RULES",
-    "Principal",
     "VIEW_MATRIX",
+    "Principal",
     "apply_view",
     "can",
     "dev_principal",

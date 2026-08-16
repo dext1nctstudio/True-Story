@@ -87,7 +87,7 @@ class GcsCacheBackend(CacheBackend):
             return None
         try:
             return json.loads(blob.download_as_text())
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None
 
     def put(self, key: str, value: dict[str, Any]) -> None:

@@ -9,7 +9,7 @@
  * The meter is the Fairstein rule made visible. That case did not turn on one
  * provably false sentence. It turned on a set of scenes attributing specific
  * conduct to a named living person that the record could not support. Amber is
- * not "probably fine" — it is the category that settles, so density is counted
+ * not "probably fine", it is the category that settles, so density is counted
  * per person rather than only flagging individual lines. But density is a
  * summary of the claims, so the claims themselves lead and the meter supports
  * them, not the other way round.
@@ -87,7 +87,7 @@ function PersonCard({ person }: { person: PersonRollup }) {
               <div className="density-threshold" style={{ left: `${threshold * 100}%` }} />
             </div>
             <p className="person-meta">
-              {person.amber_count} of {researched} researched claims unsupported ·{" "}
+              {person.amber_count} of {researched} researched claims unsupported,{" "}
               {Math.round(person.amber_density * 100)}% density
             </p>
           </>

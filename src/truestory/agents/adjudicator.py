@@ -165,9 +165,7 @@ class Adjudicator:
             await self.adjudicate_claim(claim, evidence_by_subject.get(claim.claim_id, []))
 
         for element in elements:
-            await self.adjudicate_element(
-                element, evidence_by_subject.get(element.element_id, [])
-            )
+            await self.adjudicate_element(element, evidence_by_subject.get(element.element_id, []))
 
         # Person level rules run last, because they read across claims.
         self._apply_amber_density(elements)
@@ -206,9 +204,7 @@ class Adjudicator:
             cited = usable  # the model named nothing valid, so cite everything
 
         claim.subject_alive = call.get("subject_alive", claim.subject_alive)
-        claim.subject_public_figure_status = _parse_status(
-            call.get("subject_public_figure_status")
-        )
+        claim.subject_public_figure_status = _parse_status(call.get("subject_public_figure_status"))
 
         # ── deterministic post checks ────────────────────────────────────────
         confidence = self._cap_for_fallback(confidence, cited)
@@ -255,8 +251,10 @@ class Adjudicator:
         # A false factual claim about a living person is the claim that gets
         # filed. It goes to a human regardless of how confident the model was.
         if verdict is Verdict.CONTRADICTED and claim.subject_alive:
-            return verdict, confidence, (
-                "Contradicted factual claim about a living person. Mandatory counsel review."
+            return (
+                verdict,
+                confidence,
+                ("Contradicted factual claim about a living person. Mandatory counsel review."),
             )
 
         # A contradiction is the heaviest thing this system says, so it must
@@ -266,27 +264,37 @@ class Adjudicator:
             and self.rubric.contradicted_requires_primary_source
             and not any(e.primary_source_count for e in evidence)
         ):
-            return Verdict.UNSUPPORTED, min(confidence, 0.6), (
-                "Contradiction rested on secondary sources only. Downgraded to "
-                "unsupported pending a primary source."
+            return (
+                Verdict.UNSUPPORTED,
+                min(confidence, 0.6),
+                (
+                    "Contradiction rested on secondary sources only. Downgraded to "
+                    "unsupported pending a primary source."
+                ),
             )
 
         if sources_conflict:
-            return verdict, min(confidence, 0.6), (
-                "Sources conflict. Both readings are surfaced side by side and the "
-                "system declines to choose."
+            return (
+                verdict,
+                min(confidence, 0.6),
+                (
+                    "Sources conflict. Both readings are surfaced side by side and the "
+                    "system declines to choose."
+                ),
             )
 
         if confidence < self.rubric.counsel_threshold:
-            return verdict, confidence, (
-                f"Confidence {confidence:.2f} is below the review threshold "
-                f"{self.rubric.counsel_threshold:.2f}."
+            return (
+                verdict,
+                confidence,
+                (
+                    f"Confidence {confidence:.2f} is below the review threshold "
+                    f"{self.rubric.counsel_threshold:.2f}."
+                ),
             )
 
         if len(_all_citations(evidence)) < self.rubric.min_citations(claim.risk_tier):
-            return verdict, confidence, (
-                f"Fewer citations than tier {claim.risk_tier} requires."
-            )
+            return verdict, confidence, (f"Fewer citations than tier {claim.risk_tier} requires.")
 
         # A private fact about a private person is outside what open source
         # research can settle, whatever the model thinks.
@@ -294,8 +302,10 @@ class Adjudicator:
             verdict is Verdict.UNVERIFIABLE
             and claim.subject_public_figure_status is PublicFigureStatus.PRIVATE
         ):
-            return verdict, confidence, (
-                "Unverifiable private matter concerning a private individual."
+            return (
+                verdict,
+                confidence,
+                ("Unverifiable private matter concerning a private individual."),
             )
 
         # A CRITICAL subject coming back clean still needs a human to agree
@@ -311,17 +321,20 @@ class Adjudicator:
             and verdict is Verdict.VERIFIED
             and self.rubric.critical_clear_requires_human
         ):
-            return verdict, confidence, _CONFIRM + (
-                "Critical tier claim verified by the system. Human confirmation "
-                "required before it renders as cleared."
+            return (
+                verdict,
+                confidence,
+                _CONFIRM
+                + (
+                    "Critical tier claim verified by the system. Human confirmation "
+                    "required before it renders as cleared."
+                ),
             )
 
         return verdict, confidence, None
 
     # ── elements ─────────────────────────────────────────────────────────────
-    async def adjudicate_element(
-        self, element: ClearableElement, evidence: list[Evidence]
-    ) -> None:
+    async def adjudicate_element(self, element: ClearableElement, evidence: list[Evidence]) -> None:
         if element.element_type in _DETERMINISTIC:
             from truestory.agents.router import resolve_deterministic
 
@@ -407,25 +420,31 @@ class Adjudicator:
         sources_conflict: bool,
     ) -> tuple[ClearanceStatus, float, str | None]:
         if sources_conflict:
-            return ClearanceStatus.NEEDS_COUNSEL, min(confidence, 0.6), (
-                "Sources conflict on the rights position. Both are surfaced side by side."
+            return (
+                ClearanceStatus.NEEDS_COUNSEL,
+                min(confidence, 0.6),
+                ("Sources conflict on the rights position. Both are surfaced side by side."),
             )
 
         # The Baby Reindeer post check. If the attribute cluster resolves to
         # real people, no confidence score makes that a machine's call.
         if element.element_type is ElementType.REAL_PERSON_IDENTIFIABLE:
-            matches = sum(
-                len(e.finding.get("matching_persons", []) or []) for e in evidence
-            )
+            matches = sum(len(e.finding.get("matching_persons", []) or []) for e in evidence)
             if matches:
-                return ClearanceStatus.NEEDS_COUNSEL, confidence, (
-                    f"Attribute cluster resolves to {matches} real individuals. "
-                    "Identifiability, not naming, is the legal trigger."
+                return (
+                    ClearanceStatus.NEEDS_COUNSEL,
+                    confidence,
+                    (
+                        f"Attribute cluster resolves to {matches} real individuals. "
+                        "Identifiability, not naming, is the legal trigger."
+                    ),
                 )
 
         if confidence < self.rubric.counsel_threshold:
-            return status, confidence, (
-                f"Confidence {confidence:.2f} is below the review threshold."
+            return (
+                status,
+                confidence,
+                (f"Confidence {confidence:.2f} is below the review threshold."),
             )
 
         if (
@@ -433,9 +452,14 @@ class Adjudicator:
             and status is ClearanceStatus.CLEAR
             and self.rubric.critical_clear_requires_human
         ):
-            return status, confidence, _CONFIRM + (
-                "Critical tier element cleared by the system. Human confirmation "
-                "required before it renders as cleared."
+            return (
+                status,
+                confidence,
+                _CONFIRM
+                + (
+                    "Critical tier element cleared by the system. Human confirmation "
+                    "required before it renders as cleared."
+                ),
             )
 
         return status, confidence, None
@@ -560,9 +584,7 @@ class Adjudicator:
     ) -> dict[str, Any]:
         if settings.offline:
             return _offline_claim_verdict(claim, evidence)
-        return await self._forced_call(
-            _claim_prompt(claim, evidence), RECORD_VERDICT_DECLARATION
-        )
+        return await self._forced_call(_claim_prompt(claim, evidence), RECORD_VERDICT_DECLARATION)
 
     async def _call_model_for_element(
         self, element: ClearableElement, evidence: list[Evidence]
@@ -573,9 +595,7 @@ class Adjudicator:
             _element_prompt(element, evidence), RECORD_ADJUDICATION_DECLARATION
         )
 
-    async def _forced_call(
-        self, prompt: str, declaration: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _forced_call(self, prompt: str, declaration: dict[str, Any]) -> dict[str, Any]:
         """Forced function calling. The model has no other way to respond."""
         from google.genai import types
 
@@ -597,7 +617,7 @@ class Adjudicator:
                     ),
                 ),
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("adjudication model call failed: %s", exc)
             return {"confidence": 0.0, "rationale": f"Model call failed: {exc}"}
 
@@ -638,9 +658,7 @@ def _split_escalation(raw: str) -> tuple[str, bool]:
     return raw, False
 
 
-_PERSON_TYPES = frozenset(
-    {ElementType.REAL_PERSON_DEPICTED, ElementType.REAL_PERSON_IDENTIFIABLE}
-)
+_PERSON_TYPES = frozenset({ElementType.REAL_PERSON_DEPICTED, ElementType.REAL_PERSON_IDENTIFIABLE})
 _DETERMINISTIC = frozenset(
     {ElementType.PHONE_NUMBER, ElementType.VEHICLE_PLATE, ElementType.URL_HANDLE}
 )
@@ -742,24 +760,21 @@ def _offline_claim_verdict(claim: FactualClaim, evidence: list[Evidence]) -> dic
             finding.get("supporting_facts") and finding.get("contradicting_facts")
         ),
         "subject_alive": finding.get("subject_alive", claim.subject_alive),
-        "subject_public_figure_status": finding.get(
-            "subject_public_figure_status", "unknown"
-        ),
+        "subject_public_figure_status": finding.get("subject_public_figure_status", "unknown"),
     }
 
 
-def _offline_element_status(
-    element: ClearableElement, evidence: list[Evidence]
-) -> dict[str, Any]:
+def _offline_element_status(element: ClearableElement, evidence: list[Evidence]) -> dict[str, Any]:
     finding = evidence[0].finding if evidence else {}
 
     if finding.get("collision_risk") in {"high", "medium"}:
         status = "NOT_CLEAR"
     elif finding.get("identifiability_risk") in {"high", "medium"}:
         status = "NEEDS_COUNSEL"
-    elif finding.get("public_domain_status") == "in_copyright":
-        status = "NEEDS_LICENSE"
-    elif finding.get("copyright_status") == "in_copyright":
+    elif (
+        finding.get("public_domain_status") == "in_copyright"
+        or finding.get("copyright_status") == "in_copyright"
+    ):
         status = "NEEDS_LICENSE"
     else:
         status = "CLEAR"

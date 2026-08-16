@@ -264,16 +264,26 @@ resource "google_cloud_scheduler_job" "stale_sweep" {
 
 resource "google_secret_manager_secret" "parallel_api_key" {
   secret_id = "truestory-parallel-api-key"
-  replication { auto {} }
+
+  replication {
+    auto {}
+  }
+
   depends_on = [google_project_service.required]
 }
 
 resource "google_secret_manager_secret" "webhook_secret" {
   secret_id = "truestory-parallel-webhook-secret"
-  replication { auto {} }
+
+  replication {
+    auto {}
+  }
 }
 
 resource "google_secret_manager_secret" "internal_token" {
   secret_id = "truestory-api-internal-token"
-  replication { auto {} }
+
+  replication {
+    auto {}
+  }
 }

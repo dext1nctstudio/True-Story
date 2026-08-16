@@ -112,9 +112,9 @@ async def _handle_task_completion(payload: dict[str, Any]) -> dict[str, Any]:
         log.info("task %s reported status %s", subject_id, status)
         return {"subject_id": subject_id, "status": status}
 
-    from truestory.providers.parallel_task import ParallelTaskProvider
-    from truestory.providers.base import ResearchRequest
     from truestory.models.enums import Processor, RiskTier
+    from truestory.providers.base import ResearchRequest
+    from truestory.providers.parallel_task import ParallelTaskProvider
 
     provider = ParallelTaskProvider()
     request = ResearchRequest(
@@ -130,7 +130,9 @@ async def _handle_task_completion(payload: dict[str, Any]) -> dict[str, Any]:
     store = get_store()
     if project_id and run_id:
         store.put_subject(project_id, run_id, "evidence", evidence.evidence_id, evidence.to_dict())
-        store.update_run(project_id, run_id, {"last_callback_at": evidence.retrieved_at.isoformat()})
+        store.update_run(
+            project_id, run_id, {"last_callback_at": evidence.retrieved_at.isoformat()}
+        )
 
     log.info(
         "task completion attached: subject=%s citations=%s", subject_id, len(evidence.citations)
@@ -183,9 +185,7 @@ async def _handle_monitor_event(payload: dict[str, Any]) -> dict[str, Any]:
     if significance in {"high", "critical"}:
         await _dispatch_alert(alert)
 
-    log.info(
-        "monitor event: subject=%s significance=%s", subject_id, significance
-    )
+    log.info("monitor event: subject=%s significance=%s", subject_id, significance)
     return alert
 
 
@@ -229,7 +229,7 @@ async def _dispatch_alert(alert: dict[str, Any]) -> None:
         publisher = pubsub_v1.PublisherClient()
         topic = publisher.topic_path(settings.gcp_project, settings.topic_alerts)
         publisher.publish(topic, json.dumps(alert, default=str).encode("utf-8"))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("alert dispatch failed: %s", exc)
 
 

@@ -10,7 +10,6 @@ import pytest
 from truestory.agents.pipeline import ProjectConfig, TrueStoryPipeline
 from truestory.models.enums import ElementType, Processor, RiskTier, RunStatus
 
-
 # =============================================================================
 # end to end
 # =============================================================================
@@ -82,9 +81,7 @@ async def test_every_adjudicated_claim_has_evidence_or_is_opinion(tiny_script):
 
 
 async def test_run_stays_within_budget(tiny_script):
-    pipeline = TrueStoryPipeline(
-        ProjectConfig(project_id="test", budget_usd=0.50)
-    )
+    pipeline = TrueStoryPipeline(ProjectConfig(project_id="test", budget_usd=0.50))
     state = await pipeline.run(tiny_script)
     assert state.summary.cost_usd <= 0.50
 
@@ -95,9 +92,7 @@ async def test_progress_events_are_emitted_in_order(tiny_script):
     async def capture(payload):
         seen.append(str(payload.get("event")))
 
-    await TrueStoryPipeline(ProjectConfig(project_id="test"), on_progress=capture).run(
-        tiny_script
-    )
+    await TrueStoryPipeline(ProjectConfig(project_id="test"), on_progress=capture).run(tiny_script)
 
     for expected in ("ingest_complete", "claims_extracted", "ledger_built", "plan_ready"):
         assert expected in seen, f"missing progress event: {expected}"
@@ -146,7 +141,7 @@ async def test_ledger_collapses_spans_into_fewer_elements(demo_script):
 
 
 async def test_coreference_merges_short_and_full_names(demo_script):
-    """"Margaret" and "Margaret Holloway" are one research subject, not two."""
+    """ "Margaret" and "Margaret Holloway" are one research subject, not two."""
     state = await TrueStoryPipeline(ProjectConfig(project_id="test")).run(demo_script)
 
     forms = {e.canonical_form for e in state.elements}

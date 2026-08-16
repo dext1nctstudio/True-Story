@@ -28,9 +28,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import UTC, datetime
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -116,9 +116,7 @@ class ProjectConfig:
     truth_claim_framing_override: bool | None = None
 
     def jurisdictions(self) -> list[str]:
-        return load_jurisdictions().expand(
-            self.shoot_territories, self.distribution_territories
-        )
+        return load_jurisdictions().expand(self.shoot_territories, self.distribution_territories)
 
 
 class TrueStoryPipeline:
@@ -139,18 +137,14 @@ class TrueStoryPipeline:
         self.registry = registry or ProviderRegistry(budget=self.budget)
         self.on_progress = on_progress
 
-        self.tools = ClearanceTools(
-            self.registry, jurisdictions=tuple(self.jurisdictions)
-        )
+        self.tools = ClearanceTools(self.registry, jurisdictions=tuple(self.jurisdictions))
 
         # The eight stages.
         self.ingest = IngestAgent()
         self.claim_extractor = ClaimExtractor()
         self.ledger = LedgerAgent(jurisdictions=self.jurisdictions)
         self.router = RiskRouter()
-        self.swarm = ResearchSwarm(
-            self.registry, self.tools, on_progress=self._emit_passthrough
-        )
+        self.swarm = ResearchSwarm(self.registry, self.tools, on_progress=self._emit_passthrough)
         self.adjudicator = Adjudicator()
         self.remedy = RemedyLoop(self.tools)
         self.reporter = ReportAgent()
@@ -187,7 +181,7 @@ class TrueStoryPipeline:
             await self._stage_adjudicate(state)
             await self._stage_remedy(state)
             await self._stage_report(state, started)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("pipeline failed")
             state.status = RunStatus.FAILED
             state.error = f"{type(exc).__name__}: {exc}"
@@ -196,9 +190,7 @@ class TrueStoryPipeline:
         return state
 
     # ── stage 1 ──────────────────────────────────────────────────────────────
-    async def _stage_ingest(
-        self, state: RunState, source: Path | str, draft_version: str
-    ) -> None:
+    async def _stage_ingest(self, state: RunState, source: Path | str, draft_version: str) -> None:
         state.status = RunStatus.INGESTING
         await self._emit({"event": "stage", "stage": "ingest", "status": "started"})
 
@@ -307,7 +299,7 @@ class TrueStoryPipeline:
                 reason=payload.get("reason", request.get("reason", "")),
                 active=bool(payload.get("active", True)),
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("monitor creation failed for %s: %s", request["subject_id"], exc)
             return None
 
@@ -317,9 +309,7 @@ class TrueStoryPipeline:
         await self._emit({"event": "stage", "stage": "adjudication", "status": "started"})
 
         evidence = state.artifacts.get("evidence_by_subject", {})
-        state.review_queue = await self.adjudicator.run(
-            state.claims, state.elements, evidence
-        )
+        state.review_queue = await self.adjudicator.run(state.claims, state.elements, evidence)
 
         from truestory.models.enums import Verdict
 
@@ -394,7 +384,7 @@ class TrueStoryPipeline:
         if self.on_progress:
             try:
                 await self.on_progress(payload)
-            except Exception:  # noqa: BLE001 - the UI never breaks the run
+            except Exception:
                 log.debug("progress callback failed", exc_info=True)
 
     async def _emit_passthrough(self, payload: dict[str, Any]) -> None:

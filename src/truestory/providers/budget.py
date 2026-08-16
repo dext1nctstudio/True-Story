@@ -90,9 +90,7 @@ class BudgetGovernor:
             else policy.get("on_exceed") == "degrade_tier"
         )
         self.warn_at = float(policy.get("warn_at_fraction", 0.80))
-        self.never_degrade = {
-            RiskTier(t) for t in policy.get("never_degrade_tiers", ["CRITICAL"])
-        }
+        self.never_degrade = {RiskTier(t) for t in policy.get("never_degrade_tiers", ["CRITICAL"])}
 
         self.ledger = Ledger()
         self._lock = threading.Lock()
@@ -113,11 +111,7 @@ class BudgetGovernor:
         return self.ledger.spent_cents / self.ceiling_cents if self.ceiling_cents else 0.0
 
     def available_for(self, tier: RiskTier) -> float:
-        return (
-            self.remaining_cents
-            if tier in self.never_degrade
-            else self.general_remaining_cents
-        )
+        return self.remaining_cents if tier in self.never_degrade else self.general_remaining_cents
 
     def can_afford(self, cost_cents: float, tier: RiskTier) -> bool:
         with self._lock:

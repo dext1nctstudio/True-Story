@@ -28,7 +28,10 @@ from truestory.models.enums import (
 from truestory.models.evidence import Citation, Evidence, MonitorHandle
 from truestory.models.spans import Occurrence, RawSpan, Scene, ScriptDocument
 
-__all__ = [
+# Grouped by module rather than sorted alphabetically. This list is the
+# package's public surface and the grouping is what makes it readable, so the
+# sort rule is declined here deliberately.
+__all__ = [  # noqa: RUF022
     # enums
     "ClaimType",
     "ClearanceStatus",
