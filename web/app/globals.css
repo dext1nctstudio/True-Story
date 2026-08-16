@@ -16,41 +16,50 @@
      signal lights rather than as highlighter on paper. */
   color-scheme: dark;
 
-  /* surface — layered slate, each step visibly separated from the last */
-  --bg: #0d1017;
-  --bg-panel: #161b24;
-  --bg-sunken: #1d232e;
-  --bg-raised: #1a202a;
-  --border: #29313d;
-  --border-strong: #3c4657;
+  /* Every colour below is taken from the logo, which is convenient rather
+     than merely tidy: the three bars inside its magnifying glass are the
+     verdict system itself. Sampled values are #304860 navy at 57% of the
+     ink, then #00a860 green, #f09018 amber and #a81818 red.
 
-  /* type */
-  --text: #eef1f6;
-  --text-muted: #a4aebc;
-  --text-faint: #6c7585;
+     surface — the logo navy taken down to ground level, so panels sit in
+     the same blue family rather than on neutral grey */
+  --bg: #0b111a;
+  --bg-panel: #131c28;
+  --bg-sunken: #1a2533;
+  --bg-raised: #17212e;
+  --border: #263444;
+  --border-strong: #3a4d63;
 
-  /* verdicts — a status-light system on a dark ground: emerald reads
-     cleared, amber reads unresolved, a hot coral reads consequential */
-  --verdict-green: #35d18e;
-  --verdict-green-bg: #0f2b20;
-  --verdict-amber: #eda13f;
-  --verdict-amber-bg: #2c2113;
-  --verdict-red: #ff6f5e;
-  --verdict-red-bg: #321714;
-  --verdict-pending: #333c4a;
+  /* type — cooled very slightly toward the same blue */
+  --text: #eaf0f7;
+  --text-muted: #9fb0c2;
+  --text-faint: #67788b;
 
-  /* brand: bright teal into a cooler blue, which glows against the dark
-     ground without competing with the verdict colours for attention */
-  --accent: #2fb8c6;
-  --accent-2: #4a86d8;
-  --accent-strong: #5fd3df;
-  --accent-bg: #102f36;
+  /* verdicts — the logo's own bars. Green and amber carry over almost
+     untouched; the logo's #a81818 red is too dark to read against this
+     ground, so it is lifted while keeping its hue. */
+  --verdict-green: #00c46f;
+  --verdict-green-bg: #06291c;
+  --verdict-amber: #f09018;
+  --verdict-amber-bg: #2e2010;
+  --verdict-red: #ef4436;
+  --verdict-red-bg: #2f1412;
+  --verdict-pending: #32404f;
+
+  /* brand — the dominant logo navy. At #304860 it is a background colour,
+     not an accent, so the interactive tone is that hue brightened until it
+     carries on a dark panel, gradient-paired with the deeper original. */
+  --accent: #5793c9;
+  --accent-2: #34618d;
+  --accent-strong: #7db0e0;
+  --accent-bg: #142639;
   --accent-gradient: linear-gradient(135deg, var(--accent), var(--accent-2));
 
-  /* live/in-motion only, so it stays a signal rather than decoration */
-  --highlight: #e39158;
-  --highlight-strong: #f2ab77;
-  --highlight-bg: #2c1f14;
+  /* live/in-motion only, so it stays a signal rather than decoration. The
+     logo amber, held apart from the verdict amber by weight and placement. */
+  --highlight: #f09018;
+  --highlight-strong: #ffa93f;
+  --highlight-bg: #2e2010;
 
   /* screenplay geometry, in inches, as the industry measures it */
   --script-font: "Courier New", "Courier Prime", Courier, monospace;
@@ -80,7 +89,7 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow: 0 2px 6px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.45), 0 24px 56px rgba(0, 0, 0, 0.55);
-  --shadow-accent: 0 6px 20px rgba(47, 184, 198, 0.32);
+  --shadow-accent: 0 6px 20px rgba(87, 147, 201, 0.3);
 }
 
 * {
@@ -104,6 +113,10 @@ body {
 .shell {
   display: grid;
   grid-template-rows: auto 1fr;
+  /* A grid column sizes to its widest item's min-content by default, so the
+     header's intrinsic width dragged the whole shell past the viewport and
+     took the evidence rail off screen with it. */
+  grid-template-columns: minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
 }
@@ -138,10 +151,11 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding: 12px var(--space-5);
+  min-width: 0;
+  padding: 9px var(--space-5);
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
-  min-height: 60px;
+  min-height: 62px;
   position: relative;
 }
 
@@ -156,17 +170,32 @@ body {
   opacity: 0.55;
 }
 
+/* The context group yields space; the actions do not. Without this the
+   header grew past the viewport and pushed the evidence rail off screen,
+   because every child sizes to its content and the framing banner is a
+   long nowrap sentence. */
 .header-group {
   display: flex;
   align-items: center;
   gap: var(--space-4);
   min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
   gap: var(--space-4);
+  flex: 0 0 auto;
+}
+
+/* Shrinks and ellipses rather than forcing the header wider. */
+.header-group .framing-banner {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
 }
 
 .brand {
@@ -180,29 +209,20 @@ body {
   cursor: pointer;
   padding: 0;
   line-height: 1.1;
+  flex: 0 0 auto;
 }
 
-.brand-mark {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 18px;
-  letter-spacing: -0.01em;
-  background: var(--accent-gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+/* The logo carries the name and the descriptor, so it replaces both text
+   spans. Height is fixed and width follows the artwork's own ratio. */
+.brand-logo {
+  height: 42px;
+  width: auto;
+  display: block;
+  transition: opacity 120ms ease;
 }
 
-.brand-kicker {
-  font-size: 9.5px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--highlight);
-  font-weight: 700;
-}
-
-.brand:hover .brand-mark {
-  filter: brightness(1.15);
+.brand:hover .brand-logo {
+  opacity: 0.82;
 }
 
 .workspace-single {

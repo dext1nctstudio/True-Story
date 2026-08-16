@@ -13,6 +13,7 @@
  * rewrite. Every one of those beats is a real interaction with real state.
  */
 
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClaimDashboard } from "@/components/ClaimDashboard";
 import { CostMeter, VerdictCounters } from "@/components/CostMeter";
@@ -296,8 +297,17 @@ export default function Workspace() {
             onClick={() => openRun(null)}
             title="Back to the docket"
           >
-            <span className="brand-mark">True Story</span>
-            <span className="brand-kicker">Clearance &amp; Fact Engine</span>
+            {/* The mark already sets both the name and the descriptor, so the
+                text versions would duplicate it. alt carries them for anyone
+                the image does not reach. */}
+            <Image
+              src="/logo-light.png"
+              alt="True Story · Fact and Rights Engine"
+              width={1580}
+              height={553}
+              priority
+              className="brand-logo"
+            />
           </button>
 
           {overlay && (
