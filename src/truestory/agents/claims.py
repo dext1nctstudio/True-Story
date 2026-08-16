@@ -40,18 +40,55 @@ log = logging.getLogger("truestory.claims")
 # escalation branch rather than producing an all neutral run.
 _NEGATIVE_MARKERS = frozenset(
     {
-        "convicted", "arrested", "charged", "guilty", "stole", "lied", "fraud",
-        "assault", "abuse", "stalked", "beat", "killed", "murdered", "corrupt",
-        "bribed", "cheated", "fired", "disgraced", "addicted", "imprisoned",
-        "sentenced", "indicted", "racist", "coerced", "forged", "embezzled",
+        "convicted",
+        "arrested",
+        "charged",
+        "guilty",
+        "stole",
+        "lied",
+        "fraud",
+        "assault",
+        "abuse",
+        "stalked",
+        "beat",
+        "killed",
+        "murdered",
+        "corrupt",
+        "bribed",
+        "cheated",
+        "fired",
+        "disgraced",
+        "addicted",
+        "imprisoned",
+        "sentenced",
+        "indicted",
+        "racist",
+        "coerced",
+        "forged",
+        "embezzled",
     }
 )
 
 _OPINION_MARKERS = frozenset(
     {
-        "difficult", "brilliant", "cruel", "kind", "arrogant", "impossible",
-        "genius", "monster", "saint", "charming", "cold", "warm", "greatest",
-        "worst", "best", "insufferable", "gifted", "hopeless",
+        "difficult",
+        "brilliant",
+        "cruel",
+        "kind",
+        "arrogant",
+        "impossible",
+        "genius",
+        "monster",
+        "saint",
+        "charming",
+        "cold",
+        "warm",
+        "greatest",
+        "worst",
+        "best",
+        "insufferable",
+        "gifted",
+        "hopeless",
     }
 )
 
@@ -68,9 +105,7 @@ class ClaimExtractor:
         self._client = client
 
     # ── entry point ──────────────────────────────────────────────────────────
-    async def run(
-        self, spans: list[RawSpan], scenes: list[Scene]
-    ) -> list[FactualClaim]:
+    async def run(self, spans: list[RawSpan], scenes: list[Scene]) -> list[FactualClaim]:
         by_scene = {s.scene_no: s for s in scenes}
         claim_bearing = [s for s in spans if s.element_type in CLAIM_BEARING]
 
@@ -116,7 +151,7 @@ class ClaimExtractor:
                     response_schema=_CLAIM_RESPONSE_SCHEMA,
                 ),
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("claim extraction failed for span %s: %s", span.span_id, exc)
             return self._extract_deterministic(span, scene)
 
@@ -218,7 +253,9 @@ class ClaimExtractor:
         return out
 
     # ── offline path ─────────────────────────────────────────────────────────
-    def _extract_deterministic(self, span: RawSpan, scene: Scene | None = None) -> list[FactualClaim]:
+    def _extract_deterministic(
+        self, span: RawSpan, scene: Scene | None = None
+    ) -> list[FactualClaim]:
         """Sentence splitting plus keyword classification.
 
         Far weaker than the model pass and honest about it. Its purpose is to

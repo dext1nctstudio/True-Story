@@ -191,9 +191,7 @@ class MonitorHandle:
             "cadence": self.cadence,
             "reason": self.reason,
             "created_at": self.created_at.isoformat(),
-            "last_checked_at": self.last_checked_at.isoformat()
-            if self.last_checked_at
-            else None,
+            "last_checked_at": self.last_checked_at.isoformat() if self.last_checked_at else None,
             "last_event_at": self.last_event_at.isoformat() if self.last_event_at else None,
             "expiry_hint": self.expiry_hint.isoformat() if self.expiry_hint else None,
             "active": self.active,

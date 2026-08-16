@@ -167,14 +167,14 @@ class FirestoreRunStore(RunStore):
 
     # ── runs ─────────────────────────────────────────────────────────────────
     def _run_ref(self, project_id: str, run_id: str) -> Any:
-        return self.db.collection("projects").document(project_id).collection("runs").document(run_id)
+        return (
+            self.db.collection("projects").document(project_id).collection("runs").document(run_id)
+        )
 
     def create_run(self, project_id: str, run_id: str, payload: dict[str, Any]) -> None:
         from google.cloud import firestore
 
-        self._run_ref(project_id, run_id).set(
-            {**payload, "created_at": firestore.SERVER_TIMESTAMP}
-        )
+        self._run_ref(project_id, run_id).set({**payload, "created_at": firestore.SERVER_TIMESTAMP})
 
     def update_run(self, project_id: str, run_id: str, patch: dict[str, Any]) -> None:
         from google.cloud import firestore
@@ -295,7 +295,7 @@ def get_store() -> RunStore:
             # turns that into a clean degrade at startup.
             next(iter(store.db.collections()), None)
             _store = store
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("firestore unavailable, using memory store: %s", exc)
             _store = MemoryRunStore()
     return _store

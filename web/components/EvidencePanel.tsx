@@ -59,7 +59,7 @@ export function EvidencePanel({
   if (!canSeeEvidence) {
     return (
       <div className="panel">
-        <p className="panel-title">verdict</p>
+        <p className="panel-title">Verdict</p>
         <VerdictHeader annotation={annotation} />
         <div className="claim-text">{annotation.text}</div>
         <p className="verdict-language">{annotation.language}</p>
@@ -97,7 +97,7 @@ export function EvidencePanel({
   return (
     <div className="panel">
       <p className="panel-title">
-        {annotation.kind === "claim" ? "factual claim" : "clearance element"}
+        {annotation.kind === "claim" ? "Factual claim" : "Clearance element"}
       </p>
 
       <VerdictHeader annotation={annotation} />
@@ -112,30 +112,25 @@ export function EvidencePanel({
           "unsupported" from being read as "false". */}
       {annotation.language && <p className="verdict-language">{annotation.language}</p>}
 
-      {claim?.rationale && (
-        <p style={{ fontSize: 12.5, color: "var(--text-muted)" }}>{claim.rationale}</p>
-      )}
+      {claim?.rationale && <p className="evidence-rationale">{claim.rationale}</p>}
 
       {annotation.needs_counsel && (
-        <p style={{ marginTop: 8 }}>
-          <span className="counsel-flag">counsel review</span>{" "}
-          <span style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
-            {claim?.counsel_reason}
-          </span>
-        </p>
+        <div className="queue-item-head">
+          <span className="counsel-flag">counsel review</span>
+          <span className="queue-item-subject">{claim?.counsel_reason}</span>
+        </div>
       )}
 
       {annotation.masked && !revealed && (
-        <div className="warning" style={{ marginTop: 10 }}>
-          Identifying details are withheld by default. This concerns a living
-          private individual.
+        <div className="warning">
+          <p>
+            Identifying details are withheld by default. This concerns a living
+            private individual.
+          </p>
           {canUnmask && (
-            <>
-              {" "}
-              <button className="apply" style={{ marginTop: 6 }} onClick={reveal}>
-                Reveal, audited
-              </button>
-            </>
+            <button className="apply reveal-action" onClick={reveal}>
+              Reveal, audited
+            </button>
           )}
         </div>
       )}
@@ -144,8 +139,8 @@ export function EvidencePanel({
         <RemedyBlock remedy={remedy} applying={applying} applied={applied} onApply={apply} />
       )}
 
-      <p className="panel-title" style={{ marginTop: 18 }}>
-        sources ({evidence.reduce((n, e) => n + e.citations.length, 0)})
+      <p className="panel-title panel-title-section">
+        Sources ({evidence.reduce((n, e) => n + e.citations.length, 0)})
       </p>
 
       {evidence.length === 0 && (
@@ -174,14 +169,15 @@ function VerdictHeader({ annotation }: { annotation: Annotation }) {
 
 function EvidenceBlock({ evidence }: { evidence: Evidence }) {
   return (
-    <div style={{ marginBottom: 14 }}>
-      <p className="citation-meta">
-        {evidence.provider}
-        {evidence.is_fallback && " · FALLBACK, confidence capped"}
-        {evidence.cached && " · cached"}
-        {" · "}
-        {Math.round(evidence.effective_confidence * 100)}%
-      </p>
+    <div className="evidence-record">
+      {/* Provider, degradation and confidence, separated by rules rather than
+          by punctuation, so each field stays its own readable unit. */}
+      <div className="meta-strip">
+        <span>{evidence.provider}</span>
+        {evidence.is_fallback && <span>fallback, confidence capped</span>}
+        {evidence.cached && <span>cached</span>}
+        <span>{Math.round(evidence.effective_confidence * 100)}% confidence</span>
+      </div>
 
       {evidence.citations.map((citation) => (
         <div className="citation" key={citation.url}>
@@ -193,14 +189,14 @@ function EvidenceBlock({ evidence }: { evidence: Evidence }) {
           >
             {citation.title}
           </a>
-          <p className="citation-meta">
+          <div className="citation-meta">
             <span className={`source-tag ${citation.source_type}`}>
               {citation.source_type}
             </span>
             {/* Retrieval time is not decoration. At claim time, a source read
                 on a known date is worth far more than a live URL. */}
-            read {new Date(citation.accessed_at).toLocaleDateString()}
-          </p>
+            <span>read {new Date(citation.accessed_at).toLocaleDateString()}</span>
+          </div>
           {citation.excerpt && <p className="citation-excerpt">{citation.excerpt}</p>}
         </div>
       ))}
@@ -222,15 +218,13 @@ function RemedyBlock({
   return (
     <div className="remedy">
       <span className="remedy-label">
-        {remedy.verified ? "verified rewrite" : "proposed, not yet verified"}
+        {remedy.verified ? "Verified rewrite" : "Proposed, not yet verified"}
       </span>
       <div className="remedy-proposal">{remedy.proposal}</div>
-      <p style={{ fontSize: 11.5, color: "var(--text-muted)", margin: "0 0 9px" }}>
-        {remedy.rationale}
-      </p>
+      <p className="remedy-rationale">{remedy.rationale}</p>
 
       {remedy.alternatives.length > 0 && (
-        <p style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+        <p className="remedy-alternatives">
           Alternatives: {remedy.alternatives.join(", ")}
         </p>
       )}

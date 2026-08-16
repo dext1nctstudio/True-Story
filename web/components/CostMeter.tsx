@@ -45,7 +45,7 @@ export function CostMeter({ budget, visible }: Props) {
       <div className="cost-row">
         <span className="counter-label">
           {budget.calls} lookups
-          {budget.cache_hits > 0 && ` · ${formatPercent(budget.cache_hit_rate)} cached`}
+          {budget.cache_hits > 0 && `, ${formatPercent(budget.cache_hit_rate)} cached`}
         </span>
         {budget.degradations > 0 && (
           <span className="counter-label" style={{ color: "var(--verdict-amber)" }}>

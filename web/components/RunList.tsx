@@ -5,7 +5,7 @@
  * any of them are still executing.
  *
  * Runs are process memory only, so this list, like everything else, resets on
- * the next API restart — it can only show what the current process has seen.
+ * the next API restart, it can only show what the current process has seen.
  */
 
 import type { RunListItem } from "@/lib/types";

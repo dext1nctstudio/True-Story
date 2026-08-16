@@ -302,7 +302,7 @@ export default function Workspace() {
                 the image does not reach. */}
             <Image
               src="/logo-light.png"
-              alt="True Story · Fact and Rights Engine"
+              alt="True Story, a fact and rights engine"
               width={1580}
               height={553}
               priority
@@ -312,7 +312,7 @@ export default function Workspace() {
 
           {overlay && (
             <span className="script-title">
-              {overlay.script.title} · {overlay.script.draft_version} ·{" "}
+              {overlay.script.title}, {overlay.script.draft_version},{" "}
               {overlay.script.page_count} pages
             </span>
           )}
@@ -325,7 +325,7 @@ export default function Workspace() {
               className="framing-banner"
               title={overlay.script.truth_claim_evidence ?? undefined}
             >
-              TRUE STORY ASSERTED · all person adjacent elements escalated one tier
+              True story asserted, every person adjacent element escalated one tier
             </span>
           )}
         </div>
@@ -336,34 +336,40 @@ export default function Workspace() {
           {/* Stage events only arrive for transitions seen while connected, so a
               page opened mid run has none. The polled status covers that gap. */}
           {runId && (stage || (runStatus && runStatus !== "COMPLETE")) && (
-            <span className="counter-label">
+            <span className="stage-indicator">
+              <span className="pulse" />
               {(stage || runStatus).toLowerCase().replace(/_/g, " ")}
             </span>
           )}
 
           {runId && (
-            <VerdictCounters
-              {...counts}
-              activeFilter={verdictFilter}
-              onFilter={setVerdictFilter}
-            />
+            <div className="header-readouts">
+              <VerdictCounters
+                {...counts}
+                activeFilter={verdictFilter}
+                onFilter={setVerdictFilter}
+              />
+              <CostMeter budget={budget} visible={capabilities.cost} />
+            </div>
           )}
-          {runId && <CostMeter budget={budget} visible={capabilities.cost} />}
-          <label className="btn btn-primary">
-            New draft
-            <input
-              type="file"
-              accept=".fountain,.fdx,.pdf,.txt"
-              hidden
-              disabled={uploading}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void startRun(file);
-                event.target.value = "";
-              }}
-            />
-          </label>
-          <RoleSwitcher role={role} onChange={setRoleState} />
+
+          <div className="header-controls">
+            <label className="btn btn-primary">
+              New draft
+              <input
+                type="file"
+                accept=".fountain,.fdx,.pdf,.txt"
+                hidden
+                disabled={uploading}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void startRun(file);
+                  event.target.value = "";
+                }}
+              />
+            </label>
+            <RoleSwitcher role={role} onChange={setRoleState} />
+          </div>
         </div>
       </header>
 
@@ -380,7 +386,7 @@ export default function Workspace() {
       ) : (
       <div className="workspace">
         <main>
-          {error && <div className="warning" style={{ margin: 16 }}>{error}</div>}
+          {error && <div className="warning error-banner">{error}</div>}
 
           {overlay ? (
             <VerdictOverlay
@@ -453,7 +459,7 @@ export default function Workspace() {
 
           {overlay && (
             <div className="panel">
-              <p className="panel-title">legend</p>
+              <p className="panel-title">Legend</p>
               <div className="legend">
                 {Object.entries(overlay.legend).map(([color, text]) => (
                   <div className="legend-item" key={color}>
@@ -465,15 +471,13 @@ export default function Workspace() {
                   </div>
                 ))}
               </div>
-              <p style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 10 }}>
-                {overlay.legend.amber}
-              </p>
+              <p className="legend-note">{overlay.legend.amber}</p>
             </div>
           )}
 
           {summary && (summary.coverage_warnings?.length ?? 0) > 0 && (
             <div className="panel">
-              <p className="panel-title">coverage</p>
+              <p className="panel-title">Coverage</p>
               {summary.coverage_warnings.map((warning) => (
                 <div className="warning" key={warning}>
                   {warning}

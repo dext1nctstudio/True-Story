@@ -33,17 +33,61 @@ from truestory.models.spans import RawSpan, ScriptDocument
 log = logging.getLogger("truestory.ledger")
 
 _HONORIFICS = frozenset(
-    {"mr", "mrs", "ms", "miss", "dr", "doctor", "prof", "professor", "sir",
-     "dame", "lord", "lady", "rev", "father", "sister", "captain", "capt",
-     "sergeant", "sgt", "detective", "det", "officer", "judge", "senator",
-     "governor", "president", "general", "colonel", "col", "lieutenant", "lt"}
+    {
+        "mr",
+        "mrs",
+        "ms",
+        "miss",
+        "dr",
+        "doctor",
+        "prof",
+        "professor",
+        "sir",
+        "dame",
+        "lord",
+        "lady",
+        "rev",
+        "father",
+        "sister",
+        "captain",
+        "capt",
+        "sergeant",
+        "sgt",
+        "detective",
+        "det",
+        "officer",
+        "judge",
+        "senator",
+        "governor",
+        "president",
+        "general",
+        "colonel",
+        "col",
+        "lieutenant",
+        "lt",
+    }
 )
 
 _SUFFIXES = frozenset({"jr", "sr", "ii", "iii", "iv", "phd", "md", "esq"})
 
 _CORP_SUFFIXES = frozenset(
-    {"inc", "incorporated", "llc", "ltd", "limited", "corp", "corporation",
-     "co", "company", "plc", "gmbh", "sa", "bv", "ag", "pty"}
+    {
+        "inc",
+        "incorporated",
+        "llc",
+        "ltd",
+        "limited",
+        "corp",
+        "corporation",
+        "co",
+        "company",
+        "plc",
+        "gmbh",
+        "sa",
+        "bv",
+        "ag",
+        "pty",
+    }
 )
 
 #: Cue block decorations that are not part of the character's name.
@@ -113,12 +157,8 @@ class LedgerAgent:
         }
 
         # ── gather every person surface form ─────────────────────────────────
-        forms: list[str] = [
-            _CUE_DECORATIONS.sub("", c).strip() for c in document.characters
-        ]
-        forms.extend(
-            span.surface_form for span in spans if span.element_type in person_types
-        )
+        forms: list[str] = [_CUE_DECORATIONS.sub("", c).strip() for c in document.characters]
+        forms.extend(span.surface_form for span in spans if span.element_type in person_types)
 
         display: dict[str, str] = {}
         for form in forms:

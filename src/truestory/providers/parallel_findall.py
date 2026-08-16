@@ -91,7 +91,7 @@ class ParallelFindAllProvider(EnumerationProvider):
                 body = resp.json()
             except RateLimited:
                 raise
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 return [Evidence.failed(request.subject_id, request.question, self.name, str(exc))]
 
         base_cost, per_match = _TIERS.get(self.tier, _TIERS["preview"])

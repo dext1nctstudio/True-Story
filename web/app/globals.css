@@ -1,77 +1,122 @@
 /* ============================================================================
-   TRUE STORY  ·  design tokens
+   TRUE STORY
    ============================================================================
-   A modern, high-contrast product surface: cool neutral surfaces, one vivid
-   indigo→violet brand gradient, and verdict colors saturated enough to read
-   as a real signal system rather than a muted spreadsheet. The screenplay
-   itself still renders in exact Courier at industry margins — that fidelity
-   is a functional requirement, not a style choice — but everything around it
-   is unapologetically a product, not a paper document.
+   The chrome is dark and near monochrome. The script is paper.
+
+   That split is the whole design. A clearance review runs for hours beside a
+   script editor, so the surrounding instrument stays quiet: hairline rules,
+   one accent, no gradients, no drop shadows on anything that is not a page.
+   The screenplay itself renders as a light page in exact Courier at industry
+   margins, because that is what the document is, and because a verdict mark
+   on paper reads as a markup rather than as a highlighted row in a table.
+
+   Colour is reserved. Green, amber and red appear only where a verdict has
+   been reached. Nothing decorative is allowed to use them.
    ============================================================================ */
 
 :root {
-  /* Dark by default, deliberately, and not conditional on the operating
-     system's preference. This is a review tool that runs beside a script
-     editor for hours; the dark ground also lets the verdict colours read as
-     signal lights rather than as highlighter on paper. */
+  /* Dark by choice rather than by system preference. This is a review surface,
+     and the paper it holds has to be the brightest thing on screen. */
   color-scheme: dark;
 
-  /* Every colour below is taken from the logo, which is convenient rather
-     than merely tidy: the three bars inside its magnifying glass are the
-     verdict system itself. Sampled values are #304860 navy at 57% of the
-     ink, then #00a860 green, #f09018 amber and #a81818 red.
+  /* ── ground ─────────────────────────────────────────────────────────────
+     A cool near black carrying a trace of the logo navy, so the chrome reads
+     as one material rather than as neutral grey with a blue accent on top. */
+  --bg: #090c11;
+  --surface: #0f131a;
+  --surface-raised: #141922;
+  --surface-sunken: #0c1015;
+  --surface-input: #171d26;
 
-     surface — the logo navy taken down to ground level, so panels sit in
-     the same blue family rather than on neutral grey */
-  --bg: #0b111a;
-  --bg-panel: #131c28;
-  --bg-sunken: #1a2533;
-  --bg-raised: #17212e;
-  --border: #263444;
-  --border-strong: #3a4d63;
+  /* Hairlines. The strong one is for things you can act on. */
+  --line: #1c2430;
+  --line-strong: #2a3441;
+  --line-focus: #3d4c5e;
 
-  /* type — cooled very slightly toward the same blue */
-  --text: #eaf0f7;
-  --text-muted: #9fb0c2;
-  --text-faint: #67788b;
+  /* ── type ───────────────────────────────────────────────────────────────
+     Four steps, and no more. Anything that needs a fifth is badly grouped. */
+  --text: #e9edf3;
+  --text-secondary: #9aa7b6;
+  --text-tertiary: #66727f;
+  --text-quiet: #4a5563;
 
-  /* verdicts — the logo's own bars. Green and amber carry over almost
-     untouched; the logo's #a81818 red is too dark to read against this
-     ground, so it is lifted while keeping its hue. */
-  --verdict-green: #00c46f;
-  --verdict-green-bg: #06291c;
-  --verdict-amber: #f09018;
-  --verdict-amber-bg: #2e2010;
-  --verdict-red: #ef4436;
-  --verdict-red-bg: #2f1412;
-  --verdict-pending: #32404f;
+  /* ── accent ─────────────────────────────────────────────────────────────
+     One value, taken from the logo navy and lifted until it carries on the
+     dark ground. There is no gradient pair, deliberately. */
+  --accent: #5d9ad4;
+  --accent-hover: #7db3e4;
+  --accent-quiet: #1a2a3b;
+  --accent-line: #2f4a66;
 
-  /* brand — the dominant logo navy. At #304860 it is a background colour,
-     not an accent, so the interactive tone is that hue brightened until it
-     carries on a dark panel, gradient-paired with the deeper original. */
-  --accent: #5793c9;
-  --accent-2: #34618d;
-  --accent-strong: #7db0e0;
-  --accent-bg: #142639;
-  --accent-gradient: linear-gradient(135deg, var(--accent), var(--accent-2));
+  /* ── verdicts, on the dark chrome ───────────────────────────────────────
+     Saturated enough to read as a signal system. Backgrounds are thin tints
+     rather than filled blocks, so a rail full of findings still reads calmly. */
+  --green: #35c98a;
+  --green-tint: rgba(53, 201, 138, 0.1);
+  --green-line: rgba(53, 201, 138, 0.32);
 
-  /* live/in-motion only, so it stays a signal rather than decoration. The
-     logo amber, held apart from the verdict amber by weight and placement. */
-  --highlight: #f09018;
-  --highlight-strong: #ffa93f;
-  --highlight-bg: #2e2010;
+  --amber: #e6a344;
+  --amber-tint: rgba(230, 163, 68, 0.11);
+  --amber-line: rgba(230, 163, 68, 0.34);
 
-  /* screenplay geometry, in inches, as the industry measures it */
+  --red: #ec5f57;
+  --red-tint: rgba(236, 95, 87, 0.12);
+  --red-line: rgba(236, 95, 87, 0.36);
+
+  --neutral: #4b5766;
+  --neutral-tint: rgba(120, 134, 150, 0.1);
+
+  /* Motion and progress only. Held apart from verdict amber by placement. */
+  --live: #e6a344;
+
+  /* ── paper ──────────────────────────────────────────────────────────────
+     The script page. Warm off white, because a pure white page against this
+     ground glares, and every screenplay anyone has ever read was warm. */
+  --paper: #f6f4f0;
+  --paper-edge: #ded9d1;
+  --paper-ink: #16191d;
+  --paper-ink-soft: #6b6f75;
+
+  --paper-green: #10794b;
+  --paper-amber: #9a6209;
+  --paper-amber-wash: #fbf0d8;
+  --paper-red: #b32d24;
+  --paper-red-wash: #fae3e0;
+  --paper-pending: #b6b0a6;
+
+  /* ── screenplay geometry, in inches, as the industry measures it ────────
+     US Letter, 1.5in left margin for the binding, 1in on the other three
+     sides. That leaves a 6in text column, which at 12pt Courier is the 61
+     character line every screenplay has been set to for a century. Get this
+     wrong and a line wraps mid sentence, which anyone from the industry sees
+     before they read a word of it. */
   --script-font: "Courier New", "Courier Prime", Courier, monospace;
   --script-size: 12pt;
-  --script-line: 1.05;
-  --script-width: 6.0in;
-  --script-dialogue-indent: 1.0in;
-  --script-cue-indent: 2.2in;
-  --script-paren-indent: 1.6in;
+  --script-leading: 1.08;
+  --page-width: 8.5in;
+  --page-margin-top: 1in;
+  --page-margin-right: 1in;
+  --page-margin-bottom: 1in;
+  --page-margin-left: 1.5in;
+  --script-indent-dialogue: 1in;
+  --script-indent-cue: 2.2in;
+  --script-indent-paren: 1.6in;
 
-  --font-display: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  /* ── scale ──────────────────────────────────────────────────────────────
+     Integers only. Half pixel sizes are a sign nobody chose a scale. */
+  --fs-micro: 10px;
+  --fs-tiny: 11px;
+  --fs-small: 12px;
+  --fs-body: 13px;
+  --fs-base: 14px;
+  --fs-lead: 16px;
+  --fs-title: 20px;
+  --fs-display: 30px;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -80,16 +125,16 @@
   --space-5: 24px;
   --space-6: 32px;
   --space-7: 48px;
-  --space-8: 64px;
+  --space-8: 72px;
 
-  --radius-sm: 6px;
-  --radius: 10px;
-  --radius-lg: 16px;
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius: 8px;
+  --radius-lg: 12px;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow: 0 2px 6px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.45), 0 24px 56px rgba(0, 0, 0, 0.55);
-  --shadow-accent: 0 6px 20px rgba(87, 147, 201, 0.3);
+  --page-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 18px 48px rgba(0, 0, 0, 0.55);
+
+  --ease: 110ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 
 * {
@@ -102,20 +147,56 @@ body {
   padding: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-sans);
-  font-size: 14px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-base);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* ── layout ───────────────────────────────────────────────────────────────── */
+::selection {
+  background: var(--accent-line);
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* Every scrollbar in the product, so no pane looks borrowed from the OS. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--line-focus);
+  background-clip: content-box;
+}
+
+/* ── shell ──────────────────────────────────────────────────────────────── */
 
 .shell {
   display: grid;
   grid-template-rows: auto 1fr;
-  /* A grid column sizes to its widest item's min-content by default, so the
-     header's intrinsic width dragged the whole shell past the viewport and
-     took the evidence rail off screen with it. */
+  /* A grid column sizes to its widest item by default, which let the header's
+     intrinsic width drag the shell past the viewport and take the rail with
+     it. Pinning the column to the viewport keeps the rail on screen. */
   grid-template-columns: minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
@@ -123,20 +204,23 @@ body {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 400px;
+  grid-template-columns: minmax(0, 1fr) 408px;
   overflow: hidden;
 }
 
 .workspace > main {
-  /* .shell and .workspace both clip at overflow:hidden, and this was the only
-     pane never given overflow-y, so a script longer than the viewport had
-     nowhere to scroll and just got cut off at the fold. */
   overflow-y: auto;
   min-height: 0;
   background: var(--bg);
 }
 
-@media (max-width: 1100px) {
+.workspace-single {
+  overflow-y: auto;
+  min-height: 0;
+  background: var(--bg);
+}
+
+@media (max-width: 1180px) {
   .workspace {
     grid-template-columns: 1fr;
   }
@@ -145,35 +229,19 @@ body {
   }
 }
 
-/* ── header ───────────────────────────────────────────────────────────────── */
+/* ── header ─────────────────────────────────────────────────────────────── */
 
 .header {
   display: flex;
   align-items: center;
   gap: var(--space-4);
   min-width: 0;
-  padding: 9px var(--space-5);
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
-  min-height: 62px;
-  position: relative;
+  height: 56px;
+  padding: 0 var(--space-4) 0 var(--space-5);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 
-.header::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  background: var(--accent-gradient);
-  opacity: 0.55;
-}
-
-/* The context group yields space; the actions do not. Without this the
-   header grew past the viewport and pushed the evidence rail off screen,
-   because every child sizes to its content and the framing banner is a
-   long nowrap sentence. */
 .header-group {
   display: flex;
   align-items: center;
@@ -188,9 +256,40 @@ body {
   align-items: center;
   gap: var(--space-4);
   flex: 0 0 auto;
+  height: 100%;
 }
 
-/* Shrinks and ellipses rather than forcing the header wider. */
+/* The readouts are one instrument, ruled off from the controls beside them,
+   rather than a row of loose widgets sharing a gap. */
+.header-readouts {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  height: 100%;
+  padding: 0 var(--space-5) 0 var(--space-1);
+  border-right: 1px solid var(--line);
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Something is running. The dot carries the motion so the word does not have
+   to blink, which would be unreadable next to live counters. */
+.stage-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+  color: var(--live);
+  white-space: nowrap;
+}
+
 .header-group .framing-banner {
   min-width: 0;
   overflow: hidden;
@@ -200,110 +299,128 @@ body {
 
 .brand {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
+  align-items: center;
   background: none;
   border: none;
   color: var(--text);
   cursor: pointer;
   padding: 0;
-  line-height: 1.1;
   flex: 0 0 auto;
 }
 
-/* The logo carries the name and the descriptor, so it replaces both text
-   spans. Height is fixed and width follows the artwork's own ratio. */
 .brand-logo {
-  height: 42px;
+  height: 26px;
   width: auto;
   display: block;
-  transition: opacity 120ms ease;
+  transition: opacity var(--ease);
 }
 
 .brand:hover .brand-logo {
-  opacity: 0.82;
-}
-
-.workspace-single {
-  overflow-y: auto;
-  min-height: 0;
-  background: var(--bg);
+  opacity: 0.72;
 }
 
 .script-title {
-  color: var(--text-muted);
-  font-size: 13px;
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--line);
 }
 
 .spacer {
   flex: 1;
 }
 
-/* The escalation banner. One boolean that changes the risk tier of every
-   person adjacent subject in the script, and it says so on screen. */
+/* The escalation banner. One boolean changes the risk tier of every person
+   adjacent subject in the script, and it says so on screen. */
 .framing-banner {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 11px;
-  border-radius: 999px;
-  background: var(--verdict-amber-bg);
-  color: var(--verdict-amber);
-  border: 1px solid currentColor;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  gap: var(--space-2);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--amber-tint);
+  color: var(--amber);
+  border: 1px solid var(--amber-line);
+  font-size: var(--fs-tiny);
+  font-weight: 500;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
-/* ── buttons ──────────────────────────────────────────────────────────────── */
+.framing-banner::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+/* ── controls ───────────────────────────────────────────────────────────── */
 
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 8px 15px;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: var(--bg-panel);
+  gap: var(--space-2);
+  height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-raised);
   color: var(--text);
-  font-size: 12.5px;
-  font-weight: 600;
+  font-family: inherit;
+  font-size: var(--fs-small);
+  font-weight: 500;
   cursor: pointer;
   user-select: none;
-  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
   white-space: nowrap;
+  transition: background var(--ease), border-color var(--ease), color var(--ease);
 }
 
 .btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--surface-input);
+  border-color: var(--line-focus);
 }
 
 .btn-primary {
-  background: var(--accent-gradient);
-  border-color: transparent;
-  color: #fff;
-  box-shadow: var(--shadow-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #08121c;
+  font-weight: 600;
 }
 
 .btn-primary:hover {
-  filter: brightness(1.08);
-  border-color: transparent;
-  color: #fff;
-  transform: translateY(-1px);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #08121c;
 }
 
 .btn:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
-/* ── counters ─────────────────────────────────────────────────────────────── */
+.role-select {
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  cursor: pointer;
+  transition: border-color var(--ease);
+}
+
+.role-select:hover {
+  border-color: var(--line-focus);
+}
+
+/* ── counters ───────────────────────────────────────────────────────────── */
 
 .counters {
   display: flex;
@@ -313,76 +430,79 @@ body {
 
 .counter {
   display: flex;
-  align-items: baseline;
-  gap: 5px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
 }
 
-/* Counters that double as filters render as <button>, which needs its own
-   reset before it can look like the plain <div> counters sitting next to it. */
 button.counter {
   border: none;
   background: none;
   padding: 3px 6px;
   margin: -3px -6px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   cursor: pointer;
   font: inherit;
   color: inherit;
+  transition: background var(--ease);
 }
 
 .counter.clickable:hover {
-  background: var(--bg-sunken);
+  background: var(--surface-raised);
 }
 
 .counter.active {
-  background: var(--accent-bg);
-  outline: 1px solid var(--accent);
+  background: var(--accent-quiet);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
 }
 
 .counter-value {
-  font-size: 17px;
-  font-weight: 650;
-  font-family: var(--font-display);
+  font-size: var(--fs-lead);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .counter-label {
-  font-size: 10.5px;
+  font-size: var(--fs-micro);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--text-faint);
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
-.counter.green .counter-value { color: var(--verdict-green); }
-.counter.amber .counter-value { color: var(--verdict-amber); }
-.counter.red   .counter-value { color: var(--verdict-red); }
+.counter.green .counter-value { color: var(--green); }
+.counter.amber .counter-value { color: var(--amber); }
+.counter.red   .counter-value { color: var(--red); }
 
-/* ── cost meter ───────────────────────────────────────────────────────────── */
+/* ── cost meter ─────────────────────────────────────────────────────────── */
 
 .cost-meter {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 150px;
+  gap: 3px;
+  min-width: 148px;
 }
 
 .cost-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--space-2);
 }
 
 .cost-value {
   font-variant-numeric: tabular-nums;
-  font-weight: 650;
-  font-size: 15px;
-  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-base);
+  letter-spacing: -0.01em;
 }
 
 .cost-bar {
-  height: 3px;
-  background: var(--bg-sunken);
+  height: 2px;
+  background: var(--line);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -390,40 +510,52 @@ button.counter {
 .cost-fill {
   height: 100%;
   background: var(--accent);
-  transition: width 240ms ease-out;
+  transition: width 220ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 
-.cost-fill.warn { background: var(--verdict-amber); }
-.cost-fill.over { background: var(--verdict-red); }
+.cost-fill.warn { background: var(--amber); }
+.cost-fill.over { background: var(--red); }
 
-/* ── screenplay ───────────────────────────────────────────────────────────── */
+/* ============================================================================
+   THE SCRIPT
+   ============================================================================
+   Everything below renders on paper, so the tokens flip. Verdict colours are
+   restated at print weight: a green underline you have to look for, an amber
+   wash you notice, and a red that is unmissable on a page you are reading.
+   ============================================================================ */
 
 .script-pane {
   overflow-y: auto;
-  padding: 28px 0 120px;
+  padding: var(--space-6) 0 var(--space-8);
 }
 
 .script-page {
-  width: var(--script-width);
+  width: var(--page-width);
+  max-width: 100%;
   margin: 0 auto;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--paper);
+  color: var(--paper-ink);
+  border: 1px solid var(--paper-edge);
   border-radius: 2px;
-  padding: 0.75in 0.5in 0.75in 0.75in;
-  box-shadow: var(--shadow);
+  padding: var(--page-margin-top) var(--page-margin-right) var(--page-margin-bottom)
+    var(--page-margin-left);
+  box-shadow: var(--page-shadow);
   font-family: var(--script-font);
   font-size: var(--script-size);
-  line-height: var(--script-line);
+  line-height: var(--script-leading);
   white-space: pre-wrap;
 }
 
 .scene-heading {
   font-weight: 700;
   text-transform: uppercase;
-  margin: 1.5em 0 0.6em;
+  letter-spacing: 0.01em;
+  margin: 1.6em 0 0.7em;
 }
 
-.scene-heading:first-child { margin-top: 0; }
+.scene-heading:first-child {
+  margin-top: 0;
+}
 
 .script-line {
   position: relative;
@@ -431,124 +563,152 @@ button.counter {
   border-radius: 2px;
 }
 
-.script-line.dialogue { margin-left: var(--script-dialogue-indent); }
-.script-line.cue      { margin-left: var(--script-cue-indent); font-weight: 700; }
-.script-line.paren    { margin-left: var(--script-paren-indent); color: var(--text-muted); }
+.script-line.dialogue { margin-left: var(--script-indent-dialogue); }
+.script-line.cue      { margin-left: var(--script-indent-cue); font-weight: 700; }
+.script-line.paren    { margin-left: var(--script-indent-paren); color: var(--paper-ink-soft); }
 
-/* Verdict states. Green is quiet, amber is visible, red is unmissable, and
-   opinion gets nothing at all because defamation law protects it. */
+/* Verdict marks. Restraint is the design language: a page drowning in
+   highlights reads as noise, so red has to stay rare to stay legible.
+
+   The mark is a text decoration rather than a border, so it follows the words
+   the way a pen would and stops where the sentence stops, instead of ruling
+   off the empty width of the line. */
 .annotated {
   cursor: pointer;
-  transition: background 120ms ease;
+  transition: background var(--ease);
+  text-decoration-line: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
 }
 
 .annotated.green {
-  border-bottom: 1.5px solid var(--verdict-green);
+  text-decoration-color: var(--paper-green);
 }
 
 .annotated.amber {
-  border-bottom: 1.5px solid var(--verdict-amber);
-  background: var(--verdict-amber-bg);
+  background: var(--paper-amber-wash);
+  text-decoration-color: var(--paper-amber);
 }
 
 .annotated.red {
-  border-bottom: 2px solid var(--verdict-red);
-  background: var(--verdict-red-bg);
-  font-weight: 600;
+  background: var(--paper-red-wash);
+  text-decoration-color: var(--paper-red);
+  text-decoration-thickness: 3px;
+  font-weight: 700;
 }
 
 .annotated.pending {
-  border-bottom: 1.5px dashed var(--verdict-pending);
-  opacity: 0.75;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--paper-pending);
+  opacity: 0.85;
 }
 
-/* Opinion carries no colour on the page, by design: defamation law protects
-   it, so it must never read as a finding. It is still clickable, and the
-   dotted rule is the only hint that there is something to open. */
-.annotated.grey { border-bottom: 1px dotted var(--verdict-pending); }
+/* Opinion carries no colour at all, by design. Defamation law protects it, so
+   it must never read as a finding. A dotted rule is the only hint that there
+   is something to open. */
+.annotated.grey {
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--paper-pending);
+}
 
-.annotated:hover { filter: brightness(1.12); }
+.annotated:hover {
+  background: rgba(93, 154, 212, 0.14);
+}
 
 .annotated.selected {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
 
-/* A header counter filter is active and this line's verdict does not match
-   it. Fading rather than hiding keeps the scene readable while scanning. */
+/* A header counter filter is active and this line does not match it. Fading
+   rather than hiding keeps the scene readable while scanning. */
 .annotated.faded {
-  opacity: 0.22;
-  filter: grayscale(0.6);
+  opacity: 0.24;
 }
 
 .annotated.faded:hover {
-  opacity: 0.5;
-  filter: none;
+  opacity: 0.6;
 }
 
 .citation-badge {
   display: inline-block;
   margin-left: 6px;
   padding: 0 5px;
-  border-radius: 999px;
-  background: var(--verdict-red);
-  color: #fff;
-  font-family: var(--font-sans);
-  font-size: 9.5px;
+  border-radius: var(--radius-xs);
+  background: var(--paper-red);
+  color: var(--paper);
+  font-family: var(--font-ui);
+  font-size: 9px;
   font-weight: 700;
+  letter-spacing: 0.02em;
   vertical-align: super;
 }
 
 .mask-chip {
   display: inline-block;
-  padding: 1px 7px;
-  border-radius: 4px;
-  background: var(--bg-sunken);
-  border: 1px dashed var(--border-strong);
-  color: var(--text-muted);
-  font-family: var(--font-sans);
-  font-size: 11px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px dashed var(--paper-pending);
+  color: var(--paper-ink-soft);
+  font-family: var(--font-ui);
+  font-size: var(--fs-tiny);
 }
 
-/* ── rail and panels ──────────────────────────────────────────────────────── */
+/* ── rail ───────────────────────────────────────────────────────────────── */
 
 .rail {
-  border-left: 1px solid var(--border);
-  background: var(--bg-panel);
+  border-left: 1px solid var(--line);
+  background: var(--surface);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
 
 .panel {
-  padding: var(--space-4);
-  border-bottom: 1px solid var(--border);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--line);
 }
 
 .panel-title {
-  font-size: 10.5px;
+  font-size: var(--fs-micro);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--text-faint);
-  margin: 0 0 10px;
-  font-weight: 650;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+  margin: 0 0 var(--space-3);
+  font-weight: 600;
 }
 
 .tabs {
   display: flex;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
+  padding: 0 var(--space-3);
+  gap: var(--space-1);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 2;
 }
 
 .tab {
-  flex: 1;
-  padding: 11px 8px;
+  padding: var(--space-3) var(--space-3);
   border: 0;
   background: transparent;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 550;
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: var(--fs-small);
+  font-weight: 500;
   cursor: pointer;
   border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color var(--ease);
+}
+
+.tab:hover {
+  color: var(--text-secondary);
 }
 
 .tab.active {
@@ -556,138 +716,219 @@ button.counter {
   border-bottom-color: var(--accent);
 }
 
-/* ── evidence ─────────────────────────────────────────────────────────────── */
+/* ── evidence ───────────────────────────────────────────────────────────── */
 
 .verdict-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
 }
 
 .verdict-pill {
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  border: 1px solid transparent;
 }
 
-.verdict-pill.green { background: var(--verdict-green-bg); color: var(--verdict-green); }
-.verdict-pill.amber { background: var(--verdict-amber-bg); color: var(--verdict-amber); }
-.verdict-pill.red   { background: var(--verdict-red-bg);   color: var(--verdict-red); }
-.verdict-pill.grey  { background: var(--bg-sunken);        color: var(--text-muted); }
+.verdict-pill.green { background: var(--green-tint); color: var(--green); border-color: var(--green-line); }
+.verdict-pill.amber { background: var(--amber-tint); color: var(--amber); border-color: var(--amber-line); }
+.verdict-pill.red   { background: var(--red-tint);   color: var(--red);   border-color: var(--red-line); }
+.verdict-pill.grey  { background: var(--neutral-tint); color: var(--text-secondary); border-color: var(--line-strong); }
+.verdict-pill.pending { background: var(--neutral-tint); color: var(--text-secondary); border-color: var(--line-strong); }
 
 .confidence {
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
-  color: var(--text-muted);
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
 }
 
 .claim-text {
   font-family: var(--script-font);
-  font-size: 12.5px;
-  background: var(--bg-sunken);
-  padding: 9px 11px;
-  border-radius: var(--radius);
-  border-left: 3px solid var(--border-strong);
-  margin: 8px 0;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  background: var(--surface-sunken);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--line-strong);
+  margin: var(--space-2) 0;
 }
 
 /* This sentence carries most of the epistemic weight in the product. */
 .verdict-language {
-  font-size: 12.5px;
-  color: var(--text-muted);
-  margin: 8px 0 12px;
-  font-style: italic;
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  margin: var(--space-2) 0 var(--space-3);
+  line-height: 1.5;
+}
+
+.evidence-rationale {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 0 0 var(--space-3);
+}
+
+.evidence-record {
+  margin-bottom: var(--space-4);
+}
+
+.evidence-source-note {
+  font-size: var(--fs-tiny);
+  color: var(--text-secondary);
 }
 
 .citation {
-  border-top: 1px solid var(--border);
-  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  padding: var(--space-3) 0;
 }
 
 .citation-title {
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: var(--fs-small);
+  font-weight: 500;
   color: var(--accent);
   text-decoration: none;
   display: block;
+  line-height: 1.4;
 }
 
-.citation-title:hover { text-decoration: underline; }
+.citation-title:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
 
 .citation-meta {
-  font-size: 10.5px;
-  color: var(--text-faint);
-  margin-top: 2px;
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 .citation-excerpt {
-  font-size: 11.5px;
-  color: var(--text-muted);
-  margin-top: 5px;
-  padding-left: 9px;
-  border-left: 2px solid var(--border);
-  max-height: 88px;
+  font-size: var(--fs-tiny);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-top: var(--space-2);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--line);
+  max-height: 92px;
   overflow: hidden;
 }
 
 .source-tag {
   display: inline-block;
-  padding: 0 5px;
-  border-radius: 3px;
-  background: var(--bg-sunken);
-  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-input);
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-right: 5px;
+  letter-spacing: 0.06em;
 }
 
-.source-tag.primary { background: var(--accent-bg); color: var(--accent); }
+.source-tag.primary {
+  background: var(--accent-quiet);
+  color: var(--accent);
+}
 
-/* ── remedy ───────────────────────────────────────────────────────────────── */
+/* Meta strips that would otherwise need a separator character between fields.
+   A rule does the job the middot was doing, and it does it in the layout. */
+.meta-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.meta-strip > * + *::before {
+  content: "";
+  display: inline-block;
+  width: 1px;
+  height: 9px;
+  margin-right: var(--space-2);
+  background: var(--line-strong);
+  vertical-align: -1px;
+}
+
+/* ── remedy ─────────────────────────────────────────────────────────────── */
 
 .remedy {
-  margin-top: 12px;
-  padding: 11px;
-  border: 1px solid var(--verdict-green);
-  border-radius: var(--radius);
-  background: var(--verdict-green-bg);
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--green-line);
+  border-radius: var(--radius-sm);
+  background: var(--green-tint);
 }
 
 .remedy-label {
-  font-size: 10.5px;
+  font-size: var(--fs-micro);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--verdict-green);
-  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--green);
+  font-weight: 600;
 }
 
 .remedy-proposal {
   font-family: var(--script-font);
-  font-size: 12.5px;
-  margin: 7px 0;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  margin: var(--space-2) 0;
+}
+
+.remedy-rationale {
+  font-size: var(--fs-tiny);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0 0 var(--space-3);
+}
+
+.remedy-alternatives {
+  font-size: var(--fs-tiny);
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-3);
 }
 
 button.apply {
-  padding: 6px 13px;
-  border: 0;
-  border-radius: var(--radius);
-  background: var(--verdict-green);
-  color: #fff;
-  font-size: 12px;
+  height: 30px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--green-line);
+  border-radius: var(--radius-sm);
+  background: var(--green);
+  color: #052215;
+  font-family: inherit;
+  font-size: var(--fs-small);
   font-weight: 600;
   cursor: pointer;
+  transition: filter var(--ease);
+}
+
+button.apply:hover:not(:disabled) {
+  filter: brightness(1.08);
 }
 
 button.apply:disabled {
-  background: var(--border-strong);
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--text-tertiary);
   cursor: not-allowed;
 }
 
-/* ── per person claims, and the amber density meter ───────────────────────── */
+.reveal-action {
+  margin-top: var(--space-2);
+}
+
+/* ── people, and the amber density meter ────────────────────────────────── */
 
 .person-list {
   display: flex;
@@ -695,166 +936,180 @@ button.apply:disabled {
 }
 
 .person-card {
-  border-bottom: 1px solid var(--border);
-  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+  padding: var(--space-4) var(--space-5);
 }
 
 .person-card-head {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: var(--space-2);
 }
 
 .person-name {
-  font-weight: 650;
-  font-size: 13.5px;
+  font-weight: 600;
+  font-size: var(--fs-body);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .person-tag {
   display: inline-block;
-  margin-left: 7px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--bg-sunken);
-  color: var(--text-faint);
-  font-size: 9.5px;
+  margin-left: var(--space-2);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-input);
+  color: var(--text-tertiary);
+  font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  vertical-align: middle;
+  letter-spacing: 0.06em;
+  vertical-align: 1px;
 }
 
 .person-tag.private {
-  background: var(--verdict-amber-bg);
-  color: var(--verdict-amber);
+  background: var(--amber-tint);
+  color: var(--amber);
 }
 
 .person-tallies {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1);
 }
 
 .tally {
-  font-size: 10.5px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  color: var(--text-muted);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: var(--radius-xs);
+  background: var(--neutral-tint);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
-.tally.green { background: var(--verdict-green-bg); color: var(--verdict-green); }
-.tally.amber { background: var(--verdict-amber-bg); color: var(--verdict-amber); }
-.tally.red   { background: var(--verdict-red-bg);   color: var(--verdict-red); }
+.tally.green { background: var(--green-tint); color: var(--green); }
+.tally.amber { background: var(--amber-tint); color: var(--amber); }
+.tally.red   { background: var(--red-tint);   color: var(--red); }
 
 .density-track {
-  height: 5px;
-  background: var(--bg-sunken);
-  border-radius: 3px;
+  height: 4px;
+  background: var(--surface-input);
+  border-radius: 2px;
   position: relative;
   overflow: hidden;
+  margin-top: var(--space-1);
 }
 
 .density-fill {
   height: 100%;
-  background: var(--verdict-amber);
-  transition: width 300ms ease-out;
+  background: var(--amber);
+  transition: width 260ms cubic-bezier(0.2, 0, 0.2, 1);
 }
 
-.density-fill.over { background: var(--verdict-red); }
+.density-fill.over {
+  background: var(--red);
+}
 
 .density-threshold {
   position: absolute;
-  top: -2px;
-  bottom: -2px;
+  top: 0;
+  bottom: 0;
   width: 1px;
-  background: var(--text-faint);
+  background: var(--text-quiet);
 }
 
 .person-meta {
-  font-size: 10.5px;
-  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   margin: 0;
 }
 
 .person-toggle {
-  margin-top: 10px;
+  margin-top: var(--space-3);
   padding: 0;
   border: none;
   background: none;
   color: var(--accent);
-  font-size: 11.5px;
-  font-weight: 600;
+  font-family: inherit;
+  font-size: var(--fs-tiny);
+  font-weight: 500;
   cursor: pointer;
+  transition: color var(--ease);
 }
 
-.person-toggle:hover { color: var(--accent-strong); }
+.person-toggle:hover {
+  color: var(--accent-hover);
+}
 
 .person-claims {
   list-style: none;
-  margin: 8px 0 0;
+  margin: var(--space-3) 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: var(--space-2);
 }
 
 .person-claim {
-  padding: 9px 10px;
+  padding: var(--space-3);
   border-radius: var(--radius-sm);
-  background: var(--bg-sunken);
-  border-left: 3px solid var(--verdict-pending);
+  background: var(--surface-sunken);
+  border-left: 2px solid var(--line-strong);
 }
 
-.person-claim.green { border-left-color: var(--verdict-green); }
-.person-claim.amber { border-left-color: var(--verdict-amber); }
-.person-claim.red   { border-left-color: var(--verdict-red); }
+.person-claim.green { border-left-color: var(--green); }
+.person-claim.amber { border-left-color: var(--amber); }
+.person-claim.red   { border-left-color: var(--red); }
 
 .person-claim-head {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-2);
   flex-wrap: wrap;
-  margin-bottom: 5px;
+  margin-bottom: var(--space-2);
 }
 
 .person-claim-sources {
-  font-size: 10.5px;
-  color: var(--text-faint);
+  font-size: var(--fs-micro);
+  color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
 
 .person-claim-text {
   margin: 0;
-  font-size: 12.5px;
-  line-height: 1.45;
+  font-size: var(--fs-small);
+  line-height: 1.5;
   color: var(--text);
 }
 
 .person-claim-why {
-  margin: 5px 0 0;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--text-muted);
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-tiny);
+  line-height: 1.5;
+  color: var(--text-secondary);
 }
 
-/* ── counsel queue ────────────────────────────────────────────────────────── */
+/* ── counsel queue ──────────────────────────────────────────────────────── */
 
-.queue-group { margin-bottom: var(--space-4); }
+.queue-group {
+  margin-bottom: var(--space-4);
+}
+
+.queue-group:last-child {
+  margin-bottom: 0;
+}
 
 .queue-group-title {
-  font-size: 10.5px;
+  font-size: var(--fs-micro);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--text-faint);
-  font-weight: 650;
-  margin: 0 0 7px;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
 }
 
 .queue-list {
@@ -863,88 +1118,91 @@ button.apply:disabled {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: var(--space-2);
 }
 
 .queue-item {
-  padding: 9px 10px;
+  padding: var(--space-3);
   border-radius: var(--radius-sm);
-  background: var(--bg-sunken);
-  border-left: 3px solid var(--verdict-pending);
+  background: var(--surface-sunken);
+  border-left: 2px solid var(--line-strong);
 }
 
-.queue-item.green { border-left-color: var(--verdict-green); }
-.queue-item.amber { border-left-color: var(--verdict-amber); }
-.queue-item.red   { border-left-color: var(--verdict-red); }
+.queue-item.green { border-left-color: var(--green); }
+.queue-item.amber { border-left-color: var(--amber); }
+.queue-item.red   { border-left-color: var(--red); }
 
-.queue-item.clickable { cursor: pointer; }
-.queue-item.clickable:hover { background: var(--bg-raised); }
+.queue-item.clickable {
+  cursor: pointer;
+  transition: background var(--ease);
+}
+
+.queue-item.clickable:hover {
+  background: var(--surface-raised);
+}
 
 .queue-item-head {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-2);
   flex-wrap: wrap;
-  margin-bottom: 5px;
+  margin-bottom: var(--space-2);
 }
 
 .queue-item-subject {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-weight: 600;
+  font-size: var(--fs-tiny);
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .queue-item-text {
   margin: 0;
-  font-size: 12.5px;
-  line-height: 1.45;
+  font-size: var(--fs-small);
+  line-height: 1.5;
   color: var(--text);
 }
 
 .queue-item-why {
-  margin: 5px 0 0;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--text-muted);
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-tiny);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.queue-count {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .element-type {
-  font-size: 9.5px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 700;
-  color: var(--text-faint);
+  letter-spacing: 0.07em;
+  font-weight: 600;
+  color: var(--text-tertiary);
 }
 
 .element-status {
-  font-size: 9.5px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 700;
-  padding: 1px 7px;
-  border-radius: 999px;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  border: 1px solid transparent;
 }
 
-.element-status.green { background: var(--verdict-green-bg); color: var(--verdict-green); }
-.element-status.amber { background: var(--verdict-amber-bg); color: var(--verdict-amber); }
-.element-status.red   { background: var(--verdict-red-bg);   color: var(--verdict-red); }
+.element-status.green { background: var(--green-tint); color: var(--green); border-color: var(--green-line); }
+.element-status.amber { background: var(--amber-tint); color: var(--amber); border-color: var(--amber-line); }
+.element-status.red   { background: var(--red-tint);   color: var(--red);   border-color: var(--red-line); }
 
-/* ── misc ─────────────────────────────────────────────────────────────────── */
-
-.role-select {
-  padding: 6px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  color: var(--text);
-  font-size: 12px;
-}
+/* ── states ─────────────────────────────────────────────────────────────── */
 
 .empty {
-  padding: 28px 16px;
-  text-align: center;
-  color: var(--text-faint);
-  font-size: 12.5px;
+  padding: var(--space-5);
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+  line-height: 1.55;
 }
 
 /* The window between upload and ingest finishing. Deliberately not an error
@@ -960,100 +1218,135 @@ button.apply:disabled {
 }
 
 .starting-spinner {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  border: 2.5px solid var(--border);
+  border: 2px solid var(--line-strong);
   border-top-color: var(--accent);
-  animation: spin 900ms linear infinite;
-  margin-bottom: var(--space-2);
+  animation: spin 800ms linear infinite;
+  margin-bottom: var(--space-3);
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .starting-title {
   margin: 0;
-  font-size: 14.5px;
-  font-weight: 650;
+  font-size: var(--fs-base);
+  font-weight: 600;
   color: var(--text);
 }
 
 .starting-sub {
   margin: 0;
-  font-size: 12.5px;
-  color: var(--text-muted);
-  max-width: 42ch;
-  line-height: 1.5;
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  max-width: 44ch;
+  line-height: 1.55;
 }
 
 .counsel-flag {
   display: inline-block;
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: var(--accent-bg);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--accent-quiet);
   color: var(--accent);
-  font-size: 10.5px;
-  font-weight: 650;
+  border: 1px solid var(--accent-line);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .warning {
-  padding: 9px 11px;
-  border-radius: var(--radius);
-  background: var(--verdict-amber-bg);
-  color: var(--verdict-amber);
-  font-size: 11.5px;
-  margin-bottom: 9px;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--amber-tint);
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+  font-size: var(--fs-tiny);
+  line-height: 1.5;
+  margin-bottom: var(--space-2);
+}
+
+.warning p {
+  margin: 0;
+}
+
+.error-banner {
+  margin: var(--space-4);
+}
+
+/* A second title inside a panel needs air above it that the first one does not. */
+.panel-title-section {
+  margin-top: var(--space-5);
 }
 
 .disclaimer {
-  padding: var(--space-4);
-  font-size: 11px;
-  color: var(--text-faint);
-  border-top: 1px solid var(--border);
-  line-height: 1.45;
+  padding: var(--space-4) var(--space-5);
+  margin: 0;
+  font-size: var(--fs-tiny);
+  color: var(--text-quiet);
+  border-top: 1px solid var(--line);
+  line-height: 1.55;
+  margin-top: auto;
 }
 
 .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  font-size: 11px;
-  color: var(--text-muted);
+  gap: var(--space-3);
+  font-size: var(--fs-tiny);
+  color: var(--text-secondary);
 }
 
-.legend-item { display: flex; align-items: center; gap: 5px; }
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
 
 .legend-swatch {
-  width: 14px;
-  height: 3px;
+  width: 12px;
+  height: 2px;
   border-radius: 2px;
 }
 
+.legend-note {
+  font-size: var(--fs-tiny);
+  color: var(--text-tertiary);
+  line-height: 1.5;
+  margin: var(--space-3) 0 0;
+}
+
 /* ============================================================================
-   DASHBOARD
+   THE DOCKET
    ============================================================================
-   The docket. What counsel sees before any script is open: how many matters
-   are on the books, what they have cost, how the record has broken across
-   every claim ever adjudicated, and which are still in motion right now.
+   What counsel sees before any script is open. How many matters are on the
+   books, what they have cost, how the record has broken across every claim
+   adjudicated so far, and which runs are still in motion.
    ============================================================================ */
 
 .dashboard {
-  max-width: 1080px;
+  max-width: 1000px;
   margin: 0 auto;
-  padding: var(--space-6) var(--space-5) var(--space-8);
+  padding: var(--space-8) var(--space-6);
 }
 
 .dashboard-hero {
   display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: var(--space-5);
-  align-items: stretch;
+  grid-template-columns: 1fr 360px;
+  gap: var(--space-6);
+  align-items: center;
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--line);
   margin-bottom: var(--space-6);
 }
 
-@media (max-width: 800px) {
+@media (max-width: 860px) {
   .dashboard-hero {
     grid-template-columns: 1fr;
   }
@@ -1062,50 +1355,41 @@ button.apply:disabled {
 .dashboard-welcome {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .dashboard-title {
-  font-family: var(--font-display);
-  font-size: 27px;
+  font-size: var(--fs-display);
   font-weight: 600;
   margin: 0;
-  letter-spacing: -0.01em;
-  position: relative;
-  display: inline-block;
-  padding-bottom: 10px;
-}
-
-.dashboard-title::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 40px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--highlight);
+  letter-spacing: -0.022em;
+  line-height: 1.1;
 }
 
 .dashboard-subtitle {
-  color: var(--text-muted);
-  font-size: 13.5px;
-  line-height: 1.55;
-  max-width: 46ch;
+  color: var(--text-secondary);
+  font-size: var(--fs-base);
+  line-height: 1.6;
+  max-width: 44ch;
   margin: 0;
 }
 
-/* ── stat cards ───────────────────────────────────────────────────────────── */
+/* ── stat strip ─────────────────────────────────────────────────────────── */
+/* One row, hairline separated. A grid of bordered cards with coloured tops is
+   the look every generated dashboard reaches for; a rule and good numerals
+   carry the same information and read as an instrument. */
 
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-3);
-  margin-bottom: var(--space-6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin-bottom: var(--space-7);
+  overflow: hidden;
 }
 
-@media (max-width: 800px) {
+@media (max-width: 860px) {
   .stat-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1113,151 +1397,160 @@ button.apply:disabled {
 
 .stat-card {
   position: relative;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4) var(--space-4) var(--space-3);
-  box-shadow: var(--shadow-sm);
+  padding: var(--space-4) var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  overflow: hidden;
-  transition: box-shadow 150ms ease, transform 150ms ease;
+  gap: var(--space-1);
+  border-left: 1px solid var(--line);
+  min-width: 0;
 }
 
-.stat-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: var(--accent-gradient);
+.stat-card:first-child {
+  border-left: none;
 }
 
-.stat-card:hover {
-  box-shadow: var(--shadow);
-  transform: translateY(-2px);
+/* The verdict record carries a stacked bar and its legend, so it takes the
+   width of two ordinary readouts. */
+.stat-card-wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 860px) {
+  .stat-card:nth-child(odd) {
+    border-left: none;
+  }
+  .stat-card:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
+  }
 }
 
 .stat-card-label {
-  font-size: 10.5px;
+  font-size: var(--fs-micro);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-faint);
-  font-weight: 650;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+  font-weight: 600;
 }
 
 .stat-card-value {
-  font-family: var(--font-display);
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 600;
-  line-height: 1.1;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
 .stat-card-sub {
-  font-size: 11px;
-  color: var(--text-muted);
+  font-size: var(--fs-tiny);
+  color: var(--text-secondary);
 }
 
 .stat-card-live {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: var(--highlight);
-  font-weight: 600;
+  gap: var(--space-2);
+  color: var(--live);
+  font-weight: 500;
 }
 
-/* the docket wide verdict bar, stacked green / amber / red / grey */
+/* The docket wide verdict bar, stacked green, amber, red, opinion. */
 .verdict-bar {
   display: flex;
-  height: 8px;
-  border-radius: 999px;
+  height: 6px;
+  border-radius: 3px;
   overflow: hidden;
-  background: var(--bg-sunken);
-  margin-top: 2px;
+  background: var(--surface-input);
+  margin-top: var(--space-2);
+  gap: 1px;
 }
 
-.verdict-bar-seg.green { background: var(--verdict-green); }
-.verdict-bar-seg.amber { background: var(--verdict-amber); }
-.verdict-bar-seg.red   { background: var(--verdict-red); }
-.verdict-bar-seg.grey  { background: var(--verdict-pending); }
+.verdict-bar-seg.green { background: var(--green); }
+.verdict-bar-seg.amber { background: var(--amber); }
+.verdict-bar-seg.red   { background: var(--red); }
+.verdict-bar-seg.grey  { background: var(--neutral); }
 
 .verdict-bar-legend {
   display: flex;
   gap: var(--space-3);
-  font-size: 10.5px;
-  color: var(--text-muted);
-  margin-top: 6px;
+  font-size: var(--fs-micro);
+  color: var(--text-secondary);
+  margin-top: var(--space-2);
   flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .verdict-bar-legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
 }
 
 .verdict-bar-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
 }
 
-.verdict-bar-dot.green { background: var(--verdict-green); }
-.verdict-bar-dot.amber { background: var(--verdict-amber); }
-.verdict-bar-dot.red   { background: var(--verdict-red); }
-.verdict-bar-dot.grey  { background: var(--verdict-pending); }
+.verdict-bar-dot.green { background: var(--green); }
+.verdict-bar-dot.amber { background: var(--amber); }
+.verdict-bar-dot.red   { background: var(--red); }
+.verdict-bar-dot.grey  { background: var(--neutral); }
 
-/* ── upload card ──────────────────────────────────────────────────────────── */
+/* ── upload ─────────────────────────────────────────────────────────────── */
 
 .upload-card {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
 }
 
 .upload-zone {
-  flex: 1;
-  margin: 0;
-  padding: var(--space-5);
+  padding: var(--space-6) var(--space-5);
   text-align: center;
-  border: 1.5px dashed var(--border-strong);
-  border-radius: var(--radius-lg);
-  margin: var(--space-3);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
   cursor: pointer;
-  color: var(--text-faint);
+  color: var(--text-tertiary);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-height: 96px;
-  transition: border-color 120ms ease, background 120ms ease;
+  gap: var(--space-1);
+  min-height: 132px;
+  transition: border-color var(--ease), background var(--ease), color var(--ease);
+}
+
+.upload-zone:hover {
+  border-color: var(--line-focus);
+  background: var(--surface-raised);
 }
 
 .upload-zone.drag-over {
   border-color: var(--accent);
+  border-style: solid;
   color: var(--accent);
-  background: var(--accent-bg);
+  background: var(--accent-quiet);
 }
 
 .upload-title {
-  font-size: 13px;
+  font-size: var(--fs-body);
   color: var(--text);
-  font-weight: 600;
-  margin-bottom: 2px;
+  font-weight: 500;
+  margin: 0 0 2px;
 }
 
 .upload-hint {
-  font-size: 11.5px;
+  font-size: var(--fs-tiny);
+  margin: 0;
 }
 
-/* ── section headings on the dashboard ───────────────────────────────────── */
+.upload-status {
+  font-size: var(--fs-body);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* ── section heads ──────────────────────────────────────────────────────── */
 
 .dashboard-section-head {
   display: flex;
@@ -1267,23 +1560,29 @@ button.apply:disabled {
 }
 
 .dashboard-section-title {
-  font-family: var(--font-display);
-  font-size: 15px;
+  font-size: var(--fs-body);
   font-weight: 600;
   margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
 }
 
 .dashboard-section-count {
-  font-size: 11.5px;
-  color: var(--text-faint);
+  font-size: var(--fs-tiny);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 
-/* ── run list ─────────────────────────────────────────────────────────────── */
+/* ── run rows ───────────────────────────────────────────────────────────── */
 
 .run-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
 }
 
 .run-row {
@@ -1292,129 +1591,140 @@ button.apply:disabled {
   gap: var(--space-4);
   text-align: left;
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
+  border: none;
+  border-top: 1px solid var(--line);
+  background: transparent;
   cursor: pointer;
   color: inherit;
   font: inherit;
-  box-shadow: var(--shadow-sm);
-  transition: border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+  transition: background var(--ease);
+}
+
+.run-row:first-child {
+  border-top: none;
 }
 
 .run-row:hover {
-  border-color: var(--accent);
-  border-left-color: var(--accent);
-  transform: translateY(-1px) scale(1.005);
-  box-shadow: var(--shadow);
+  background: var(--surface-raised);
 }
-
-.run-row:has(.run-row-status.complete) { border-left-color: var(--verdict-green); }
-.run-row:has(.run-row-status.failed) { border-left-color: var(--verdict-red); }
-.run-row:has(.run-row-status.live) { border-left-color: var(--highlight); }
 
 .run-row-identity {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .run-row-main {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .run-row-title {
-  font-weight: 600;
-  font-size: 13.5px;
+  font-weight: 500;
+  font-size: var(--fs-body);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .run-row-status {
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-faint);
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: var(--text-tertiary);
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--bg-sunken);
+  gap: var(--space-1);
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--neutral-tint);
   flex-shrink: 0;
 }
 
-.run-row-status.complete { color: var(--verdict-green); background: var(--verdict-green-bg); }
-.run-row-status.failed { color: var(--verdict-red); background: var(--verdict-red-bg); }
-.run-row-status.live { color: var(--highlight-strong); background: var(--highlight-bg); }
+.run-row-status.complete { color: var(--green); background: var(--green-tint); }
+.run-row-status.failed   { color: var(--red);   background: var(--red-tint); }
+.run-row-status.live     { color: var(--live);  background: var(--amber-tint); }
 
 .pulse {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: currentColor;
-  animation: pulse 1.4s ease-in-out infinite;
+  animation: pulse 1.6s ease-in-out infinite;
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
 }
 
 .run-row-meta {
   display: flex;
   gap: var(--space-3);
-  font-size: 11px;
-  color: var(--text-faint);
+  font-size: var(--fs-tiny);
+  color: var(--text-tertiary);
   flex-wrap: wrap;
   font-variant-numeric: tabular-nums;
 }
 
 .run-row-verdicts {
   display: flex;
-  gap: 3px;
+  gap: 2px;
   flex-shrink: 0;
 }
 
 .run-row-verdict-chip {
-  min-width: 20px;
+  min-width: 22px;
   text-align: center;
   padding: 2px 6px;
-  border-radius: 5px;
-  font-size: 10.5px;
-  font-weight: 700;
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-micro);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-.run-row-verdict-chip.green { background: var(--verdict-green-bg); color: var(--verdict-green); }
-.run-row-verdict-chip.amber { background: var(--verdict-amber-bg); color: var(--verdict-amber); }
-.run-row-verdict-chip.red   { background: var(--verdict-red-bg);   color: var(--verdict-red); }
+.run-row-verdict-chip.green { background: var(--green-tint); color: var(--green); }
+.run-row-verdict-chip.amber { background: var(--amber-tint); color: var(--amber); }
+.run-row-verdict-chip.red   { background: var(--red-tint);   color: var(--red); }
 
 .run-row-cost {
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--fs-small);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   flex-shrink: 0;
-  min-width: 52px;
+  min-width: 54px;
   text-align: right;
 }
 
 .warning-inline {
-  color: var(--verdict-red);
+  color: var(--red);
 }
 
 .dashboard-empty {
   padding: var(--space-7) var(--space-4);
   text-align: center;
-  color: var(--text-faint);
-  font-size: 13px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-lg);
+  color: var(--text-tertiary);
+  font-size: var(--fs-small);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

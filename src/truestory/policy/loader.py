@@ -190,20 +190,21 @@ class RoutingPolicy:
                 try:
                     processor = Processor(proc_raw)
                 except ValueError as exc:
-                    raise PolicyError(
-                        f"rule {rule_id}: unknown processor {proc_raw!r}"
-                    ) from exc
+                    raise PolicyError(f"rule {rule_id}: unknown processor {proc_raw!r}") from exc
 
             provider = e.get("provider", "parallel_task")
 
             # A tier above LOW that neither researches nor names a schema is
             # almost certainly a typo, and it is the exact typo that silently
             # drops a real subject on the floor.
-            if provider not in {"none", "deterministic_rules"} and not e.get("schema"):
-                if tier.rank >= RiskTier.MEDIUM.rank:
-                    raise PolicyError(
-                        f"rule {rule_id}: tier {tier} researches but declares no output schema"
-                    )
+            if (
+                provider not in {"none", "deterministic_rules"}
+                and not e.get("schema")
+                and tier.rank >= RiskTier.MEDIUM.rank
+            ):
+                raise PolicyError(
+                    f"rule {rule_id}: tier {tier} researches but declares no output schema"
+                )
 
             rules.append(
                 RoutingRule(
@@ -392,7 +393,9 @@ class Jurisdictions:
         entry = self.us_states.get(state.upper(), {})
         return int(entry.get("post_mortem_publicity_years", 0))
 
-    def publicity_rights_live(self, state: str | None, death_year: int | None, now_year: int) -> bool:
+    def publicity_rights_live(
+        self, state: str | None, death_year: int | None, now_year: int
+    ) -> bool:
         """Whether a post mortem publicity licence is still required."""
         if death_year is None:
             return False
@@ -481,7 +484,7 @@ def _validate_schemas() -> int:
             schema = json.loads(path.read_text(encoding="utf-8"))
             jsonschema.Draft202012Validator.check_schema(schema)
             print(f"  ok    {path.name}")
-        except Exception as exc:  # noqa: BLE001 - report every failure, do not stop
+        except Exception as exc:
             failures += 1
             print(f"  FAIL  {path.name}: {exc}")
     return failures

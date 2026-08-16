@@ -17,7 +17,6 @@ from truestory.models.elements import ClearableElement
 from truestory.models.enums import ElementType, PublicFigureStatus, Role
 from truestory.webhooks.signature import SignatureError, compute, sign_outbound, verify
 
-
 # =============================================================================
 # roles
 # =============================================================================
@@ -86,7 +85,7 @@ def test_masked_element_never_exposes_its_name():
 
 
 def test_masked_element_still_reports_useful_counts():
-    """"Three matching individuals, four sources, withheld" is itself the
+    """ "Three matching individuals, four sources, withheld" is itself the
     signal. Masking must not reduce to silence."""
     element = ClearableElement(
         element_id="el_masked",
@@ -204,7 +203,9 @@ def test_wrong_secret_is_rejected():
     headers = sign_outbound("shared-secret", body)
 
     with pytest.raises(SignatureError):
-        verify("other-secret", headers["x-truestory-signature"], headers["x-truestory-timestamp"], body)
+        verify(
+            "other-secret", headers["x-truestory-signature"], headers["x-truestory-timestamp"], body
+        )
 
 
 def test_replayed_request_is_rejected():

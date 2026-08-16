@@ -76,7 +76,9 @@ class RateLimited(ProviderError):
     """Back off and retry. Cloud Tasks owns the schedule, not this layer."""
 
     def __init__(self, provider: str, retry_after_seconds: float = 30.0) -> None:
-        super().__init__(provider, f"rate limited, retry after {retry_after_seconds}s", retryable=True)
+        super().__init__(
+            provider, f"rate limited, retry after {retry_after_seconds}s", retryable=True
+        )
         self.retry_after_seconds = retry_after_seconds
 
 

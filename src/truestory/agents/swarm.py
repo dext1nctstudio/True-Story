@@ -174,7 +174,7 @@ class ResearchSwarm:
                 # reported condition rather than a crash. The report front page
                 # will carry the coverage warning.
                 log.warning("budget exhausted mid run: %s", exc)
-            except Exception:  # noqa: BLE001 - one subject, not the run
+            except Exception:
                 log.exception("swarm subject failed")
 
     # ── claims ───────────────────────────────────────────────────────────────
@@ -210,9 +210,7 @@ class ResearchSwarm:
         )
 
     # ── elements ─────────────────────────────────────────────────────────────
-    async def _research_element(
-        self, element: ClearableElement, result: SwarmResult
-    ) -> None:
+    async def _research_element(self, element: ClearableElement, result: SwarmResult) -> None:
         payload = await self._dispatch_element(element)
         evidence = _rehydrate(payload, element.element_id, element.canonical_form)
         result.add(element.element_id, evidence)
@@ -276,9 +274,7 @@ class ResearchSwarm:
             case ElementType.SOURCE_MATERIAL:
                 return await self.tools.check_public_domain(eid, name)
             case _:
-                return await self.tools.check_entity(
-                    eid, name, str(element.element_type).lower()
-                )
+                return await self.tools.check_entity(eid, name, str(element.element_type).lower())
 
     async def _run_side_effect(
         self, side_effect: str, element: ClearableElement, result: SwarmResult
@@ -293,8 +289,11 @@ class ResearchSwarm:
             result.monitors_requested.append(request)
             return
 
-        if side_effect in {"findall_similar_persons", "findall_matching_persons",
-                           "findall_registered_entities"}:
+        if side_effect in {
+            "findall_similar_persons",
+            "findall_matching_persons",
+            "findall_registered_entities",
+        }:
             try:
                 matches = await self.tools.enumerate_matching_entities(
                     element.element_id,
@@ -306,7 +305,7 @@ class ResearchSwarm:
                         element.element_id,
                         _rehydrate(payload, element.element_id, element.canonical_form),
                     )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.warning("enumeration failed for %s: %s", element.element_id, exc)
             return
 
@@ -321,7 +320,7 @@ class ResearchSwarm:
                             element.element_id,
                             _rehydrate(payload, element.element_id, citation.url),
                         )
-                    except Exception as exc:  # noqa: BLE001
+                    except Exception as exc:
                         log.warning("page capture failed: %s", exc)
 
     # ── progress ─────────────────────────────────────────────────────────────
@@ -336,7 +335,7 @@ class ResearchSwarm:
         if self.on_progress:
             try:
                 await self.on_progress(payload)
-            except Exception:  # noqa: BLE001 - never let the UI break the run
+            except Exception:
                 log.debug("progress callback failed", exc_info=True)
 
 
@@ -430,6 +429,4 @@ def _monitor_reason(element: ClearableElement) -> str:
 
 def negative_living_claims(claims: list[FactualClaim]) -> list[FactualClaim]:
     """The escalation cocktail. Every marquee case in the set is this shape."""
-    return [
-        c for c in claims if c.polarity is Polarity.NEGATIVE and c.subject_alive is True
-    ]
+    return [c for c in claims if c.polarity is Polarity.NEGATIVE and c.subject_alive is True]

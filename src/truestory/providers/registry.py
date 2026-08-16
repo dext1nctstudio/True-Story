@@ -120,9 +120,7 @@ class ProviderRegistry:
         self._health.pop(name, None)
 
     # ── selection ────────────────────────────────────────────────────────────
-    async def select(
-        self, decision: RoutingDecision, request: ResearchRequest
-    ) -> Selection | None:
+    async def select(self, decision: RoutingDecision, request: ResearchRequest) -> Selection | None:
         """Resolve the four checks. Returns None when no research is warranted."""
         if not decision.researched:
             return None
@@ -184,9 +182,7 @@ class ProviderRegistry:
         return selection
 
     # ── execution ────────────────────────────────────────────────────────────
-    async def investigate(
-        self, decision: RoutingDecision, request: ResearchRequest
-    ) -> Evidence:
+    async def investigate(self, decision: RoutingDecision, request: ResearchRequest) -> Evidence:
         """Select, dispatch, meter, and cache. The single entry point for research."""
         try:
             selection = await self.select(decision, request)
@@ -228,7 +224,7 @@ class ProviderRegistry:
             evidence = Evidence.failed(
                 request.subject_id, request.question, selection.provider.name, str(exc)
             )
-        except Exception as exc:  # noqa: BLE001 - one subject fails, not the run
+        except Exception as exc:
             evidence = Evidence.failed(
                 request.subject_id,
                 request.question,
@@ -262,9 +258,7 @@ class ProviderRegistry:
             self._health[name] = up
             return up
 
-    async def _pick_fallback(
-        self, tier: RiskTier, exclude: str
-    ) -> ResearchProvider | None:
+    async def _pick_fallback(self, tier: RiskTier, exclude: str) -> ResearchProvider | None:
         for name in self.FALLBACK_CHAIN:
             if name == exclude:
                 continue

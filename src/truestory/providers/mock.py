@@ -75,8 +75,7 @@ class MockProvider(EnumerationProvider):
         fixture = self._lookup(request)
         if fixture and isinstance(fixture.get("matches"), list):
             return [
-                self._from_fixture(request, {**fixture, "finding": m})
-                for m in fixture["matches"]
+                self._from_fixture(request, {**fixture, "finding": m}) for m in fixture["matches"]
             ]
         return [self._synthesise(request)]
 
@@ -209,9 +208,7 @@ def _fixture_citation() -> Citation:
     )
 
 
-def _synthetic_finding(
-    schema_name: str, verdict: str, quality: str, seed: int
-) -> dict[str, Any]:
+def _synthetic_finding(schema_name: str, verdict: str, quality: str, seed: int) -> dict[str, Any]:
     """Shape the synthetic payload to the schema the caller asked for."""
     if schema_name == "claim_verification_v1":
         supporting = (

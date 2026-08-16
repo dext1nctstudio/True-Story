@@ -40,7 +40,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from truestory.agents.pipeline import ProjectConfig, TrueStoryPipeline  # noqa: E402
-from truestory.models.enums import ClearanceStatus, RiskTier, Verdict  # noqa: E402
+from truestory.models.enums import RiskTier  # noqa: E402
 from truestory.policy import load_routing, load_rubric  # noqa: E402
 
 EVAL_DIR = REPO_ROOT / "eval"
@@ -338,9 +338,7 @@ async def _run_case(case: dict[str, Any], *, blind: bool) -> CaseResult:
     correct = all(checks) if checks else False
 
     if case.get("verify") == "required":
-        notes.append(
-            "case facts require primary source confirmation before publication"
-        )
+        notes.append("case facts require primary source confirmation before publication")
 
     return CaseResult(
         case_id=case["id"],
@@ -422,9 +420,7 @@ async def main_async(args: argparse.Namespace) -> int:
     if args.suite in {"litigation_set", "all"}:
         print("running eval B: the Litigation Set")
         results.append(
-            await run_litigation_set(
-                EVAL_DIR / "litigation_set" / "cases.yaml", blind=args.blind
-            )
+            await run_litigation_set(EVAL_DIR / "litigation_set" / "cases.yaml", blind=args.blind)
         )
 
     _report(results)
@@ -478,9 +474,7 @@ def main() -> int:
     )
     parser.add_argument("--out", help="Directory for the JSON results file")
     parser.add_argument("--publish", action="store_true", help="Write rows to BigQuery")
-    parser.add_argument(
-        "--min-accuracy", type=float, help="Fail the process below this accuracy"
-    )
+    parser.add_argument("--min-accuracy", type=float, help="Fail the process below this accuracy")
     args = parser.parse_args()
     return asyncio.run(main_async(args))
 

@@ -94,7 +94,9 @@ class RemedyLoop:
         beat will be rejected by the writer and the production ships the
         original line, so the loop that ignores it produces nothing usable.
         """
-        original = claim.first_occurrence.surface_form if claim.first_occurrence else claim.claim_text
+        original = (
+            claim.first_occurrence.surface_form if claim.first_occurrence else claim.claim_text
+        )
         rejected: list[str] = []
 
         for iteration in range(1, self.max_iterations + 1):
@@ -209,8 +211,14 @@ class RemedyLoop:
     def _remedy_music(self, element: ClearableElement) -> Remedy:
         """Two licence request letters, because a cue is two rights."""
         finding = element.evidence[0].finding if element.evidence else {}
-        sync = finding.get("sync_contact") or finding.get("composition_rights_holder") or "unidentified"
-        master = finding.get("master_contact") or finding.get("master_rights_holder") or "unidentified"
+        sync = (
+            finding.get("sync_contact")
+            or finding.get("composition_rights_holder")
+            or "unidentified"
+        )
+        master = (
+            finding.get("master_contact") or finding.get("master_rights_holder") or "unidentified"
+        )
 
         return Remedy(
             remedy_id=Remedy.make_id(element.element_id, "music_license", 1),
@@ -325,7 +333,7 @@ class RemedyLoop:
                 ),
             )
             return json.loads(getattr(response, "text", "") or "{}")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("remedy proposal failed: %s", exc)
             return {}
 
@@ -365,9 +373,7 @@ class RemedyLoop:
 # helpers
 # =============================================================================
 
-_NEEDS_REMEDY = frozenset(
-    {ClearanceStatus.NOT_CLEAR, ClearanceStatus.NEEDS_LICENSE}
-)
+_NEEDS_REMEDY = frozenset({ClearanceStatus.NOT_CLEAR, ClearanceStatus.NEEDS_LICENSE})
 
 
 def _rehydrate(payload: dict[str, Any], subject_id: str, question: str) -> Evidence:
@@ -412,9 +418,7 @@ def _profession_hint(element: ClearableElement) -> str:
     return "unknown"
 
 
-def _offline_proposal(
-    claim: FactualClaim, original: str, rejected: list[str]
-) -> dict[str, Any]:
+def _offline_proposal(claim: FactualClaim, original: str, rejected: list[str]) -> dict[str, Any]:
     """Deterministic softening. Enough to exercise the loop without a model.
 
     Attributing an assertion rather than stating it is a real remedy and not a

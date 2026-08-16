@@ -105,9 +105,11 @@ async def _run_async(config: ProjectConfig, script: Path, draft: str, verbose: b
             if event == "stage":
                 progress.update(task, description=f"{payload.get('stage')} ...")
             elif event == "ingest_complete":
-                framing = " [yellow]TRUE STORY ASSERTED[/yellow]" if payload.get(
-                    "truth_claim_framing"
-                ) else ""
+                framing = (
+                    " [yellow]TRUE STORY ASSERTED[/yellow]"
+                    if payload.get("truth_claim_framing")
+                    else ""
+                )
                 progress.console.print(
                     f"  ingest    {payload['scenes']} scenes, {payload['spans']} spans{framing}"
                 )
@@ -221,7 +223,7 @@ def _write_artifacts(state: Any, out: Path) -> None:
         path = out / "eo_clearance_report.pdf"
         path.write_bytes(render_pdf(report.get("eo_report", {})))
         written.append(path)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         console.print(f"[yellow]pdf rendering skipped:[/yellow] {exc}")
 
     console.print(f"\nwrote {len(written)} artifacts to {out}/")
@@ -277,8 +279,7 @@ def warm_cache(
     """
     if settings.mode is not Mode.LIVE:
         console.print(
-            "[yellow]warm-cache needs TRUESTORY_MODE=live.[/yellow] "
-            "This run costs real money."
+            "[yellow]warm-cache needs TRUESTORY_MODE=live.[/yellow] This run costs real money."
         )
         raise typer.Exit(1)
 
@@ -328,14 +329,16 @@ def doctor() -> None:
     try:
         policy = load_routing()
         problems = policy.validate()
-        row("routing policy", not problems, f"{len(policy.rules)} rules, {len(problems)} advisories")
-    except Exception as exc:  # noqa: BLE001
+        row(
+            "routing policy", not problems, f"{len(policy.rules)} rules, {len(problems)} advisories"
+        )
+    except Exception as exc:
         row("routing policy", False, str(exc))
 
     try:
         load_rubric()
         row("rubric", True)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         row("rubric", False, str(exc))
 
     console.print(table)

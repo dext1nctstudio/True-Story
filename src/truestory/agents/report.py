@@ -39,9 +39,7 @@ from truestory.policy import load_rubric
 
 log = logging.getLogger("truestory.report")
 
-_PERSON_TYPES = frozenset(
-    {ElementType.REAL_PERSON_DEPICTED, ElementType.REAL_PERSON_IDENTIFIABLE}
-)
+_PERSON_TYPES = frozenset({ElementType.REAL_PERSON_DEPICTED, ElementType.REAL_PERSON_IDENTIFIABLE})
 
 DISCLAIMER = (
     "This report is decision support for a clearance attorney. It is not legal "
@@ -223,8 +221,7 @@ class ReportAgent:
             )
             entry = rollup.to_dict()
             entry["exceeds_amber_threshold"] = (
-                rollup.researched_count >= min_claims
-                and rollup.exceeds_threshold(threshold)
+                rollup.researched_count >= min_claims and rollup.exceeds_threshold(threshold)
             )
             entry["amber_threshold"] = threshold
             entry["claims"] = [
@@ -240,7 +237,11 @@ class ReportAgent:
                     "counsel_reason": c.counsel_reason,
                     "pages": [o.page_eighths for o in c.asserted_in],
                     "citations": [
-                        {"url": cit.url, "title": cit.title, "accessed_at": cit.accessed_at.isoformat()}
+                        {
+                            "url": cit.url,
+                            "title": cit.title,
+                            "accessed_at": cit.accessed_at.isoformat(),
+                        }
                         for e in c.evidence
                         for cit in e.citations
                     ],
@@ -381,8 +382,8 @@ class ReportAgent:
         entries: list[dict[str, Any]] = []
 
         for subject in [*claims, *elements]:
-            subject_id = getattr(subject, "claim_id", None) or getattr(subject, "element_id")
-            label = getattr(subject, "claim_text", None) or getattr(subject, "canonical_form")
+            subject_id = getattr(subject, "claim_id", None) or subject.element_id
+            label = getattr(subject, "claim_text", None) or subject.canonical_form
             for evidence in subject.evidence:
                 entries.append(
                     {
@@ -415,9 +416,19 @@ class ReportAgent:
         writer = csv.writer(buffer, lineterminator="\n")
         writer.writerow(
             [
-                "element_id", "type", "element", "first_page", "occurrences",
-                "jurisdictions", "status", "conditions", "confidence",
-                "citations", "needs_counsel", "monitor", "rationale",
+                "element_id",
+                "type",
+                "element",
+                "first_page",
+                "occurrences",
+                "jurisdictions",
+                "status",
+                "conditions",
+                "confidence",
+                "citations",
+                "needs_counsel",
+                "monitor",
+                "rationale",
             ]
         )
         for element in sorted(elements, key=lambda e: (e.first_page, e.canonical_form)):

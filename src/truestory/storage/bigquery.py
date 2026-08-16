@@ -166,7 +166,7 @@ class TelemetrySink:
                 log.warning("telemetry insert reported errors: %s", errors[:3])
             else:
                 self.rows_written += len(rows)
-        except Exception as exc:  # noqa: BLE001 - telemetry never fails a run
+        except Exception as exc:
             log.warning("telemetry insert failed: %s", exc)
 
     # ── evaluation ───────────────────────────────────────────────────────────
@@ -179,7 +179,7 @@ class TelemetrySink:
             return
         try:
             self._bq().insert_rows_json(self._table(settings.bq_table_eval), stamped)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("eval insert failed: %s", exc)
 
     # ── precedent ────────────────────────────────────────────────────────────
@@ -193,7 +193,7 @@ class TelemetrySink:
             return
         try:
             self._bq().insert_rows_json(self._table(settings.bq_table_precedent), rows)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("precedent insert failed: %s", exc)
 
 

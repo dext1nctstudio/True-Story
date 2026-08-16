@@ -33,7 +33,6 @@ from truestory.api.security import (
     Principal,
     apply_view,
     can,
-    dev_principal,
     record_override,
     record_remedy_applied,
     unmask,
@@ -370,7 +369,7 @@ async def _execute_run(
         )
         _RUNS[run_id] = state
         get_store().create_run(config.project_id, run_id, state.to_dict())
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.exception("run %s failed", run_id)
         if queue is not None:
             await queue.put({"event": "run_failed", "error": str(exc)})
@@ -382,9 +381,7 @@ async def _execute_run(
 
 
 @app.get("/v1/runs/{run_id}")
-async def get_run(
-    run_id: str, principal: Principal = Depends(current_principal)
-) -> dict[str, Any]:
+async def get_run(run_id: str, principal: Principal = Depends(current_principal)) -> dict[str, Any]:
     state = _RUNS.get(run_id)
     if state is None:
         raise HTTPException(status_code=404, detail="run not found")
@@ -498,9 +495,7 @@ async def get_claim_register(
 ) -> dict[str, Any]:
     """Per person claim table, including the amber density meter."""
     state = _state_or_404(run_id, principal)
-    return apply_view(
-        state.artifacts.get("report", {}).get("claim_register", {}), principal
-    )
+    return apply_view(state.artifacts.get("report", {}).get("claim_register", {}), principal)
 
 
 @app.get("/v1/runs/{run_id}/report")

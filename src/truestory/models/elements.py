@@ -150,7 +150,9 @@ class ClearableElement:
             return self.canonical_form
         matches = len(self.evidence)
         sources = self.citation_count
-        return f"{matches} matching individuals · {sources} sources · withheld pending counsel review"
+        return (
+            f"{matches} matching individuals · {sources} sources · withheld pending counsel review"
+        )
 
     def to_dict(self, *, include_evidence: bool = True, unmasked: bool = False) -> dict[str, Any]:
         d: dict[str, Any] = {
@@ -197,9 +199,7 @@ class ClearableElement:
         evidence: list[Evidence],
         conditions: list[str] | None = None,
     ) -> None:
-        if status is not ClearanceStatus.RESEARCH_FAILED and not any(
-            e.is_usable for e in evidence
-        ):
+        if status is not ClearanceStatus.RESEARCH_FAILED and not any(e.is_usable for e in evidence):
             raise ValueError(
                 f"element {self.element_id}: status {status} requires at least one "
                 "citation bearing evidence record (principle P2)"
@@ -214,7 +214,9 @@ class ClearableElement:
     @staticmethod
     def make_id(element_type: ElementType, canonical_form: str, jurisdictions: list[str]) -> str:
         """Content addressed on the three things that define the research question."""
-        key = f"{element_type}|{canonical_form.strip().casefold()}|{'|'.join(sorted(jurisdictions))}"
+        key = (
+            f"{element_type}|{canonical_form.strip().casefold()}|{'|'.join(sorted(jurisdictions))}"
+        )
         return f"el_{hashlib.sha256(key.encode()).hexdigest()[:20]}"
 
 

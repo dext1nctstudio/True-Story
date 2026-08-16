@@ -94,8 +94,10 @@ class GcsBlobStore(BlobStore):
         """
         from datetime import timedelta
 
-        return self.client.bucket(bucket).blob(path).generate_signed_url(
-            expiration=timedelta(minutes=minutes), version="v4"
+        return (
+            self.client.bucket(bucket)
+            .blob(path)
+            .generate_signed_url(expiration=timedelta(minutes=minutes), version="v4")
         )
 
 
@@ -132,7 +134,7 @@ def get_blob_store() -> BlobStore:
     else:
         try:
             _store = GcsBlobStore()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("gcs unavailable, using local blob store: %s", exc)
             _store = LocalBlobStore()
     return _store
@@ -153,7 +155,9 @@ def store_evidence_page(project_id: str, evidence_id: str, markdown: str) -> str
     )
 
 
-def store_report(project_id: str, run_id: str, artifact: str, data: bytes, content_type: str) -> str:
+def store_report(
+    project_id: str, run_id: str, artifact: str, data: bytes, content_type: str
+) -> str:
     return get_blob_store().put(
         settings.bucket_reports or "truestory-reports",
         report_path(project_id, run_id, artifact),

@@ -57,7 +57,7 @@ class SecretResolver:
                 name = f"projects/{settings.gcp_project}/secrets/{secret_id}/versions/latest"
                 response = self._sm().access_secret_version(request={"name": name})
                 return response.payload.data.decode("utf-8").strip()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.debug("secret manager lookup failed for %s: %s", secret_id, exc)
 
         value = os.environ.get(env_var, "")

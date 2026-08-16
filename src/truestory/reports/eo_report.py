@@ -223,30 +223,34 @@ def _render_reportlab(report: dict[str, Any], watermark: str | None) -> bytes:
     return buffer.getvalue()
 
 
-def _kv_table(Table: Any, TableStyle: Any, HexColor: Any, pairs: list[tuple[str, Any]]) -> Any:
-    table = Table([[k, str(v)] for k, v in pairs], colWidths=[150, 320])
+# reportlab is imported inside `render_pdf` so that nothing in the import graph
+# depends on it, which is why these helpers take the classes rather than
+# importing them. The parameters are the classes themselves, hence the `_cls`
+# names: a bare `Table` reads as a type annotation at every call site.
+def _kv_table(table_cls: Any, style_cls: Any, hex_color: Any, pairs: list[tuple[str, Any]]) -> Any:
+    table = table_cls([[k, str(v)] for k, v in pairs], colWidths=[150, 320])
     table.setStyle(
-        TableStyle(
+        style_cls(
             [
                 ("FONTSIZE", (0, 0), (-1, -1), 9),
-                ("TEXTCOLOR", (0, 0), (0, -1), HexColor("#555555")),
+                ("TEXTCOLOR", (0, 0), (0, -1), hex_color("#555555")),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-                ("LINEBELOW", (0, 0), (-1, -1), 0.25, HexColor("#dddddd")),
+                ("LINEBELOW", (0, 0), (-1, -1), 0.25, hex_color("#dddddd")),
             ]
         )
     )
     return table
 
 
-def _grid(Table: Any, TableStyle: Any, HexColor: Any, rows: list[list[str]]) -> Any:
-    table = Table(rows, colWidths=[190, 110, 90, 90], repeatRows=1)
+def _grid(table_cls: Any, style_cls: Any, hex_color: Any, rows: list[list[str]]) -> Any:
+    table = table_cls(rows, colWidths=[190, 110, 90, 90], repeatRows=1)
     table.setStyle(
-        TableStyle(
+        style_cls(
             [
                 ("FONTSIZE", (0, 0), (-1, -1), 8),
-                ("BACKGROUND", (0, 0), (-1, 0), HexColor("#f2f2f2")),
-                ("GRID", (0, 0), (-1, -1), 0.25, HexColor("#dddddd")),
+                ("BACKGROUND", (0, 0), (-1, 0), hex_color("#f2f2f2")),
+                ("GRID", (0, 0), (-1, -1), 0.25, hex_color("#dddddd")),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ]
         )

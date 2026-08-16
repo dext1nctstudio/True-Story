@@ -19,7 +19,7 @@ from typing import Any
 
 from truestory.models.claims import FactualClaim
 from truestory.models.elements import ClearableElement
-from truestory.models.enums import ClaimType, ElementType, Processor, RiskTier, Verdict
+from truestory.models.enums import ClaimType, ElementType, Processor, Verdict
 from truestory.policy import RoutingDecision, load_routing
 
 log = logging.getLogger("truestory.router")
@@ -39,9 +39,7 @@ class RoutingPlan:
     @property
     def researched_subjects(self) -> int:
         return sum(
-            1
-            for d in [*self.claim_routes.values(), *self.element_routes.values()]
-            if d.researched
+            1 for d in [*self.claim_routes.values(), *self.element_routes.values()] if d.researched
         )
 
     def projected_cost_usd(self) -> float:
@@ -124,9 +122,7 @@ class RiskRouter:
         return plan
 
     # ── claims ───────────────────────────────────────────────────────────────
-    def _route_claim(
-        self, claim: FactualClaim, project: dict[str, Any]
-    ) -> RoutingDecision:
+    def _route_claim(self, claim: FactualClaim, project: dict[str, Any]) -> RoutingDecision:
         subject = {
             "kind": "claim",
             "type": str(claim.claim_type),
@@ -149,14 +145,11 @@ class RiskRouter:
             claim.verdict = Verdict.OPINION
             claim.confidence = 1.0
             claim.rationale = (
-                "Characterisation rather than a verifiable factual assertion. "
-                "Not researched."
+                "Characterisation rather than a verifiable factual assertion. Not researched."
             )
 
     # ── elements ─────────────────────────────────────────────────────────────
-    def _route_element(
-        self, element: ClearableElement, project: dict[str, Any]
-    ) -> RoutingDecision:
+    def _route_element(self, element: ClearableElement, project: dict[str, Any]) -> RoutingDecision:
         subject = {
             "type": str(element.element_type),
             "occurrence_count": element.occurrence_count,
@@ -184,9 +177,7 @@ class RiskRouter:
         answer, and it is generated from the same table that made the decision.
         """
         decision = self.policy.match(subject)
-        parts = [
-            f"Matched rule '{decision.rule_id}', which assigns tier {decision.tier}"
-        ]
+        parts = [f"Matched rule '{decision.rule_id}', which assigns tier {decision.tier}"]
         if decision.processor:
             parts.append(f"using the {decision.processor} processor")
         if decision.schema_name:

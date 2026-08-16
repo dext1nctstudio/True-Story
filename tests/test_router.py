@@ -27,9 +27,7 @@ def policy():
 
 def test_negative_claim_about_living_person_is_critical(policy):
     """The shape of every marquee case in the Litigation Set."""
-    decision = policy.match(
-        {"kind": "claim", "polarity": "negative", "subject_alive": True}
-    )
+    decision = policy.match({"kind": "claim", "polarity": "negative", "subject_alive": True})
     assert decision.tier is RiskTier.CRITICAL
     assert decision.processor is Processor.CORE
     assert decision.schema_name == "claim_verification_v1"
@@ -38,9 +36,7 @@ def test_negative_claim_about_living_person_is_critical(policy):
 
 def test_negative_claim_about_deceased_person_is_not_critical(policy):
     """The dead do not sue for defamation, and the tier reflects that."""
-    decision = policy.match(
-        {"kind": "claim", "polarity": "negative", "subject_alive": False}
-    )
+    decision = policy.match({"kind": "claim", "polarity": "negative", "subject_alive": False})
     assert decision.tier is not RiskTier.CRITICAL
 
 
@@ -87,9 +83,7 @@ def test_truth_claim_framing_escalates_person_adjacent_elements(policy):
     subject = {"type": str(ElementType.PERSON_NAME_FICTIONAL), "occurrence_count": 1}
 
     base = policy.match(subject)
-    escalated = policy.apply_project_escalations(
-        base, subject, {"truth_claim_framing": True}
-    )
+    escalated = policy.apply_project_escalations(base, subject, {"truth_claim_framing": True})
 
     assert base.tier is RiskTier.MEDIUM
     assert escalated.tier is RiskTier.HIGH
@@ -118,9 +112,7 @@ def test_non_person_elements_are_not_escalated(policy):
     """The doctrine concerns people. A music cue is not a person."""
     subject = {"type": str(ElementType.MUSIC_CUE)}
     base = policy.match(subject)
-    escalated = policy.apply_project_escalations(
-        base, subject, {"truth_claim_framing": True}
-    )
+    escalated = policy.apply_project_escalations(base, subject, {"truth_claim_framing": True})
     assert escalated.tier == base.tier
     assert not escalated.escalated_by
 

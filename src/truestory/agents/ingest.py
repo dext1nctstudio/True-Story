@@ -71,9 +71,9 @@ class IngestAgent:
         self._client = client
 
     # ── entry point ──────────────────────────────────────────────────────────
-    async def run(self, source: Path | str, *, draft_version: str = "v1") -> tuple[
-        ScriptDocument, list[RawSpan]
-    ]:
+    async def run(
+        self, source: Path | str, *, draft_version: str = "v1"
+    ) -> tuple[ScriptDocument, list[RawSpan]]:
         raw, fmt = _read_source(source)
         document = self.parse(raw, fmt=fmt, draft_version=draft_version)
 
@@ -121,9 +121,7 @@ class IngestAgent:
     def _split_scenes(self, text: str) -> list[Scene]:
         lines = text.splitlines()
         boundaries: list[tuple[int, str]] = [
-            (i, line.strip())
-            for i, line in enumerate(lines)
-            if _SCENE_HEADING.match(line)
+            (i, line.strip()) for i, line in enumerate(lines) if _SCENE_HEADING.match(line)
         ]
 
         if not boundaries:
@@ -176,9 +174,7 @@ class IngestAgent:
         return False, None
 
     # ── the model pass ───────────────────────────────────────────────────────
-    async def tag_scene(
-        self, scene: Scene, *, truth_claim_framing: bool = False
-    ) -> list[RawSpan]:
+    async def tag_scene(self, scene: Scene, *, truth_claim_framing: bool = False) -> list[RawSpan]:
         """Tag one scene. Falls back to deterministic patterns in mock mode."""
         if settings.offline:
             return self._tag_deterministic(scene, truth_claim_framing=truth_claim_framing)
@@ -205,7 +201,7 @@ class IngestAgent:
                     safety_settings=_analysis_safety(types),
                 ),
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             # Never skip a scene silently. A gap in the breakdown is a gap in
             # the report, so it is flagged for manual attention and the
             # deterministic pass still runs.
@@ -321,9 +317,14 @@ class IngestAgent:
             seen_names.add(title)
             spans.append(
                 _span(
-                    scene, 0, ElementType.MUSIC_CUE, title,
+                    scene,
+                    0,
+                    ElementType.MUSIC_CUE,
+                    title,
                     " ".join(match.group(0).split()),
-                    Modality.SCRIPT_ACTION, None, confidence=0.7,
+                    Modality.SCRIPT_ACTION,
+                    None,
+                    confidence=0.7,
                 )
             )
 
@@ -360,8 +361,14 @@ class IngestAgent:
             if card and card.group(2).strip():
                 spans.append(
                     _span(
-                        scene, line_no, ElementType.REAL_EVENT, card.group(2).strip(),
-                        line, Modality.TITLE_CARD, None, confidence=0.8,
+                        scene,
+                        line_no,
+                        ElementType.REAL_EVENT,
+                        card.group(2).strip(),
+                        line,
+                        Modality.TITLE_CARD,
+                        None,
+                        confidence=0.8,
                     )
                 )
 
@@ -369,7 +376,11 @@ class IngestAgent:
                 for match in pattern.finditer(line):
                     spans.append(
                         _span(
-                            scene, line_no, element_type, match.group(0), line,
+                            scene,
+                            line_no,
+                            element_type,
+                            match.group(0),
+                            line,
                             Modality.SCRIPT_DIALOGUE if current_cue else Modality.SCRIPT_ACTION,
                             current_cue,
                         )
@@ -388,12 +399,17 @@ class IngestAgent:
                 seen_names.add(name)
                 spans.append(
                     _span(
-                        scene, line_no, person_type, name.title(),
+                        scene,
+                        line_no,
+                        person_type,
+                        name.title(),
                         # Claim extraction needs sentences to decompose, so a
                         # person span carries the surrounding scene rather than
                         # just its own line.
                         _window(scene.text, line, 600),
-                        Modality.SCRIPT_ACTION, None, confidence=0.5,
+                        Modality.SCRIPT_ACTION,
+                        None,
+                        confidence=0.5,
                     )
                 )
 
@@ -407,8 +423,14 @@ class IngestAgent:
                     seen_names.add(surface)
                     spans.append(
                         _span(
-                            scene, line_no, ElementType.PERSON_NAME_FICTIONAL, surface,
-                            line, Modality.SCRIPT_ACTION, None, confidence=0.3,
+                            scene,
+                            line_no,
+                            ElementType.PERSON_NAME_FICTIONAL,
+                            surface,
+                            line,
+                            Modality.SCRIPT_ACTION,
+                            None,
+                            confidence=0.3,
                         )
                     )
 
@@ -451,12 +473,56 @@ def _span(
 #: Capitalised tokens that are formatting, not names.
 _CAPS_NOISE = frozenset(
     {
-        "INT", "EXT", "CUT", "FADE", "DISSOLVE", "SMASH", "TITLE", "CARD", "SUPER",
-        "CONTINUOUS", "LATER", "MOMENTS", "DAY", "NIGHT", "MORNING", "EVENING",
-        "AFTERNOON", "DAWN", "DUSK", "THE", "AND", "BUT", "FOR", "WITH", "FROM",
-        "INTO", "ONTO", "OVER", "THIS", "THAT", "TRUE", "STORY", "BASED", "ANGLE",
-        "CLOSE", "WIDE", "POV", "INSERT", "MATCH", "BEAT", "FLASHBACK", "MONTAGE",
-        "VOICE", "OVER", "OFF", "SCREEN", "CONTD", "MORE", "END", "BLACK", "WHITE",
+        "INT",
+        "EXT",
+        "CUT",
+        "FADE",
+        "DISSOLVE",
+        "SMASH",
+        "TITLE",
+        "CARD",
+        "SUPER",
+        "CONTINUOUS",
+        "LATER",
+        "MOMENTS",
+        "DAY",
+        "NIGHT",
+        "MORNING",
+        "EVENING",
+        "AFTERNOON",
+        "DAWN",
+        "DUSK",
+        "THE",
+        "AND",
+        "BUT",
+        "FOR",
+        "WITH",
+        "FROM",
+        "INTO",
+        "ONTO",
+        "OVER",
+        "THIS",
+        "THAT",
+        "TRUE",
+        "STORY",
+        "BASED",
+        "ANGLE",
+        "CLOSE",
+        "WIDE",
+        "POV",
+        "INSERT",
+        "MATCH",
+        "BEAT",
+        "FLASHBACK",
+        "MONTAGE",
+        "VOICE",
+        "OFF",
+        "SCREEN",
+        "CONTD",
+        "MORE",
+        "END",
+        "BLACK",
+        "WHITE",
     }
 )
 
@@ -533,7 +599,7 @@ def _read_source(source: Path | str) -> tuple[str, str]:
 
             reader = PdfReader(str(path))
             return "\n".join((page.extract_text() or "") for page in reader.pages), "pdf"
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("pdf extraction failed, reading as text: %s", exc)
 
     text = path.read_text(encoding="utf-8", errors="replace")

@@ -100,7 +100,7 @@ class ParallelMonitorProvider(ResearchProvider):
                 raise ProviderError(self.name, f"HTTP {resp.status_code}: {resp.text[:200]}")
             body = resp.json()
             provider_id = body.get("monitor_id", "")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             # A failed monitor is a manifest entry that says so. It never
             # silently reduces to no watch at all, because the whole promise of
             # Living Clearance is that somebody is looking.
@@ -137,7 +137,7 @@ class ParallelMonitorProvider(ResearchProvider):
         try:
             resp = await self._http().delete(f"/v1beta/monitors/{provider_monitor_id}")
             return resp.status_code < 400
-        except Exception:  # noqa: BLE001
+        except Exception:
             return False
 
     # ── inbound events ───────────────────────────────────────────────────────

@@ -68,7 +68,7 @@ class ParallelExtractProvider(ResearchProvider):
                 if resp.status_code >= 400:
                     raise ProviderError(self.name, f"HTTP {resp.status_code}: {resp.text[:200]}")
                 body = resp.json()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 return Evidence.failed(request.subject_id, url, self.name, str(exc))
 
         results = body.get("results", [])
