@@ -14,7 +14,7 @@
  * citations and the proposed rewrite.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { Annotation, Overlay, Scene } from "@/lib/types";
 
 interface Props {
@@ -28,8 +28,22 @@ interface Props {
 }
 
 export function VerdictOverlay({ overlay, selectedId, onSelect, filterColor = null }: Props) {
+  const paneRef = useRef<HTMLDivElement>(null);
+
+  // Scroll the first match into view when a filter is applied. A feature
+  // length script can hold a single opinion line among a hundred and seventy
+  // others, so filtering without this fades the whole visible page and leaves
+  // the one match far below the fold: indistinguishable from nothing matching.
+  useEffect(() => {
+    if (!filterColor || !paneRef.current) return;
+    const first = paneRef.current.querySelector<HTMLElement>(
+      ".annotated:not(.faded)",
+    );
+    first?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [filterColor]);
+
   return (
-    <div className="script-pane">
+    <div className="script-pane" ref={paneRef}>
       <div className="script-page">
         {overlay.scenes.map((scene) => (
           <SceneBlock

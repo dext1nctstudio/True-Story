@@ -150,6 +150,9 @@ function Counter({
   onClick?: () => void;
 }) {
   const className = `counter ${tone} ${active ? "active" : ""} ${onClick ? "clickable" : ""}`.trim();
+  const title = active
+    ? `Showing only ${label} lines. Click to clear.`
+    : `Show only ${label} lines`;
 
   if (!onClick) {
     return (
@@ -161,7 +164,7 @@ function Counter({
   }
 
   return (
-    <button className={className} onClick={onClick} title={`Show only ${label} lines`}>
+    <button className={className} onClick={onClick} title={title}>
       <span className="counter-value">{value}</span>
       <span className="counter-label">{label}</span>
     </button>
