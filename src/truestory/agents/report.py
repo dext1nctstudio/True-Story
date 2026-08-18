@@ -104,7 +104,17 @@ class ReportAgent:
 
         def anchor(scene_no: int, line_no: int) -> int:
             lines = lines_by_scene.get(scene_no)
-            if not lines or line_no >= len(lines) or lines[line_no].strip():
+            if not lines:
+                return line_no
+
+            # A line number past the end of the scene addresses a line the UI
+            # never renders, so the annotation is dropped without a trace: the
+            # script's only opinion claim sat at index 32 of a 32 line scene
+            # and filtering on opinion therefore matched nothing at all.
+            # Clamping keeps it attached to the last real line instead.
+            line_no = max(0, min(line_no, len(lines) - 1))
+
+            if lines[line_no].strip():
                 return line_no
             for offset in range(1, 4):
                 for candidate in (line_no - offset, line_no + offset):

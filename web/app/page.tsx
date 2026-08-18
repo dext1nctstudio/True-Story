@@ -398,7 +398,10 @@ export default function Workspace() {
                 setTab("evidence");
               }}
             />
-          ) : justStarted ? (
+          ) : justStarted || (runStatus && runStatus !== "COMPLETE" && runStatus !== "FAILED") ? (
+            // No overlay yet and the run is still moving. Covers both the
+            // window before the run registers and the ingest stage after it,
+            // which on a feature length script is minutes of model calls.
             <div className="starting">
               <div className="starting-spinner" />
               <p className="starting-title">Parsing the screenplay</p>
