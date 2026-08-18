@@ -347,15 +347,22 @@ async def _execute_run(
 ) -> None:
     queue = _STREAMS.get(run_id)
 
+    # Register the run before the first stage starts. Ingest is minutes of
+    # model calls on a feature length script, and until it finished the run
+    # existed nowhere the API could see: the dashboard listed nothing and
+    # every read 404'd, so a run that was busy working looked like a run that
+    # had never been started. The placeholder is replaced by the real state
+    # the moment ingest produces one.
+    _RUNS[run_id] = RunState(run_id=run_id, project_id=config.project_id)
+
     async def on_progress(payload: dict[str, Any]) -> None:
         if queue is not None:
             await queue.put(payload)
 
     def on_state(state: Any) -> None:
-        # Register as soon as ingest lands so the overlay, claims and counters
-        # are readable while the run is still going. Registering only on
-        # completion made every read 404 for the whole run, which the UI could
-        # not tell apart from a backend that was down.
+        # Swap the placeholder for the real state as soon as ingest lands, so
+        # the overlay, claims and counters are readable while the run is still
+        # going rather than only after it ends.
         _RUNS[run_id] = state
 
     pipeline = TrueStoryPipeline(config, on_progress=on_progress)
