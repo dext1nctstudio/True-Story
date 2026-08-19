@@ -5,44 +5,96 @@
   "description": "Establishes the facts about a depicted real person that change the legal standard applied to every claim about them: whether they are living, whether they are a public figure, and where they were domiciled at death. Those three answers decide the defamation standard, the masking policy, and whether a post mortem publicity licence is required at all.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["person_exists", "alive", "public_figure_status"],
+  "required": [
+    "person_exists",
+    "alive",
+    "public_figure_status",
+    "identity_confirmed"
+  ],
   "properties": {
     "person_exists": {
       "type": "boolean",
       "description": "Whether a real person matching this identification can be located at all."
     },
+    "identity_confirmed": {
+      "type": "boolean",
+      "description": "Whether the located record was confirmed to concern the subject in the script, on something beyond the name: matching profession, place, dates, relationships or events. A name match alone is false. Every downstream conclusion about publicity rights, death, domicile or an estate depends on this being true."
+    },
+    "identity_basis": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "What tied the record to the script's subject. Required when identity_confirmed is true, and it must not be the name alone."
+    },
     "canonical_name": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "The name of record, which is often not the name in the script."
     },
     "alive": {
-      "type": ["boolean", "null"]
+      "type": [
+        "boolean",
+        "null"
+      ]
     },
-    "birth_year": { "type": ["integer", "null"] },
-    "death_year": { "type": ["integer", "null"] },
+    "birth_year": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "death_year": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
     "domicile_state": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "State or territory of domicile at death. Post mortem publicity term is state law and the spread between states is enormous, so this single field can be the difference between a licence negotiation and a non issue."
     },
     "postmortem_publicity_term_years": {
-      "type": ["integer", "null"],
+      "type": [
+        "integer",
+        "null"
+      ],
       "description": "Term applicable in the domicile jurisdiction. Cross checked against policy/jurisdictions.yaml rather than trusted blindly."
     },
     "publicity_rights_active": {
-      "type": ["boolean", "null"],
+      "type": [
+        "boolean",
+        "null"
+      ],
       "description": "Whether the post mortem term has expired as of the run date."
     },
     "public_figure_status": {
       "type": "string",
-      "enum": ["public", "limited_purpose", "private", "unknown"],
+      "enum": [
+        "public",
+        "limited_purpose",
+        "private",
+        "unknown"
+      ],
       "description": "Public figures must prove actual malice. Limited purpose public figures are public only as to the controversy that made them so, which is a distinction that decides cases."
     },
     "public_figure_basis": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Why the status was assigned. A judgement this consequential must show its reasoning."
     },
     "estate_representative": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "Who to approach for a licence or a release, where the estate is represented."
     },
     "known_litigation": {
@@ -51,18 +103,42 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["description"],
+        "required": [
+          "description"
+        ],
         "properties": {
-          "description": { "type": "string" },
-          "year": { "type": ["integer", "null"] },
-          "outcome": { "type": ["string", "null"] },
-          "source_url": { "type": ["string", "null"], "format": "uri" }
+          "description": {
+            "type": "string"
+          },
+          "year": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "outcome": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          }
         }
       }
     },
     "record_quality": {
       "type": "string",
-      "enum": ["strong", "moderate", "thin"],
+      "enum": [
+        "strong",
+        "moderate",
+        "thin"
+      ],
       "description": "How well documented this person is. A thin record makes every downstream no_record verdict weaker evidence."
     },
     "sources": {
@@ -70,15 +146,38 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["url"],
+        "required": [
+          "url"
+        ],
         "properties": {
-          "url": { "type": "string", "format": "uri" },
-          "title": { "type": ["string", "null"] },
-          "source_type": {
-            "type": ["string", "null"],
-            "enum": ["primary", "secondary", "tertiary", null]
+          "url": {
+            "type": "string",
+            "format": "uri"
           },
-          "excerpt": { "type": ["string", "null"] }
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "primary",
+              "secondary",
+              "tertiary",
+              null
+            ]
+          },
+          "excerpt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
         }
       }
     }
