@@ -20,6 +20,7 @@ Two implementation notes that matter for the demo:
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -249,17 +250,25 @@ class ParallelTaskProvider(ResearchProvider):
         content = output.get("content", output) if isinstance(output, dict) else {}
         basis = output.get("basis", []) if isinstance(output, dict) else []
 
-        citations = self._citations_from_basis(basis)
         confidence = self._confidence_from_basis(basis)
         reasoning = self._reasoning_from_basis(basis)
 
-        # Several schemas carry their own `sources` array rather than relying
-        # on Parallel's per field basis: entity_v1 is the main one, and it is
-        # what every clearance element is researched under. Reading only the
-        # basis left those elements with zero citations, so a research pass
-        # that had genuinely succeeded was recorded as RESEARCH_FAILED.
-        if not citations and isinstance(content, dict):
-            citations = self._citations_from_sources(content.get("sources"))
+        # Three places carry sources and all three are read, because losing any
+        # one of them shows up as a subject with "no citable source" that had
+        # in fact been researched successfully:
+        #
+        #   basis[]                     Parallel's per field citations
+        #   content.sources[]           schemas that ask for sources directly
+        #   content.*_facts[].source_url  claim_verification_v1, the workhorse
+        #
+        # The last one was never read at all, which is why claim verification
+        # ran on basis alone and every thin basis became an amber line.
+        harvested = _CitationBag()
+        harvested.add_basis(basis)
+        if isinstance(content, dict):
+            harvested.add_sources(content.get("sources"))
+            harvested.add_facts(content)
+        citations = harvested.build()
 
         return Evidence(
             evidence_id=Evidence.make_id(
@@ -276,56 +285,6 @@ class ParallelTaskProvider(ResearchProvider):
             cost_cents=request.processor.usd_per_run * 100,
             latency_ms=latency_ms,
         )
-
-    @staticmethod
-    def _citations_from_basis(basis: list[dict[str, Any]]) -> list[Citation]:
-        citations: list[Citation] = []
-        seen: set[str] = set()
-        for field_basis in basis:
-            for cit in field_basis.get("citations", []) or []:
-                url = cit.get("url")
-                if not url or url in seen:
-                    continue
-                seen.add(url)
-                citations.append(
-                    Citation(
-                        url=url,
-                        title=cit.get("title") or url,
-                        excerpt=(cit.get("excerpt") or "")[:1200],
-                        source_type=cit.get("source_type", "secondary"),
-                        publisher=cit.get("publisher"),
-                    )
-                )
-        return citations
-
-    @staticmethod
-    def _citations_from_sources(sources: Any) -> list[Citation]:
-        """Citations carried in the finding's own `sources` array.
-
-        Same shape as a basis citation, one level up: schemas that ask the
-        model for its sources directly put them here instead.
-        """
-        if not isinstance(sources, list):
-            return []
-        citations: list[Citation] = []
-        seen: set[str] = set()
-        for src in sources:
-            if not isinstance(src, dict):
-                continue
-            url = src.get("url") or src.get("source_url")
-            if not url or url in seen:
-                continue
-            seen.add(url)
-            citations.append(
-                Citation(
-                    url=url,
-                    title=src.get("title") or url,
-                    excerpt=(src.get("excerpt") or "")[:1200],
-                    source_type=src.get("source_type", "secondary"),
-                    publisher=src.get("publisher"),
-                )
-            )
-        return citations
 
     @staticmethod
     def _confidence_from_basis(basis: list[dict[str, Any]]) -> float:
@@ -349,3 +308,167 @@ class ParallelTaskProvider(ResearchProvider):
             f"{fb.get('field', 'output')}: {fb['reasoning']}" for fb in basis if fb.get("reasoning")
         ]
         return "\n".join(parts) if parts else "No reasoning trace returned."
+
+
+# =============================================================================
+# citation harvesting
+# =============================================================================
+
+
+class _CitationBag:
+    """Collect citations from every place a Task response hides them.
+
+    Deduplicates on a normalised URL, and merges rather than discards: the
+    basis entry usually carries the excerpt, the schema's own facts array
+    usually carries the source type and the publication date, and the two
+    describe the same page. Keeping whichever arrived first threw away half of
+    each.
+    """
+
+    __slots__ = ("_by_url",)
+
+    def __init__(self) -> None:
+        self._by_url: dict[str, dict[str, Any]] = {}
+
+    # ── inputs ───────────────────────────────────────────────────────────────
+    def add_basis(self, basis: Any) -> None:
+        """Parallel's per field citations: {url, excerpts[]}."""
+        if not isinstance(basis, list):
+            return
+        for field_basis in basis:
+            if not isinstance(field_basis, dict):
+                continue
+            for cit in field_basis.get("citations") or []:
+                if not isinstance(cit, dict):
+                    continue
+                self._merge(
+                    url=cit.get("url"),
+                    title=cit.get("title"),
+                    # The field is `excerpts`, a list. Reading `excerpt` meant
+                    # every citation in the evidence appendix was blank.
+                    excerpt=_join_excerpts(cit.get("excerpts"), cit.get("excerpt")),
+                    declared=cit.get("source_type"),
+                    publisher=cit.get("publisher"),
+                    published=cit.get("published_date") or cit.get("date"),
+                )
+
+    def add_sources(self, sources: Any) -> None:
+        """A schema's own `sources` array. entity_v1 and friends."""
+        if not isinstance(sources, list):
+            return
+        for src in sources:
+            if not isinstance(src, dict):
+                continue
+            self._merge(
+                url=src.get("url") or src.get("source_url"),
+                title=src.get("title"),
+                excerpt=_join_excerpts(src.get("excerpts"), src.get("excerpt")),
+                declared=src.get("source_type"),
+                publisher=src.get("publisher"),
+                published=src.get("published_date") or src.get("date"),
+            )
+
+    def add_facts(self, content: dict[str, Any]) -> None:
+        """Any `*_facts` array: the fact itself doubles as the excerpt.
+
+        claim_verification_v1 puts the whole verification here — supporting and
+        contradicting facts, each with its own source URL and declared type.
+        This is the workhorse schema and its sources were being dropped.
+        """
+        for key, value in content.items():
+            if not key.endswith(("_facts", "_findings", "_records")) or not isinstance(value, list):
+                continue
+            for item in value:
+                if not isinstance(item, dict):
+                    continue
+                self._merge(
+                    url=item.get("source_url") or item.get("url"),
+                    title=item.get("title"),
+                    excerpt=item.get("excerpt") or item.get("fact"),
+                    declared=item.get("source_type"),
+                    publisher=item.get("publisher"),
+                    published=item.get("date") or item.get("published_date"),
+                )
+
+    # ── output ───────────────────────────────────────────────────────────────
+    def build(self) -> list[Citation]:
+        """Classify every URL and return the citation list, best first."""
+        citations = [
+            Citation.classified(
+                url=entry["url"],
+                title=entry.get("title") or "",
+                excerpt=entry.get("excerpt") or "",
+                declared_type=entry.get("declared"),
+                publisher=entry.get("publisher"),
+                published_at=_parse_date(entry.get("published")),
+            )
+            for entry in self._by_url.values()
+        ]
+        # Strongest pedigree first, so the evidence panel opens on the docket
+        # rather than on whichever aggregator happened to be returned first.
+        citations.sort(key=lambda c: (-c.trust, c.url))
+        return citations
+
+    # ── internals ────────────────────────────────────────────────────────────
+    def _merge(
+        self,
+        url: Any,
+        title: Any = None,
+        excerpt: Any = None,
+        declared: Any = None,
+        publisher: Any = None,
+        published: Any = None,
+    ) -> None:
+        if not isinstance(url, str) or not url.strip():
+            return
+        key = _normalise_url(url)
+        entry = self._by_url.setdefault(key, {"url": url.strip()})
+
+        if title and not entry.get("title"):
+            entry["title"] = str(title)[:300]
+        # Longest excerpt wins: the evidence appendix quotes it, so more of the
+        # passage relied on is strictly better.
+        if excerpt and len(str(excerpt)) > len(str(entry.get("excerpt") or "")):
+            entry["excerpt"] = str(excerpt)[:1200]
+        if declared and not entry.get("declared"):
+            entry["declared"] = str(declared)
+        if publisher and not entry.get("publisher"):
+            entry["publisher"] = str(publisher)
+        if published and not entry.get("published"):
+            entry["published"] = published
+
+
+def _join_excerpts(excerpts: Any, singular: Any = None) -> str:
+    """Parallel returns `excerpts: [str]`; older shapes returned `excerpt: str`."""
+    if isinstance(excerpts, list):
+        parts = [str(e).strip() for e in excerpts if str(e).strip()]
+        if parts:
+            return " … ".join(parts)[:1200]
+    if isinstance(excerpts, str) and excerpts.strip():
+        return excerpts.strip()[:1200]
+    return str(singular).strip()[:1200] if isinstance(singular, str) else ""
+
+
+def _normalise_url(url: str) -> str:
+    """Fold the trivial variants so one page is not counted as three sources."""
+    cleaned = url.strip().lower().split("#", 1)[0].rstrip("/")
+    for prefix in ("https://", "http://"):
+        if cleaned.startswith(prefix):
+            cleaned = cleaned[len(prefix) :]
+    return cleaned[4:] if cleaned.startswith("www.") else cleaned
+
+
+def _parse_date(value: Any) -> datetime | None:
+    """Best effort ISO date. A source's age governs how far it is trusted."""
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip().replace("Z", "+00:00")
+    for candidate in (text, text[:10]):
+        try:
+            parsed = datetime.fromisoformat(candidate)
+        except ValueError:
+            continue
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+    return None

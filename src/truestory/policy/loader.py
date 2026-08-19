@@ -348,6 +348,30 @@ class Rubric:
         return bool(self.confidence.get("contradicted_requires_primary_source", True))
 
     @property
+    def contradicted_requires_classified_primary(self) -> bool:
+        """Whether a red line needs a recognised record, not a declared one."""
+        return bool(self.confidence.get("contradicted_requires_classified_primary", True))
+
+    @property
+    def low_trust_cannot_decide(self) -> bool:
+        return bool(self.confidence.get("low_trust_cannot_decide", True))
+
+    @property
+    def stale_source_days(self) -> int:
+        return int(self.confidence.get("stale_source_days", 1825))
+
+    def min_independent_domains(self, tier: RiskTier) -> int:
+        """Distinct domains required before a verdict counts as corroborated."""
+        table = self.confidence.get("min_independent_domains", {})
+        return int(table.get(str(tier), 1))
+
+    def corroboration_cap(self, score: float) -> float:
+        """Confidence ceiling implied by how well corroborated the finding is."""
+        floor = float(self.confidence.get("corroboration_cap_floor", 0.35))
+        span = float(self.confidence.get("corroboration_cap_span", 0.65))
+        return min(1.0, floor + span * max(0.0, min(1.0, score)))
+
+    @property
     def max_remedy_iterations(self) -> int:
         return int(self.remedy.get("max_iterations", 3))
 

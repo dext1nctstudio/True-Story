@@ -43,12 +43,16 @@ class ResearchRequest:
     context: str = ""
     max_results: int = 10
     idempotency_key: str = ""
+    #: Literal queries for the Search API, which requires the field. Left empty
+    #: for Task, which derives its own from the objective.
+    search_queries: tuple[str, ...] = ()
 
     def cache_key(self) -> str:
         import hashlib
 
         raw = "|".join(
             [
+                EVIDENCE_ENVELOPE_VERSION,
                 self.subject_id,
                 self.question,
                 self.schema_name,
@@ -57,6 +61,15 @@ class ResearchRequest:
             ]
         )
         return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+#: Bumped whenever the shape of a stored Evidence envelope changes in a way
+#: that makes an older entry misleading rather than merely sparse. It is part
+#: of the cache key, so a bump retires the whole cache instead of replaying
+#: envelopes that predate a field the adjudicator now relies on.
+#:
+#:   v2  citation pedigree: source_class, trust, verified_source, published_at
+EVIDENCE_ENVELOPE_VERSION = "v2"
 
 
 class ProviderError(RuntimeError):

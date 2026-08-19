@@ -64,6 +64,11 @@ app.add_middleware(
 # are driven by real time listeners rather than these queues.
 _RUNS: dict[str, RunState] = {}
 _STREAMS: dict[str, asyncio.Queue[dict[str, Any]]] = {}
+#: The pipeline behind each run, kept so the cost endpoint can read the
+#: governor's ledger rather than a rounded figure copied onto the summary.
+#: Process memory, like _RUNS: a restarted API answers 404 for cost detail on
+#: an old run instead of inventing one.
+_PIPELINES: dict[str, TrueStoryPipeline] = {}
 _PROJECTS: dict[str, ProjectConfig] = {}
 
 
@@ -148,6 +153,14 @@ class OverrideRequest(BaseModel):
 
 class UnmaskRequest(BaseModel):
     reason: str
+
+
+class InterrogateRequest(BaseModel):
+    """One ad hoc question about one subject, asked while reading the overlay."""
+
+    question: str = Field(min_length=3, max_length=400)
+    subject_id: str = Field(default="", max_length=120)
+    subject: str = Field(default="", max_length=200)
 
 
 # =============================================================================
@@ -396,6 +409,7 @@ async def _execute_run(
         _RUNS[run_id] = state
 
     pipeline = TrueStoryPipeline(config, on_progress=on_progress)
+    _PIPELINES[run_id] = pipeline
     try:
         state = await pipeline.run(
             source,
@@ -617,9 +631,148 @@ async def get_elements(
 async def get_claim_register(
     run_id: str, principal: Principal = Depends(current_principal)
 ) -> dict[str, Any]:
-    """Per person claim table, including the amber density meter."""
+    """Per person claim table, including the amber density meter.
+
+    Counsel and the producer only. The register names living people and totals
+    what the record failed to support about each of them, which is a heavier
+    document than the overlay and not something a writer or an external
+    underwriter is given. The client already assumed this endpoint was gated;
+    it was not, so the assumption is now enforced here rather than believed.
+    """
+    if not can(principal, "review_queue"):
+        raise HTTPException(status_code=403, detail="role may not view the person register")
     state = _state_or_404(run_id, principal)
     return apply_view(state.artifacts.get("report", {}).get("claim_register", {}), principal)
+
+
+@app.post("/v1/runs/{run_id}/interrogate")
+async def interrogate(
+    run_id: str,
+    body: InterrogateRequest,
+    principal: Principal = Depends(current_principal),
+) -> dict[str, Any]:
+    """Ask the record a question about one line, and get the passages back.
+
+    The single most common thing a reviewer does with a red line is ask why,
+    and until now the only answer was the evidence the run happened to collect.
+    This is a live search round trip, priced at a tenth of a cent, whose result
+    is explicitly a lead rather than a finding: it never enters adjudication,
+    never changes a verdict, and is stamped at the provider's own low
+    confidence so it cannot present as a verification run.
+
+    Evidence bearing roles only. A search result is research, and the roles
+    that are not given research are not given this either.
+    """
+    if not can(principal, "evidence"):
+        raise HTTPException(status_code=403, detail="role may not run research")
+
+    state = _state_or_404(run_id, principal)
+    pipeline = _PIPELINES.get(run_id)
+    if pipeline is None:
+        raise HTTPException(status_code=404, detail="this run is no longer live in this process")
+
+    # Named subjects only. An open text box that reaches a research API is a
+    # way to spend somebody else's money on somebody else's question, so the
+    # subject has to be one this run actually researched.
+    subject_id = body.subject_id or "interrogation"
+    if body.subject_id:
+        known = {c.claim_id for c in state.claims} | {e.element_id for e in state.elements}
+        if body.subject_id not in known:
+            raise HTTPException(status_code=404, detail="unknown subject for this run")
+
+    payload = await pipeline.tools.interrogate(
+        subject_id=subject_id,
+        question=body.question,
+        subject=body.subject,
+    )
+    get_store().audit(
+        "interrogate",
+        principal.subject,
+        subject_id,
+        {"run_id": run_id, "question": body.question[:200]},
+    )
+    return apply_view(payload, principal)
+
+
+# =============================================================================
+# cost
+# =============================================================================
+
+
+@app.get("/v1/runs/{run_id}/cost")
+async def get_run_cost(
+    run_id: str, principal: Principal = Depends(current_principal)
+) -> dict[str, Any]:
+    """The full cost breakdown for one run.
+
+    Research and model spend are two different bills and are never blended
+    into one figure here: the research ceiling governs research only, and a
+    number that mixes them cannot be checked against either invoice.
+    """
+    if not can(principal, "cost"):
+        raise HTTPException(status_code=403, detail="role may not view cost")
+
+    state = _state_or_404(run_id, principal)
+    pipeline = _PIPELINES.get(run_id)
+    if pipeline is None:
+        raise HTTPException(status_code=404, detail="cost detail is not retained for this run")
+
+    budget = pipeline.budget
+    pages = float(state.document.page_count) if state.document else 0.0
+    researched = len([e for e in state.elements if e.evidence]) + len(
+        [c for c in state.claims if c.evidence]
+    )
+    return {
+        "run_id": run_id,
+        "snapshot": budget.snapshot(),
+        "economics": budget.economics(subjects=researched, claims=len(state.claims), pages=pages),
+        "pricing": _pricing_payload(),
+        "counts": {
+            "researched_subjects": researched,
+            "claims": len(state.claims),
+            "elements": len(state.elements),
+            "pages": pages,
+        },
+    }
+
+
+@app.get("/v1/pricing")
+async def get_pricing() -> dict[str, Any]:
+    """Published unit prices, so nothing downstream restates a rate.
+
+    The UI cost calculator, the report footer and the projection all read from
+    here. One place holds a price, and one date says when it was verified.
+    """
+    return _pricing_payload()
+
+
+class EstimateRequest(BaseModel):
+    """A pre flight estimate for a script nobody has uploaded yet."""
+
+    pages: int = Field(default=100, ge=1, le=400)
+    truth_claim_framing: bool = Field(
+        default=True,
+        description="A true story assertion escalates every person adjacent subject one tier.",
+    )
+    drafts: int = Field(default=1, ge=1, le=20, description="Drafts over the life of the title.")
+    cache_hit_rate: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=0.99,
+        description="Expected share of subjects unchanged from the previous draft.",
+    )
+
+
+@app.post("/v1/estimate")
+async def estimate(body: EstimateRequest) -> dict[str, Any]:
+    """What a script of this size would cost, before anything is uploaded.
+
+    Built from the same processor prices and the same per page subject density
+    the router actually produces, so the number on the marketing surface and
+    the number on the meter come from one source. Densities are measured from
+    the demo screenplay and stated as such rather than presented as a law.
+    """
+    return _estimate(body)
 
 
 @app.get("/v1/runs/{run_id}/report")
@@ -755,3 +908,148 @@ async def review_queue(
     if not can(principal, "review_queue"):
         raise HTTPException(status_code=403, detail="role may not view the review queue")
     return {"items": get_store().list_review_queue(project_id)}
+
+
+# =============================================================================
+# pricing and estimation
+# =============================================================================
+# One place holds a unit price. The cost meter, the projection, the report
+# footer and the marketing calculator all read from here, so a rate cannot be
+# right in one surface and stale in another.
+
+#: Subjects per page, measured on the demo screenplay and on the upload test
+#: script rather than assumed. Stated as a measurement so the number can be
+#: argued with: a dialogue heavy true story piece runs hot, a genre script with
+#: few real people runs well under it.
+_DENSITY = {
+    "claims_per_page": 1.6,
+    "elements_per_page": 0.5,
+    # Share of claims that land at each depth once the router has run. Derived
+    # from the routing table: negative claims about living people go to core,
+    # quotes and ordinary claims to base, background elements to lite.
+    "mix_core": 0.18,
+    "mix_base": 0.62,
+    "mix_lite": 0.20,
+    # A true story assertion escalates person adjacent subjects one tier, which
+    # moves roughly this share of base work up to core.
+    "framing_uplift": 0.25,
+    "source": "measured on demo/screenplay/the_long_shadow.fountain",
+}
+
+
+def _pricing_payload() -> dict[str, Any]:
+    from truestory.models.enums import Processor
+    from truestory.policy import load_routing
+    from truestory.providers.model_cost import price_table
+
+    budget_policy = load_routing().budget_policy
+    return {
+        "verified_on": "2026-08-19",
+        "research": {
+            "task_processors_usd_per_run": {str(p): p.usd_per_run for p in Processor},
+            "search_usd_per_request": {"turbo": 0.001, "advanced": 0.005},
+            "extract_usd_per_url": 0.001,
+            "findall_usd": {
+                "preview": {"fixed": 0.10, "per_match": 0.0},
+                "base": {"fixed": 0.25, "per_match": 0.03},
+                "core": {"fixed": 2.00, "per_match": 0.15},
+            },
+            "monitor_usd_per_check": {"lite": 0.003, "base": 0.010},
+            "source": "https://docs.parallel.ai/getting-started/pricing",
+        },
+        "models_usd_per_million_tokens": price_table(),
+        "models_source": "https://ai.google.dev/gemini-api/docs/pricing",
+        "budget": {
+            "per_script_ceiling_usd": budget_policy.get("per_script_ceiling_usd", 5.0),
+            "reserve_for_critical_usd": budget_policy.get("reserve_for_critical_usd", 1.5),
+        },
+        "manual_baseline": budget_policy.get("manual_baseline", {}),
+        "density": _DENSITY,
+    }
+
+
+def _estimate(body: EstimateRequest) -> dict[str, Any]:
+    """Project the cost of a script of this size, in the same units as a run."""
+    from truestory.models.enums import Processor
+    from truestory.policy import load_routing
+
+    pages = float(body.pages)
+    claims = pages * _DENSITY["claims_per_page"]
+    elements = pages * _DENSITY["elements_per_page"]
+    subjects = claims + elements
+
+    uplift = _DENSITY["framing_uplift"] if body.truth_claim_framing else 0.0
+    core_share = _DENSITY["mix_core"] + _DENSITY["mix_base"] * uplift
+    base_share = _DENSITY["mix_base"] * (1 - uplift)
+    lite_share = _DENSITY["mix_lite"]
+
+    by_processor = {
+        "core": subjects * core_share,
+        "base": subjects * base_share,
+        "lite": subjects * lite_share,
+    }
+    research_usd = sum(count * Processor(name).usd_per_run for name, count in by_processor.items())
+
+    # Model spend: the script is read once per model stage, and the adjudicator
+    # reads evidence per subject. Estimated from tokens rather than guessed at,
+    # because on a short script the model half is the larger of the two bills
+    # and a projection that omits it is wrong by an order of magnitude.
+    from truestory.providers.model_cost import cost_cents
+
+    script_tokens = pages * 450  # ~450 tokens per formatted screenplay page
+    ingest_usd = cost_cents(settings.model_ingest, int(script_tokens), int(pages * 120)) / 100
+    claims_usd = cost_cents(settings.model_claims, int(script_tokens), int(claims * 90)) / 100
+    adjudicate_usd = (
+        cost_cents(settings.model_adjudicator, int(subjects * 1400), int(subjects * 120)) / 100
+    )
+    remedy_usd = cost_cents(settings.model_remedy, int(claims * 0.15 * 900), int(claims * 40)) / 100
+    model_usd = ingest_usd + claims_usd + adjudicate_usd + remedy_usd
+
+    first_draft = research_usd + model_usd
+    # Later drafts only research what changed, because element and claim
+    # identifiers are content hashes. The model half does not get the same
+    # discount and it would be dishonest to give it one: a redraft is re read
+    # end to end whatever changed in it, so ingest and claim extraction are
+    # paid in full again and only adjudication and remedy scale with the delta.
+    unchanged = body.cache_hit_rate
+    later_draft = (
+        research_usd * (1 - unchanged)
+        + ingest_usd
+        + claims_usd
+        + (adjudicate_usd + remedy_usd) * (1 - unchanged)
+    )
+    total = first_draft + later_draft * max(0, body.drafts - 1)
+
+    baseline = load_routing().budget_policy.get("manual_baseline", {})
+    manual_low = float(baseline.get("report_usd_low", 1000))
+    manual_total = manual_low * body.drafts
+
+    return {
+        "input": body.model_dump(),
+        "subjects": {
+            "claims": round(claims),
+            "elements": round(elements),
+            "total": round(subjects),
+            "by_processor": {k: round(v) for k, v in by_processor.items()},
+        },
+        "research_usd": round(research_usd, 4),
+        "model_usd": round(model_usd, 4),
+        "model_breakdown_usd": {
+            "ingest": round(ingest_usd, 4),
+            "claim_extraction": round(claims_usd, 4),
+            "adjudication": round(adjudicate_usd, 4),
+            "remedy": round(remedy_usd, 4),
+        },
+        "first_draft_usd": round(first_draft, 4),
+        "later_draft_usd": round(later_draft, 4),
+        "total_usd": round(total, 4),
+        "manual_baseline_usd": round(manual_total, 2),
+        "savings_usd": round(manual_total - total, 2),
+        "times_cheaper": round(manual_total / total, 1) if total > 0 else None,
+        "assumptions": _DENSITY,
+        "caveat": (
+            "An estimate from measured subject density, not a quote. A script's "
+            "real cost depends on how many real people it names and how much of "
+            "the record already sits in the cache."
+        ),
+    }

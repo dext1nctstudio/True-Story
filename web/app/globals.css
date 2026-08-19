@@ -14,6 +14,19 @@
    been reached. Nothing decorative is allowed to use them.
    ============================================================================ */
 
+/* Inter where it is reachable, the system stack where it is not. Loaded by
+   @import rather than next/font on purpose: a build with no network still
+   produces a correct page instead of failing, and the fallback metrics are
+   close enough that the swap does not shift the layout when it lands.
+   @import has to precede every style rule, which is why it sits here rather
+   than beside the font tokens it feeds. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+/* The role workspaces, kept in their own file. This one is the instrument;
+   that one is the four surfaces the instrument is driven from, and mixing
+   them produced a stylesheet nobody could find anything in. */
+@import "./surfaces.css";
+
 :root {
   /* Dark by choice rather than by system preference. This is a review surface,
      and the paper it holds has to be the brightest thing on screen. */
@@ -102,8 +115,8 @@
   --script-indent-cue: 2.2in;
   --script-indent-paren: 1.6in;
 
-  --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-ui: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
 
@@ -134,8 +147,25 @@
 
   --page-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 18px 48px rgba(0, 0, 0, 0.55);
 
+  /* ── elevation ──────────────────────────────────────────────────────────
+     Three steps and no more. On a near black ground a drop shadow alone is
+     invisible, so each step pairs a shadow with a hairline top highlight —
+     the way a physical instrument catches light on its top edge. */
+  --lift-1: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.4);
+  --lift-2: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 4px 16px rgba(0, 0, 0, 0.45);
+  --lift-3: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 24px 64px rgba(0, 0, 0, 0.6);
+
+  /* ── motion ─────────────────────────────────────────────────────────────
+     Fast for anything under the pointer, slower for anything that enters.
+     Nothing in this product bounces: it is an instrument, not a toy. */
   --ease: 110ms cubic-bezier(0.2, 0, 0.2, 1);
+  --ease-in: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Set per role on .shell. The chrome itself changes when the role does, so
+     the switch is legible before a single panel is read. */
+  --role: var(--accent);
 }
+
 
 * {
   box-sizing: border-box;
@@ -193,7 +223,10 @@ body {
 
 .shell {
   display: grid;
-  grid-template-rows: auto 1fr;
+  /* Header, role strip, workspace. The strip arrived with the role rework and
+     took the 1fr row that belongs to the workspace, so its gradient stretched
+     into a hundred and sixty pixels of empty band above the content. */
+  grid-template-rows: auto auto 1fr;
   /* A grid column sizes to its widest item by default, which let the header's
      intrinsic width drag the shell past the viewport and take the rail with
      it. Pinning the column to the viewport keeps the rail on screen. */
@@ -232,14 +265,41 @@ body {
 /* ── header ─────────────────────────────────────────────────────────────── */
 
 .header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
   display: flex;
   align-items: center;
   gap: var(--space-4);
   min-width: 0;
-  height: 56px;
+  height: 58px;
   padding: 0 var(--space-4) 0 var(--space-5);
   border-bottom: 1px solid var(--line);
-  background: var(--surface);
+  /* Slightly translucent over a blur, so a script scrolling underneath is
+     felt rather than seen. Falls back to the flat surface where backdrop
+     filters are unavailable. */
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+
+/* The role's colour, as a hairline the width of the instrument. Two pixels of
+   chrome is enough to tell somebody the workspace changed. */
+.header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    var(--role) 0%,
+    color-mix(in srgb, var(--role) 30%, transparent) 22%,
+    transparent 55%
+  );
+  opacity: 0.75;
+  pointer-events: none;
 }
 
 .header-group {
@@ -380,9 +440,18 @@ body {
   transition: background var(--ease), border-color var(--ease), color var(--ease);
 }
 
+.btn {
+  box-shadow: var(--lift-1);
+}
+
 .btn:hover {
   background: var(--surface-input);
   border-color: var(--line-focus);
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0);
 }
 
 .btn-primary {
@@ -390,12 +459,41 @@ body {
   border-color: var(--accent);
   color: #08121c;
   font-weight: 600;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset,
+    0 6px 18px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .btn-primary:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
   color: #08121c;
+}
+
+/* The quiet one. Reads as a control rather than as an action, which is what
+   a search affordance should be beside a primary button. */
+.btn-quiet {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+.btn-quiet:hover {
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+.btn-kbd,
+kbd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  line-height: 1;
+  padding: 3px 5px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-sunken);
+  color: var(--text-tertiary);
 }
 
 .btn:disabled {
@@ -1346,9 +1444,9 @@ button.apply:disabled {
    ============================================================================ */
 
 .dashboard {
-  max-width: 1000px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: var(--space-8) var(--space-6);
+  padding: var(--space-7) var(--space-6) var(--space-8);
 }
 
 .dashboard-hero {

@@ -3,41 +3,21 @@
 /**
  * The role switch.
  *
- * Four seconds of the demo, and instantly legible governance: switch to the
- * writer and the evidence panel simply is not there. That says more about the
- * IAM model than any architecture slide, because the audience sees a
- * capability disappear rather than being told one exists.
+ * A dropdown of four words was the wrong control for this, because the thing
+ * being chosen is a workspace and the dropdown showed no sign of that. This is
+ * a segmented control that carries the role's accent, and choosing one states
+ * in a sentence what the role is given and what it is not, so the governance
+ * model is read rather than inferred from an absence.
  *
  * In deployment the role is a verified claim on the identity token in front of
- * the service and is not selectable at all. This control exists so the demo
- * can show four views of one document without four logins.
+ * the service and is not selectable at all. This control exists so one
+ * document can be seen through four eyes without four logins.
  */
 
+import { useEffect, useRef, useState } from "react";
 import { setRole } from "@/lib/api";
+import { ROLE_LIST, viewFor } from "@/lib/roles";
 import type { Role } from "@/lib/types";
-
-const ROLES: { value: Role; label: string; sees: string }[] = [
-  {
-    value: "truestory.counsel",
-    label: "Counsel",
-    sees: "Everything, including unmasked identities and full evidence.",
-  },
-  {
-    value: "truestory.producer",
-    label: "Producer",
-    sees: "Verdict counts, risk posture, cost and alerts. Not the evidence.",
-  },
-  {
-    value: "truestory.writer",
-    label: "Writer",
-    sees: "Their own draft's overlay and rewrites. No cross project access.",
-  },
-  {
-    value: "truestory.underwriter",
-    label: "Underwriter",
-    sees: "The final package, read only and watermarked. External party.",
-  },
-];
 
 export function RoleSwitcher({
   role,
@@ -46,32 +26,77 @@ export function RoleSwitcher({
   role: Role;
   onChange: (role: Role) => void;
 }) {
-  const current = ROLES.find((r) => r.value === role);
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const current = viewFor(role);
+
+  // Click outside and Escape both close it. A popover that only closes by
+  // re-clicking the trigger is the kind of thing that reads as unfinished.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  function pick(next: Role) {
+    setRole(next);
+    onChange(next);
+    setOpen(false);
+  }
 
   return (
-    <select
-      className="role-select"
-      value={role}
-      title={current?.sees}
-      onChange={(event) => {
-        const next = event.target.value as Role;
-        setRole(next);
-        onChange(next);
-      }}
-    >
-      {ROLES.map((entry) => (
-        <option key={entry.value} value={entry.value}>
-          {entry.label}
-        </option>
-      ))}
-    </select>
+    <div className="role-switch" ref={wrapRef}>
+      <button
+        className="role-trigger"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        title="Switch role. Each role is a different workspace."
+      >
+        <span className="role-dot" style={{ background: current.accent }} />
+        <span className="role-trigger-label">{current.label}</span>
+        <span className="role-caret" aria-hidden>
+          ▾
+        </span>
+      </button>
+
+      {open && (
+        <div className="role-menu" role="listbox">
+          <p className="role-menu-head">
+            One document, four workspaces. The server enforces this, not the page.
+          </p>
+          {ROLE_LIST.map((entry) => (
+            <button
+              key={entry.value}
+              role="option"
+              aria-selected={entry.value === role}
+              className={`role-option ${entry.value === role ? "active" : ""}`}
+              onClick={() => pick(entry.value)}
+            >
+              <span className="role-option-head">
+                <span className="role-dot" style={{ background: entry.accent }} />
+                <span className="role-option-label">{entry.label}</span>
+                {entry.value === role && <span className="role-current">current</span>}
+              </span>
+              <span className="role-option-line">{entry.role_line}</span>
+              <span className="role-option-sees">{entry.sees}</span>
+              {entry.caps.evidence && entry.caps.cost && entry.caps.unmask ? null : (
+                <span className="role-option-withheld">Withheld · {entry.withheld}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
-
-/** What each role may see. Mirrors VIEW_MATRIX in api/security.py exactly. */
-export const CAPABILITIES: Record<Role, { evidence: boolean; cost: boolean; unmask: boolean }> = {
-  "truestory.counsel": { evidence: true, cost: true, unmask: true },
-  "truestory.producer": { evidence: false, cost: true, unmask: false },
-  "truestory.writer": { evidence: false, cost: false, unmask: false },
-  "truestory.underwriter": { evidence: true, cost: false, unmask: false },
-};

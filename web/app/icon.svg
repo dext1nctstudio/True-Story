@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="True Story">
+  <!--
+    The mark, reduced to the one part of it that survives 16 pixels.
+
+    The full logo is a script page under a magnifying glass whose lens holds
+    three bars: verified, unsupported, contradicted. At tab size the page and
+    the wordmark are mud, so the favicon keeps the lens alone. Three colours
+    inside a ring is legible at 16px and is the same idea the product is: the
+    record, looked at, and marked.
+  -->
+  <defs>
+    <clipPath id="lens">
+      <circle cx="13.5" cy="13" r="7.6"/>
+    </clipPath>
+  </defs>
+
+  <rect width="32" height="32" rx="7.5" fill="#0B0F15"/>
+
+  <g clip-path="url(#lens)">
+    <rect x="5.9" y="5.4" width="5.1" height="15.2" fill="#35C98A"/>
+    <rect x="11" y="5.4" width="5" height="15.2" fill="#E6A344"/>
+    <rect x="16" y="5.4" width="5.2" height="15.2" fill="#EC5F57"/>
+  </g>
+
+  <circle cx="13.5" cy="13" r="7.6" fill="none" stroke="#E9EDF3" stroke-width="2.4"/>
+  <path d="M19.2 18.7 L25.4 24.9" stroke="#E9EDF3" stroke-width="3.2" stroke-linecap="round"/>
+</svg>

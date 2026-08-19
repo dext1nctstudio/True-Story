@@ -25,7 +25,10 @@ class ParallelExtractProvider(ResearchProvider):
     name = "parallel_extract"
     supports_citations = True
     supports_async = False
-    unit_cost_cents = 0.5
+    #: $1 per 1000 URLs. Verified 19 August 2026 against
+    #: https://docs.parallel.ai/getting-started/pricing — this was 0.5, which
+    #: billed the evidence appendix at five times its real cost.
+    unit_cost_cents = 0.1
 
     def __init__(
         self,
@@ -93,11 +96,11 @@ class ParallelExtractProvider(ResearchProvider):
                 "archived_object": None,
             },
             citations=[
-                Citation(
+                Citation.classified(
                     url=url,
                     title=page.get("title") or url,
                     excerpt=content[:1200],
-                    source_type="primary",
+                    declared_type="primary",
                 )
             ],
             reasoning="Page captured verbatim for the evidence appendix.",

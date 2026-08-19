@@ -122,27 +122,41 @@ class ReportAgent:
                         return candidate
             return line_no
 
-        def locate_element(scene_no: int, line_no: int, surface: str) -> int:
-            """Anchor an element to a line that actually contains its name.
+        def locate(scene_no: int, line_no: int, surface: str) -> int:
+            """Anchor a subject to a line that actually contains its words.
 
-            An element's line comes from whichever span survived grouping, and
+            A subject's line comes from whichever span survived grouping, and
             after coreference merging that can be a different mention than the
             one being rendered — which is how "Eiffel Tower" ended up
-            highlighting a bare character cue. The element's own surface form
+            highlighting a bare character cue. The subject's own surface form
             is the reliable signal, so prefer the nearest line containing it.
+
+            Claims used this too late: they anchored on the line number alone,
+            which for a line of dialogue is frequently the character cue above
+            it, so the overlay lit up the word ARTHUR rather than the sentence
+            Arthur says. The longest run of the surface form is tried first and
+            then progressively shorter prefixes, because a claim's wording is
+            often a rephrasing that shares its opening rather than the whole.
             """
             lines = lines_by_scene.get(scene_no)
-            needle = (surface or "").strip().lower()
+            needle = " ".join((surface or "").split()).lower()
             if not lines or not needle:
                 return anchor(scene_no, line_no)
-            matches = [i for i, text in enumerate(lines) if needle in text.lower()]
-            if not matches:
-                return anchor(scene_no, line_no)
-            return min(matches, key=lambda i: abs(i - line_no))
+
+            for probe in _probes(needle):
+                matches = [i for i, text in enumerate(lines) if probe in text.lower()]
+                if matches:
+                    return min(matches, key=lambda i: abs(i - line_no))
+            return anchor(scene_no, line_no)
 
         for claim in claims:
             for occurrence in claim.asserted_in:
-                key = f"{occurrence.scene_no}:{anchor(occurrence.scene_no, occurrence.line_no)}"
+                # The claim's own words, never the occurrence's surface form:
+                # for a claim that is the subject's name, and anchoring on it
+                # would move the highlight off the sentence and onto whichever
+                # line happens to mention the person.
+                line = locate(occurrence.scene_no, occurrence.line_no, claim.claim_text)
+                key = f"{occurrence.scene_no}:{line}"
                 by_line.setdefault(key, []).append(
                     {
                         "kind": "claim",
@@ -167,7 +181,7 @@ class ReportAgent:
             for occurrence in element.occurrences:
                 key = (
                     f"{occurrence.scene_no}:"
-                    f"{locate_element(occurrence.scene_no, occurrence.line_no, occurrence.surface_form)}"
+                    f"{locate(occurrence.scene_no, occurrence.line_no, occurrence.surface_form)}"
                 )
                 by_line.setdefault(key, []).append(
                     {
@@ -516,6 +530,22 @@ class ReportAgent:
 # =============================================================================
 # helpers
 # =============================================================================
+
+
+def _probes(needle: str) -> list[str]:
+    """The surface form, then progressively shorter prefixes of it.
+
+    A claim's wording is frequently a rephrasing of the line rather than a
+    quotation of it, so an exact match fails while the opening words still
+    identify the line uniquely. Six words is long enough to be unambiguous on a
+    screenplay page and short enough to survive a rewritten tail.
+    """
+    words = needle.split()
+    probes = [needle]
+    for size in (8, 6, 4):
+        if len(words) > size:
+            probes.append(" ".join(words[:size]))
+    return probes
 
 
 def _status_color(status: ClearanceStatus) -> str:

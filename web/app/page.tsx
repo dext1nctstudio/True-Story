@@ -3,37 +3,51 @@
 /**
  * The workspace.
  *
- * One screen: the screenplay on the left with every claim lit against the
- * record, the rail on the right carrying the evidence panel and the per person
- * dashboard, and the live counters and cost meter across the top.
+ * One run, seen four ways. The role does not filter this page, it selects
+ * which page gets built: counsel opens the script with the evidence beside it,
+ * the producer opens exposure and spend, the writer opens the lines to fix,
+ * and the underwriter opens the filed package with no working draft behind it
+ * at all. `lib/roles.ts` holds that decision, and the server enforces the same
+ * matrix, so a role never renders a panel it would be refused.
  *
- * The demo path through this page is deliberate. Drop a draft in, watch the
- * truth claim banner fire, watch the overlay fill in live while the cost meter
+ * The demo path is unchanged and still deliberate: drop a draft in, watch the
+ * truth claim banner fire, watch the overlay fill in live while the meter
  * ticks in cents, click the one red line, read the sources, apply the verified
- * rewrite. Every one of those beats is a real interaction with real state.
+ * rewrite.
  */
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClaimDashboard } from "@/components/ClaimDashboard";
+import { Calculator, CostPanel } from "@/components/CostPanel";
+import { CommandPalette, type Command } from "@/components/CommandPalette";
 import { CostMeter, VerdictCounters } from "@/components/CostMeter";
-import { EvidencePanel } from "@/components/EvidencePanel";
-import { CAPABILITIES, RoleSwitcher } from "@/components/RoleSwitcher";
 import { Dashboard } from "@/components/Dashboard";
+import { EvidencePanel } from "@/components/EvidencePanel";
+import { MonitorPanel } from "@/components/MonitorPanel";
+import { ProducerBoard } from "@/components/ProducerBoard";
 import { ReviewQueue } from "@/components/ReviewQueue";
+import { RoleSwitcher } from "@/components/RoleSwitcher";
+import { RunTimeline } from "@/components/RunTimeline";
+import { UnderwriterPackage } from "@/components/UnderwriterPackage";
 import { VerdictOverlay } from "@/components/VerdictOverlay";
+import { WriterDesk } from "@/components/WriterDesk";
 import {
   ApiError,
+  clearanceLogUrl,
   getClaims,
-  getOverlay,
   getElements,
+  getOverlay,
   getRegister,
   getRemedies,
   getRun,
   listRuns,
+  reportPdfUrl,
+  setRole,
   streamRun,
   uploadRun,
 } from "@/lib/api";
+import { ROLE_VIEWS, TAB_LABEL, type RailTab, viewFor } from "@/lib/roles";
 import type {
   Annotation,
   BudgetSnapshot,
@@ -74,7 +88,11 @@ export default function Workspace() {
   // does not match, rather than hiding them, so scanning "every red line"
   // does not lose the surrounding scene structure.
   const [verdictFilter, setVerdictFilter] = useState<string | null>(null);
-  const [tab, setTab] = useState<"evidence" | "persons">("evidence");
+  const [tab, setTab] = useState<RailTab>("evidence");
+  // Producer and writer open on their own surface and can flip to the script.
+  // Counsel opens on the script. The underwriter has no script at all.
+  const [surface, setSurface] = useState<"native" | "script">("native");
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [stage, setStage] = useState<string>("");
   const [runStatus, setRunStatus] = useState<string>("");
   // Rebuilt from the store rather than held in this process. Only the run
@@ -82,7 +100,9 @@ export default function Workspace() {
   const [restored, setRestored] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const capabilities = CAPABILITIES[role];
+  const view = viewFor(role);
+  const caps = view.caps;
+
   // Always null on the first render, on both server and client: the server
   // has no window to read ?run= from, and hydration requires the client's
   // first pass to match that exact output. Reading the URL synchronously
@@ -109,13 +129,75 @@ export default function Workspace() {
     setRestored(false);
   }, []);
 
-  // Resolves the real ?run= value once mounted, then keeps it in sync with
-  // the back button. pushState does not fire popstate on its own.
+  // Resolves the real ?run= and ?role= values once mounted, then keeps them in
+  // sync with the back button. pushState does not fire popstate on its own.
+  //
+  // The role lives in the URL so a workspace is a link. "Here is what the
+  // underwriter sees" is a sentence somebody says several times a day in this
+  // workflow, and it should be a URL rather than a set of instructions.
   useEffect(() => {
-    const onPop = () => setRunIdState(resolveRunId());
+    const onPop = () => {
+      setRunIdState(resolveRunId());
+      const wanted = new URLSearchParams(window.location.search).get("role");
+      if (wanted && wanted in ROLE_VIEWS) {
+        setRole(wanted as Role);
+        setRoleState(wanted as Role);
+      }
+    };
     onPop();
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const changeRole = useCallback((next: Role) => {
+    setRoleState(next);
+    const url = new URL(window.location.href);
+    // Counsel is the default, so it stays out of the URL and a plain link
+    // keeps working as it did.
+    if (next === "truestory.counsel") url.searchParams.delete("role");
+    else url.searchParams.set("role", next);
+    window.history.replaceState(null, "", url);
+  }, []);
+
+  // A role change can land on a tab that role does not have. Snap to the
+  // first tab it does, rather than rendering an empty rail.
+  useEffect(() => {
+    setTab((current) => (view.rail.includes(current) ? current : (view.rail[0] ?? "evidence")));
+  }, [view]);
+
+  // Each role opens on its own surface. Kept in its own effect, keyed on the
+  // role alone: folded in with the tab reset above, every tab click also threw
+  // the user back to the role's landing surface.
+  useEffect(() => {
+    setSurface(view.home === "docket" ? "script" : "native");
+  }, [view]);
+
+  // ⌘K / ctrl-K anywhere, and the shortcuts a six hour session needs.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const typing =
+        event.target instanceof HTMLElement &&
+        ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName);
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+        return;
+      }
+      if (typing || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === "/") {
+        event.preventDefault();
+        setPaletteOpen(true);
+      } else if (event.key === "Escape") {
+        setSelected(null);
+        setVerdictFilter(null);
+      } else if (["1", "2", "3", "4"].includes(event.key)) {
+        const colours = ["green", "amber", "red", "grey"];
+        const next = colours[Number(event.key) - 1];
+        setVerdictFilter((current) => (current === next ? null : next));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   const startRun = useCallback(
@@ -180,7 +262,7 @@ export default function Workspace() {
       setError(null);
 
       const [overlayData, claimData, remedyData, elementData] = await Promise.all([
-        getOverlay(runId).catch(() => null),
+        caps.overlay ? getOverlay(runId).catch(() => null) : Promise.resolve(null),
         getClaims(runId).catch(() => ({ claims: [] as Claim[] })),
         getRemedies(runId).catch(() => ({ remedies: [] as Remedy[] })),
         getElements(runId).catch(() => ({ elements: [] as ClearableElement[] })),
@@ -192,13 +274,18 @@ export default function Workspace() {
       setRemedies(remedyData.remedies);
       setElements(elementData.elements ?? []);
 
-      // The register is counsel and producer only, so a 403 here is the
-      // governance model working rather than a failure to report.
-      try {
-        const register = await getRegister(runId);
-        setPersons(register.persons ?? []);
-      } catch (exc) {
-        if (!(exc instanceof ApiError && exc.isForbidden)) throw exc;
+      // The register is counsel and producer only, and the server enforces
+      // that, so a 403 here is the governance model working rather than a
+      // failure to report.
+      if (caps.register) {
+        try {
+          const register = await getRegister(runId);
+          setPersons(register.persons ?? []);
+        } catch (exc) {
+          if (!(exc instanceof ApiError && exc.isForbidden)) throw exc;
+          setPersons([]);
+        }
+      } else {
         setPersons([]);
       }
     } catch (exc) {
@@ -218,7 +305,7 @@ export default function Workspace() {
         );
       }
     }
-  }, [runId]);
+  }, [caps.overlay, caps.register, runId]);
 
   useEffect(() => {
     void load();
@@ -294,16 +381,86 @@ export default function Workspace() {
     };
   }, [claims, summary]);
 
+  /** Open a subject by id from anywhere: the palette, the board, the desk. */
+  const openSubject = useCallback(
+    (subjectId: string) => {
+      const annotation = Object.values(overlay?.annotations ?? {})
+        .flat()
+        .find((a) => a.id === subjectId);
+      if (annotation) {
+        setSelected(annotation);
+        setTab("evidence");
+        if (caps.overlay) setSurface("script");
+      }
+    },
+    [caps.overlay, overlay],
+  );
+
+  const commands = useMemo<Command[]>(() => {
+    const rows: Command[] = [];
+    if (caps.overlay) {
+      for (const [colour, label] of [
+        ["red", "contradicted"],
+        ["amber", "unsupported"],
+        ["green", "verified"],
+      ] as const) {
+        rows.push({
+          id: `filter:${colour}`,
+          label: `Show only ${label} lines`,
+          hint: "filter the script",
+          group: "View",
+          run: () => {
+            setSurface("script");
+            setVerdictFilter((current) => (current === colour ? null : colour));
+          },
+        });
+      }
+      rows.push({
+        id: "filter:clear",
+        label: "Clear the filter",
+        group: "View",
+        run: () => setVerdictFilter(null),
+      });
+    }
+    if (view.home !== "docket") {
+      rows.push({
+        id: "surface:native",
+        label: `Go to ${view.label.toLowerCase()} view`,
+        group: "View",
+        run: () => setSurface("native"),
+      });
+    }
+    rows.push({
+      id: "nav:docket",
+      label: "Back to the docket",
+      group: "View",
+      run: () => openRun(null),
+    });
+    if (caps.reports && runId) {
+      rows.push({
+        id: "export:pdf",
+        label: "Open the clearance report, PDF",
+        group: "Export",
+        run: () => window.open(reportPdfUrl(runId), "_blank"),
+      });
+      rows.push({
+        id: "export:csv",
+        label: "Download the clearance log, CSV",
+        group: "Export",
+        run: () => window.open(clearanceLogUrl(runId), "_blank"),
+      });
+    }
+    return rows;
+  }, [caps.overlay, caps.reports, openRun, runId, view]);
+
+  const showScript = caps.overlay && (view.home === "docket" || surface === "script");
+
   // ── render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="shell">
+    <div className="shell" data-role={view.value} style={{ ["--role" as string]: view.accent }}>
       <header className="header">
         <div className="header-group">
-          <button
-            className="brand"
-            onClick={() => openRun(null)}
-            title="Back to the docket"
-          >
+          <button className="brand" onClick={() => openRun(null)} title="Back to the docket">
             {/* The mark already sets both the name and the descriptor, so the
                 text versions would duplicate it. alt carries them for anyone
                 the image does not reach. */}
@@ -320,7 +477,7 @@ export default function Workspace() {
           {overlay && (
             <span className="script-title">
               {overlay.script.title}, {overlay.script.draft_version},{" "}
-              {overlay.script.page_count} pages
+              {Math.max(1, Math.round(overlay.script.page_count))} pages
             </span>
           )}
 
@@ -351,34 +508,61 @@ export default function Workspace() {
 
           {runId && (
             <div className="header-readouts">
-              <VerdictCounters
-                {...counts}
-                activeFilter={verdictFilter}
-                onFilter={setVerdictFilter}
-              />
-              <CostMeter budget={budget} visible={capabilities.cost} />
+              {caps.overlay && (
+                <VerdictCounters
+                  {...counts}
+                  activeFilter={verdictFilter}
+                  onFilter={(colour) => {
+                    setSurface("script");
+                    setVerdictFilter(colour);
+                  }}
+                />
+              )}
+              <CostMeter budget={budget} visible={caps.cost} />
             </div>
           )}
 
           <div className="header-controls">
-            <label className="btn btn-primary">
-              New draft
-              <input
-                type="file"
-                accept=".fountain,.fdx,.pdf,.txt"
-                hidden
-                disabled={uploading}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void startRun(file);
-                  event.target.value = "";
-                }}
-              />
-            </label>
-            <RoleSwitcher role={role} onChange={setRoleState} />
+            <button
+              className="btn btn-quiet"
+              onClick={() => setPaletteOpen(true)}
+              title="Search claims, elements and people"
+            >
+              Search
+              <kbd className="btn-kbd">⌘K</kbd>
+            </button>
+
+            {caps.upload && (
+              <label className="btn btn-primary">
+                New draft
+                <input
+                  type="file"
+                  accept=".fountain,.fdx,.pdf,.txt"
+                  hidden
+                  disabled={uploading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void startRun(file);
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+            )}
+            <RoleSwitcher role={role} onChange={changeRole} />
           </div>
         </div>
       </header>
+
+      {/* Governance, said rather than implied. Four roles that look identical
+          teach nobody anything; a line naming what this one does not get is
+          the whole point of the control. */}
+      <div className="role-strip">
+        <span className="role-strip-role" style={{ color: view.accent }}>
+          {view.role_line}
+        </span>
+        <span className="role-strip-sees">{view.sees}</span>
+        {!caps.evidence && <span className="role-strip-withheld">{view.withheld}</span>}
+      </div>
 
       {!runId ? (
         <div className="workspace-single">
@@ -388,137 +572,226 @@ export default function Workspace() {
             onFile={startRun}
             uploading={uploading}
             uploadError={uploadError}
+            title={
+              view.home === "package"
+                ? "Filed packages"
+                : view.home === "desk"
+                  ? "Your drafts"
+                  : "The docket"
+            }
+            canUpload={caps.upload}
           />
+          {caps.cost && <Calculator standalone />}
         </div>
       ) : (
-      <div className="workspace">
-        <main>
-          {error && <div className="warning error-banner">{error}</div>}
+        <div className={showScript ? "workspace" : "workspace-single"}>
+          <main>
+            {error && <div className="warning error-banner">{error}</div>}
 
-          {overlay ? (
-            <VerdictOverlay
-              overlay={overlay}
-              selectedId={selected?.id ?? null}
-              filterColor={verdictFilter}
-              onSelect={(annotation) => {
-                setSelected(annotation);
-                setTab("evidence");
-              }}
-            />
-          ) : restored ? (
-            // Rebuilt from the store after a restart. The run record persists;
-            // the claims, elements and overlay do not, so there is no script to
-            // annotate and no amount of waiting will produce one.
-            <div className="starting">
-              <p className="starting-title">Summary only</p>
-              <p className="starting-sub">
-                This run was restored from storage after a restart. Its verdicts and
-                cost are in the header, but the annotated script is not retained
-                between restarts.
-              </p>
-            </div>
-          ) : justStarted || (runStatus && runStatus !== "COMPLETE" && runStatus !== "FAILED") ? (
-            // No overlay yet and the run is still moving. Covers both the
-            // window before the run registers and the ingest stage after it,
-            // which on a feature length script is minutes of model calls.
-            <div className="starting">
-              <div className="starting-spinner" />
-              <p className="starting-title">Parsing the screenplay</p>
-              <p className="starting-sub">
-                The script appears here as soon as ingest finishes, then lines light
-                up as verdicts land.
-              </p>
-            </div>
-          ) : (
-            !error && <div className="empty">Loading the draft.</div>
-          )}
-        </main>
+            {/* The surface switch. Only rendered for the roles that have two,
+                which is why it is not a permanent piece of chrome. */}
+            {caps.overlay && view.home !== "docket" && (
+              <div className="surface-switch">
+                <button
+                  className={`surface-tab ${surface === "native" ? "active" : ""}`}
+                  onClick={() => setSurface("native")}
+                >
+                  {view.home === "risk" ? "Risk" : "Lines to fix"}
+                </button>
+                <button
+                  className={`surface-tab ${surface === "script" ? "active" : ""}`}
+                  onClick={() => setSurface("script")}
+                >
+                  Script
+                </button>
+              </div>
+            )}
 
-        <aside className="rail">
-          <div className="tabs">
-            <button
-              className={`tab ${tab === "evidence" ? "active" : ""}`}
-              onClick={() => setTab("evidence")}
-            >
-              Evidence
-            </button>
-            <button
-              className={`tab ${tab === "persons" ? "active" : ""}`}
-              onClick={() => setTab("persons")}
-            >
-              People ({persons.length})
-            </button>
-          </div>
-
-          {tab === "evidence" ? (
-            selected ? (
-              <EvidencePanel
+            {view.home === "package" ? (
+              <UnderwriterPackage runId={runId} summary={summary} elements={elements} />
+            ) : surface === "native" && view.home === "risk" ? (
+              <ProducerBoard
                 runId={runId}
-                annotation={selected}
-                claim={selectedClaim}
-                element={selectedElement}
-                remedy={selectedRemedy}
-                canSeeEvidence={capabilities.evidence}
-                canUnmask={capabilities.unmask}
-              />
-            ) : (
-              // Nothing selected. The resting state is the work queue rather
-              // than an instruction to go clicking.
-              <ReviewQueue
+                live={runStatus !== "COMPLETE" && runStatus !== "FAILED"}
+                summary={summary}
                 claims={claims}
                 elements={elements}
-                onSelectClaim={(claimId) => {
-                  const found = Object.values(overlay?.annotations ?? {})
-                    .flat()
-                    .find((a) => a.id === claimId);
-                  if (found) setSelected(found);
+                persons={persons}
+                onOpenLine={openSubject}
+              />
+            ) : surface === "native" && view.home === "desk" ? (
+              <WriterDesk
+                runId={runId}
+                claims={claims}
+                remedies={remedies}
+                onOpenLine={openSubject}
+                canApply={caps.remedies}
+              />
+            ) : overlay ? (
+              <VerdictOverlay
+                overlay={overlay}
+                selectedId={selected?.id ?? null}
+                filterColor={verdictFilter}
+                onSelect={(annotation) => {
+                  setSelected(annotation);
+                  setTab("evidence");
                 }}
               />
-            )
-          ) : (
-            <ClaimDashboard persons={persons} />
-          )}
+            ) : restored ? (
+              // Rebuilt from the store after a restart. The run record persists;
+              // the claims, elements and overlay do not, so there is no script to
+              // annotate and no amount of waiting will produce one.
+              <div className="starting">
+                <p className="starting-title">Summary only</p>
+                <p className="starting-sub">
+                  This run was restored from storage after a restart. Its verdicts and
+                  cost are in the header, but the annotated script is not retained
+                  between restarts.
+                </p>
+              </div>
+            ) : justStarted ||
+              (runStatus && runStatus !== "COMPLETE" && runStatus !== "FAILED") ? (
+              // No overlay yet and the run is still moving. Covers both the
+              // window before the run registers and the ingest stage after it,
+              // which on a feature length script is minutes of model calls.
+              <div className="starting">
+                <RunTimeline stage={stage} status={runStatus} />
+                <p className="starting-title">
+                  {stage ? stageTitle(stage) : "Parsing the screenplay"}
+                </p>
+                <p className="starting-sub">
+                  The script appears here as soon as ingest finishes, then lines light
+                  up as verdicts land.
+                </p>
+              </div>
+            ) : (
+              !error && <div className="empty">Loading the draft.</div>
+            )}
+          </main>
 
-          {overlay && (
-            <div className="panel">
-              <p className="panel-title">Legend</p>
-              <div className="legend">
-                {Object.entries(overlay.legend).map(([color, text]) => (
-                  <div className="legend-item" key={color}>
-                    <span
-                      className="legend-swatch"
-                      style={{ background: `var(--verdict-${color}, transparent)` }}
-                    />
-                    <span title={text}>{color}</span>
-                  </div>
+          {showScript && (
+            <aside className="rail">
+              <div className="tabs">
+                {view.rail.map((entry) => (
+                  <button
+                    key={entry}
+                    className={`tab ${tab === entry ? "active" : ""}`}
+                    onClick={() => setTab(entry)}
+                  >
+                    {TAB_LABEL[entry]}
+                    {entry === "people" && persons.length > 0 && ` (${persons.length})`}
+                  </button>
                 ))}
               </div>
-              <p className="legend-note">{overlay.legend.amber}</p>
-            </div>
-          )}
 
-          {summary && (summary.coverage_warnings?.length ?? 0) > 0 && (
-            <div className="panel">
-              <p className="panel-title">Coverage</p>
-              {summary.coverage_warnings.map((warning) => (
-                <div className="warning" key={warning}>
-                  {warning}
+              {tab === "evidence" &&
+                (selected ? (
+                  <EvidencePanel
+                    runId={runId}
+                    annotation={selected}
+                    claim={selectedClaim}
+                    element={selectedElement}
+                    remedy={selectedRemedy}
+                    canSeeEvidence={caps.evidence}
+                    canUnmask={caps.unmask}
+                  />
+                ) : (
+                  // Nothing selected. The resting state is the work queue rather
+                  // than an instruction to go clicking.
+                  <ReviewQueue
+                    claims={claims}
+                    elements={elements}
+                    onSelectClaim={openSubject}
+                  />
+                ))}
+
+              {tab === "people" && <ClaimDashboard persons={persons} />}
+
+              {tab === "queue" && (
+                <ReviewQueue claims={claims} elements={elements} onSelectClaim={openSubject} />
+              )}
+
+              {tab === "cost" && (
+                <CostPanel
+                  runId={runId}
+                  live={runStatus !== "COMPLETE" && runStatus !== "FAILED"}
+                />
+              )}
+
+              {tab === "monitors" && (
+                <MonitorPanel projectId={PROJECT_ID} opened={summary?.monitors_created ?? 0} />
+              )}
+
+              {tab === "report" && (
+                <UnderwriterPackage runId={runId} summary={summary} elements={elements} />
+              )}
+
+              {overlay && tab === "evidence" && (
+                <div className="panel">
+                  <p className="panel-title">Legend</p>
+                  <div className="legend">
+                    {Object.entries(overlay.legend).map(([color, text]) => (
+                      <div className="legend-item" key={color}>
+                        <span
+                          className="legend-swatch"
+                          style={{ background: `var(--verdict-${color}, transparent)` }}
+                        />
+                        <span title={text}>{color}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="legend-note">{overlay.legend.amber}</p>
                 </div>
-              ))}
-            </div>
-          )}
+              )}
 
-          {/* Non negotiable, and it appears in the product as well as the
-              report and the video. */}
-          <p className="disclaimer">
-            Decision support for a clearance attorney. Not legal advice. Every
-            clearance report in this industry is reviewed by a qualified attorney
-            before a policy is bound. This system automates the research and the
-            document, not the judgement.
-          </p>
-        </aside>
-      </div>
+              {summary && (summary.coverage_warnings?.length ?? 0) > 0 && (
+                <div className="panel">
+                  <p className="panel-title">Coverage</p>
+                  {summary.coverage_warnings.map((warning) => (
+                    <div className="warning" key={warning}>
+                      {warning}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Non negotiable, and it appears in the product as well as the
+                  report and the video. */}
+              <p className="disclaimer">
+                Decision support for a clearance attorney. Not legal advice. Every
+                clearance report in this industry is reviewed by a qualified attorney
+                before a policy is bound. This system automates the research and the
+                document, not the judgement.
+              </p>
+            </aside>
+          )}
+        </div>
       )}
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        claims={claims}
+        elements={elements}
+        persons={persons}
+        commands={commands}
+        onSelectClaim={openSubject}
+        onSelectElement={openSubject}
+      />
     </div>
   );
+}
+
+function stageTitle(stage: string): string {
+  const titles: Record<string, string> = {
+    ingest: "Parsing the screenplay",
+    claims: "Decomposing the dialogue into claims",
+    ledger: "Collapsing mentions into subjects",
+    routing: "Routing every subject by risk",
+    research: "Researching against the live record",
+    adjudication: "Turning evidence into verdicts",
+    remedy: "Drafting verified rewrites",
+    report: "Assembling the clearance package",
+  };
+  return titles[stage.toLowerCase()] ?? "Working";
 }

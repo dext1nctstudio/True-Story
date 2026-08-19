@@ -268,6 +268,13 @@ class ClaimExtractor:
         source = span.context or span.surface_form
         sentences = [s.strip() for s in _split_sentences(source) if len(s.strip()) > 12]
 
+        # The context is a window over the scene, so its last sentence is
+        # routinely cut off mid thought. Splitting on terminal punctuation
+        # means an unterminated tail is exactly that fragment, and a fragment
+        # is not an assertion anybody made.
+        if len(sentences) > 1 and not sentences[-1].rstrip().endswith((".", "!", "?", '"')):
+            sentences.pop()
+
         # span.context is the surrounding scene text, not a window scoped to
         # this entity, so without filtering, every claim-bearing span in the
         # same scene reprocesses the identical sentences and each claim gets
@@ -279,7 +286,15 @@ class ClaimExtractor:
             sentences = scoped or sentences[:1]
 
         claims: list[FactualClaim] = []
-        for sentence in sentences[:6]:
+        for raw in sentences[:6]:
+            # Scoping above matches on the raw sentence, which still carries
+            # the character cue that names the speaker. The cue is stripped
+            # only here, for the claim's own text: doing it earlier removed the
+            # very token the scoping filter matches on, and two thirds of the
+            # claims in an offline run disappeared with it.
+            sentence = _clean_sentence(raw)
+            if len(sentence) < 12:
+                continue
             lowered = sentence.lower()
             words = set(lowered.replace(",", " ").replace(".", " ").split())
 
@@ -337,6 +352,37 @@ def _split_sentences(text: str) -> list[str]:
     import re
 
     return re.split(r"(?<=[.!?])\s+", text)
+
+
+def _clean_sentence(text: str) -> str:
+    """One line of prose out of a block of screenplay.
+
+    Sentences are split on terminal punctuation, and a screenplay puts a
+    character cue on its own line with no punctuation after it, so the cue is
+    swallowed into the sentence that follows: "ARTHUR\\nThey're saying you'll
+    not make Karachi." The claim then carries the speaker's name inside its own
+    text, which reads as a mistake in the review queue and pollutes the
+    identifier the cache is keyed on.
+    """
+
+    lines = [line.strip() for line in text.splitlines()]
+    # The cue is a line of its own, which is the only thing that distinguishes
+    # it from a character named mid action: "ARTHUR PENN enters. Fifties." must
+    # keep its subject, while a cue line above dialogue must lose it. Testing
+    # the collapsed string cannot tell those apart, so the line break is
+    # checked before the whitespace is collapsed.
+    while lines and _is_cue_line(lines[0]):
+        lines.pop(0)
+    return " ".join(" ".join(lines).split()).strip()
+
+
+def _is_cue_line(line: str) -> bool:
+    """A character cue: all caps, short, no sentence punctuation of its own."""
+    import re
+
+    if not line or len(line) > 40:
+        return False
+    return bool(re.fullmatch(r"[A-Z][A-Z0-9 '\-]*(\s*\([^)]*\))?", line))
 
 
 _CLAIM_RESPONSE_SCHEMA: dict[str, Any] = {

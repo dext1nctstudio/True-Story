@@ -207,6 +207,18 @@ budget_policy:
   never_degrade_tiers: [CRITICAL]
   warn_at_fraction: 0.80
 
+  # What this run is being compared against. Every "cheaper than" figure in the
+  # product, the report and the cost panel resolves from here, so the claim is
+  # a policy value an attorney can argue with rather than a constant buried in
+  # a React component. Ranges are vendor published rates for a first full
+  # feature report; see Agentic Cin.md §5.3 for the sources.
+  manual_baseline:
+    report_usd_low: 1000
+    report_usd_high: 3000
+    turnaround_days_low: 3
+    turnaround_days_high: 10
+    source: "Vendor published rates for a first full feature clearance report"
+
 # -----------------------------------------------------------------------------
 # concurrency
 # -----------------------------------------------------------------------------

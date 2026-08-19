@@ -42,15 +42,74 @@ class Citation:
     published_at: datetime | None = None
     reliability: float | None = None  # provider supplied, 0..1
 
+    # ── pedigree, filled by providers.source_quality at ingestion ───────────
+    # A research API returns a URL and an excerpt. What kind of source that URL
+    # is decides whether a CONTRADICTED verdict may stand, so it is classified
+    # once, on the way in, rather than assumed downstream.
+    source_class: str = "unknown"  # official | registry | archive | news | …
+    trust: float = 0.5  # 0..1, weights corroboration
+    verified_source: bool = False  # False: host was not in any table
+
     @property
     def is_primary(self) -> bool:
         return self.source_type == "primary"
+
+    @property
+    def is_classified_primary(self) -> bool:
+        """Primary *and* recognised, which is what a red line requires.
+
+        A researcher declaring its own blog a primary record does not make it
+        one. This is the stricter test the rubric uses for CONTRADICTED.
+        """
+        return self.source_type == "primary" and self.verified_source
+
+    @property
+    def domain(self) -> str:
+        from truestory.providers.source_quality import registrable_domain
+
+        return registrable_domain(self.url)
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["accessed_at"] = self.accessed_at.isoformat()
         d["published_at"] = self.published_at.isoformat() if self.published_at else None
+        d["domain"] = self.domain
         return d
+
+    @classmethod
+    def classified(
+        cls,
+        url: str,
+        title: str = "",
+        excerpt: str = "",
+        *,
+        declared_type: str | None = None,
+        publisher: str | None = None,
+        published_at: datetime | None = None,
+        accessed_at: datetime | None = None,
+    ) -> Citation:
+        """Build a citation with its pedigree resolved from the URL.
+
+        Every provider funnels through here, so there is exactly one place
+        where a URL becomes a typed, weighted source, and no provider can
+        accidentally reintroduce the "everything is secondary" default that
+        made the CONTRADICTED verdict unreachable.
+        """
+        from truestory.providers.source_quality import assess
+
+        verdict = assess(url, declared_type)
+        return cls(
+            url=url,
+            title=(title or verdict.host or url)[:300],
+            excerpt=(excerpt or "")[:1200],
+            accessed_at=accessed_at or _now(),
+            source_type=verdict.source_type,
+            publisher=publisher or (verdict.host or None),
+            published_at=published_at,
+            source_class=verdict.source_class,
+            trust=verdict.trust,
+            verified_source=verdict.verified,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +162,29 @@ class Evidence:
     def primary_source_count(self) -> int:
         return sum(1 for c in self.citations if c.is_primary)
 
+    @property
+    def classified_primary_count(self) -> int:
+        """Primary sources on a recognised host. The strict count."""
+        return sum(1 for c in self.citations if c.is_classified_primary)
+
+    @property
+    def low_trust_count(self) -> int:
+        return sum(1 for c in self.citations if c.source_class == "user")
+
+    @property
+    def domains(self) -> set[str]:
+        """Distinct registrable domains. Two pages on one site are one source."""
+        return {c.domain for c in self.citations if c.domain}
+
+    @property
+    def source_strength(self) -> float:
+        """Best trust score among the citations, 0 when there are none.
+
+        Used to weight, not to decide. The adjudicator's rules read the counts;
+        this is the single number the UI puts on a source pedigree meter.
+        """
+        return max((c.trust for c in self.citations), default=0.0)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "evidence_id": self.evidence_id,
@@ -121,6 +203,12 @@ class Evidence:
             "cached": self.cached,
             "retrieved_at": self.retrieved_at.isoformat(),
             "error": self.error,
+            # Pedigree, so the UI and the report can show what the verdict is
+            # standing on without re deriving it from the citation list.
+            "primary_source_count": self.primary_source_count,
+            "classified_primary_count": self.classified_primary_count,
+            "independent_domains": sorted(self.domains),
+            "source_strength": round(self.source_strength, 3),
         }
 
     @staticmethod

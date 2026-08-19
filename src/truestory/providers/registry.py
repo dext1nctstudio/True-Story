@@ -241,6 +241,10 @@ class ProviderRegistry:
             evidence.provider,
             cached=evidence.cached,
             reserved=cost,
+            # What this lookup would have cost had it gone out. On a hit the
+            # difference is the saving, which is otherwise unrecoverable once
+            # the envelope comes back stamped zero.
+            list_price_cents=cost,
         )
 
         if evidence.is_usable and not evidence.cached:

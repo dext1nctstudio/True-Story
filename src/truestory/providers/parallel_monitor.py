@@ -39,7 +39,9 @@ class ParallelMonitorProvider(ResearchProvider):
     name = "parallel_monitor"
     supports_citations = True
     supports_async = True
-    unit_cost_cents = 0.3  # per check, lite cadence
+    #: Per completed check. Lite $3 per 1000, base $10 per 1000. Verified
+    #: 19 August 2026 against https://docs.parallel.ai/getting-started/pricing
+    unit_cost_cents = 0.3
 
     def __init__(
         self,
@@ -150,11 +152,11 @@ class ParallelMonitorProvider(ResearchProvider):
         for things that happen after delivery.
         """
         citations = [
-            Citation(
+            Citation.classified(
                 url=c.get("url", ""),
                 title=c.get("title") or c.get("url", ""),
                 excerpt=(c.get("excerpt") or "")[:1000],
-                source_type=c.get("source_type", "secondary"),
+                declared_type=c.get("source_type"),
             )
             for c in (event.get("citations") or [])
             if c.get("url")
@@ -189,11 +191,11 @@ class ParallelMonitorProvider(ResearchProvider):
             question=request.question,
             finding=handle.to_dict(),
             citations=[
-                Citation(
+                Citation.classified(
                     url="https://parallel.ai/monitor",
                     title="Monitor created",
                     excerpt=f"Recurring watch established at {handle.cadence} cadence.",
-                    source_type="tertiary",
+                    declared_type="tertiary",
                 )
             ],
             reasoning=f"Watch created: {handle.reason or 'ongoing rights and facts surveillance'}.",

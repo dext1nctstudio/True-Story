@@ -22,11 +22,23 @@ interface Props {
   onFile: (file: File) => void;
   uploading: boolean;
   uploadError: string | null;
+  /** Named by the role. A carrier opens "filed packages", not "the docket". */
+  title?: string;
+  /** The underwriter is outside the trust boundary and does not start runs. */
+  canUpload?: boolean;
 }
 
 const TERMINAL = new Set(["COMPLETE", "FAILED"]);
 
-export function Dashboard({ runs, onOpen, onFile, uploading, uploadError }: Props) {
+export function Dashboard({
+  runs,
+  onOpen,
+  onFile,
+  uploading,
+  uploadError,
+  title = "The docket",
+  canUpload = true,
+}: Props) {
   const stats = useMemo(() => {
     const totals = { green: 0, amber: 0, red: 0, grey: 0 };
     let cost = 0;
@@ -51,15 +63,18 @@ export function Dashboard({ runs, onOpen, onFile, uploading, uploadError }: Prop
     <div className="dashboard">
       <div className="dashboard-hero">
         <div className="dashboard-welcome">
-          <h1 className="dashboard-title">The docket</h1>
+          <h1 className="dashboard-title">{title}</h1>
           <p className="dashboard-subtitle">
             Every claim about a real person, checked against the record before a line
-            reaches a set. Drop a draft below to open a new matter.
+            reaches a set.
+            {canUpload && " Drop a draft below to open a new matter."}
           </p>
         </div>
-        <div className="upload-card">
-          <UploadZone onFile={onFile} uploading={uploading} error={uploadError} />
-        </div>
+        {canUpload && (
+          <div className="upload-card">
+            <UploadZone onFile={onFile} uploading={uploading} error={uploadError} />
+          </div>
+        )}
       </div>
 
       <div className="stat-grid">

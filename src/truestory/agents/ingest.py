@@ -465,11 +465,33 @@ def _span(
         line_no=line_no,
         element_type=element_type,
         surface_form=surface,
-        context=context.strip()[:400],
+        context=_context_window(context),
         modality=modality,
         extraction_confidence=confidence,
         character_cue=cue,
     )
+
+
+#: How much surrounding scene text a span carries. Long enough for the offline
+#: claim extractor to see whole sentences, short enough to keep a cache key
+#: stable across a redraft that only touched the paragraph below.
+_CONTEXT_CHARS = 400
+
+
+def _context_window(context: str) -> str:
+    """Trim the context to a word boundary rather than a character count.
+
+    A hard slice at 400 characters cut mid word, and the offline extractor then
+    treated the fragment as a sentence: the demo script produced a claim whose
+    entire text was "They're sayi", which was researched, adjudicated and shown
+    in the review queue exactly like a real assertion.
+    """
+    text = context.strip()
+    if len(text) <= _CONTEXT_CHARS:
+        return text
+    cut = text[:_CONTEXT_CHARS]
+    boundary = cut.rfind(" ")
+    return (cut[:boundary] if boundary > _CONTEXT_CHARS // 2 else cut).rstrip()
 
 
 #: Capitalised tokens that are formatting, not names.

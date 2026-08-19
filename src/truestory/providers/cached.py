@@ -111,12 +111,22 @@ class CachedProvider(ResearchProvider):
         backend: CacheBackend | None = None,
         *,
         write_through: bool = True,
+        max_age_days: int | None = None,
     ) -> None:
         self.inner = inner
         self.backend = backend or LocalCacheBackend()
         self.write_through = write_through
+        # Facts move. A verified claim about a living person, answered from a
+        # six month old envelope, is a stale answer presented as a current one,
+        # and the retrieval date in the report would then be a fiction. Live
+        # runs re research anything past the ceiling; replay and mock keep
+        # every entry, because a byte identical rerun is the whole point there.
+        self.max_age_days = (
+            max_age_days if max_age_days is not None else settings.cache_max_age_days
+        )
         self.hits = 0
         self.misses = 0
+        self.expired = 0
 
     def _usable(self, entry: dict[str, Any] | None) -> bool:
         """Whether a cached entry may answer for the current mode.
@@ -131,7 +141,27 @@ class CachedProvider(ResearchProvider):
             return False
         if settings.offline:
             return True
-        return entry.get("provider") != "mock"
+        if entry.get("provider") == "mock":
+            return False
+        return not self._is_stale(entry)
+
+    def _is_stale(self, entry: dict[str, Any]) -> bool:
+        """Whether this envelope is older than a live run may rely on."""
+        if not settings.is_live or self.max_age_days <= 0:
+            return False
+        stamp = entry.get("retrieved_at")
+        if not stamp:
+            return False
+        try:
+            retrieved = datetime.fromisoformat(str(stamp))
+        except ValueError:
+            return False
+        if retrieved.tzinfo is None:
+            retrieved = retrieved.replace(tzinfo=UTC)
+        stale = (datetime.now(UTC) - retrieved).days > self.max_age_days
+        if stale:
+            self.expired += 1
+        return stale
 
     def has(self, request: ResearchRequest) -> bool:
         return self._usable(self.backend.get(request.cache_key()))
@@ -187,6 +217,11 @@ def _evidence_from_dict(data: dict[str, Any], *, cached: bool = False) -> Eviden
             accessed_at=_parse_dt(c.get("accessed_at")),
             source_type=c.get("source_type", "secondary"),
             publisher=c.get("publisher"),
+            published_at=_parse_optional_dt(c.get("published_at")),
+            # Entries written before the pedigree fields existed are
+            # reclassified on read rather than served with an unknown class,
+            # so an old cache does not quietly disable the source rules.
+            **_pedigree(c),
         )
         for c in data.get("citations", [])
     ]
@@ -207,6 +242,28 @@ def _evidence_from_dict(data: dict[str, Any], *, cached: bool = False) -> Eviden
         retrieved_at=_parse_dt(data.get("retrieved_at")),
         error=data.get("error"),
     )
+
+
+def _pedigree(citation: dict[str, Any]) -> dict[str, Any]:
+    """Pedigree fields, reclassified when the cached entry predates them."""
+    if citation.get("source_class") and citation.get("source_class") != "unknown":
+        return {
+            "source_class": citation["source_class"],
+            "trust": float(citation.get("trust", 0.5)),
+            "verified_source": bool(citation.get("verified_source", False)),
+        }
+    from truestory.providers.source_quality import assess
+
+    verdict = assess(citation.get("url", ""), citation.get("source_type"))
+    return {
+        "source_class": verdict.source_class,
+        "trust": verdict.trust,
+        "verified_source": verdict.verified,
+    }
+
+
+def _parse_optional_dt(value: Any) -> datetime | None:
+    return _parse_dt(value) if value else None
 
 
 def _parse_dt(value: Any) -> datetime:

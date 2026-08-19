@@ -28,6 +28,9 @@ APIs.
 4. [Architecture](#4-architecture)
 5. [The eight stages](#5-the-eight-stages)
 6. [Where the domain knowledge lives](#6-where-the-domain-knowledge-lives)
+   - [How a verdict is allowed to exist](#how-a-verdict-is-allowed-to-exist)
+   - [Cost, in two bills](#6a-cost-in-two-bills)
+   - [Four roles, four workspaces](#6b-four-roles-four-workspaces)
 7. [The Parallel integration](#7-the-parallel-integration)
 8. [Google Cloud services in runtime use](#8-google-cloud-services-in-runtime-use)
 9. [Governance and privacy](#9-governance-and-privacy)
@@ -300,9 +303,12 @@ The deterministic post checks that run **after** the model, never by it:
 | Condition | Action |
 |---|---|
 | Confidence below threshold | Counsel queue |
-| Sources conflict | Counsel queue, both surfaced side by side |
+| Sources conflict, or the payload returned facts on both sides | Counsel queue, both surfaced side by side |
 | Contradicted plus a living subject | Counsel queue, regardless of confidence |
-| Contradiction on secondary sources only | Downgraded to unsupported |
+| Contradiction without a **recognised** primary record | Downgraded to unsupported |
+| Every source user generated or unattributable | Downgraded, cannot carry a verdict about a person |
+| Fewer independent domains than the tier requires | Counsel queue, confidence capped |
+| The model's verdict disagrees with its own research payload | Counsel queue, confidence capped |
 | Any fallback evidence | Confidence capped |
 | Amber density per named living person over threshold | The person escalates |
 
@@ -317,6 +323,92 @@ Post mortem publicity terms range from nothing to seventy five years depending
 on the state of domicile at death. The same depiction of the same deceased
 person is a licence negotiation in one jurisdiction and a non issue in another,
 which makes this a product surface rather than a config detail.
+
+
+### How a verdict is allowed to exist
+
+Three things stand between a research answer and a verdict on screen, and all
+three are code rather than prompt text.
+
+**1. Every citation is classified from its host.**
+[`source_quality.py`](src/truestory/providers/source_quality.py) resolves a URL
+to a source class — official record, registry, archive, reporting, trade,
+reference, user generated — and the table wins in both directions. A
+courtlistener docket the researcher called "secondary" is promoted; a Wikipedia
+page it called "primary" is demoted. An unrecognised host keeps whatever was
+declared and is marked unverified, so a rule can require a classified record
+rather than an asserted one.
+
+This is load bearing. Parallel's Basis citations carry a URL and excerpts and
+nothing else, so before this existed every citation in a live run defaulted to
+"secondary" and the rubric's `contradicted_requires_primary_source` silently
+downgraded **every red line in the product** to amber.
+
+**2. Corroboration is counted, not asserted.**
+[`corroboration.py`](src/truestory/agents/corroboration.py) reports independent
+domains (eTLD+1, because five pages on one site are one source), how many
+recognised records are behind the finding, how many sources are user generated,
+what the research payload itself concluded from its own schema fields, and
+whether it returned supporting and contradicting facts at the same time.
+
+**3. Confidence may not exceed what that supports.** The corroboration score
+caps confidence before any threshold is applied, so a single tertiary source
+cannot produce a 0.95 verdict however certain the model sounded.
+
+All of it is on screen. The evidence panel shows the count of independent
+sources, how many are records, the payload's own signal, and a per source badge
+naming the class the host was classified as.
+
+---
+
+## 6a. Cost, in two bills
+
+Research and model spend are different invoices and are never blended into one
+number, because a blended figure cannot be checked against either.
+
+| Bill | Priced | Governed by the per script ceiling |
+|---|---|---|
+| Parallel Task, Search, Extract, FindAll, Monitor | per run, per URL, per match, per check | yes |
+| Gemini | per token, with a cached input tier | no, deliberately |
+
+Charging model tokens against the research ceiling would silently reduce the
+research a script can buy, so they are metered separately and reported side by
+side.
+
+Every rate in the product resolves from one place and is served over the API,
+so nothing in the UI restates a price of its own:
+
+```bash
+curl localhost:8080/v1/pricing                    # published unit prices, with the date they were verified
+curl localhost:8080/v1/runs/$RUN/cost             # research, model, cache saving, projection against actual, unit economics
+curl -X POST localhost:8080/v1/estimate   -H 'content-type: application/json'   -d '{"pages":105,"drafts":4,"cache_hit_rate":0.9}'   # the pre flight calculator
+```
+
+The estimator runs the same subject density and the same processor prices the
+router actually uses, so the number on the marketing surface and the number on
+the meter are the same arithmetic. A redraft's model half is **not** discounted
+by the cache: a rewritten draft is re read end to end whatever changed in it,
+and only research, adjudication and remedy scale with the delta.
+
+---
+
+## 6b. Four roles, four workspaces
+
+The role control selects a workspace, not a filter. Each role has its own
+landing surface, rail, actions and accent, because these are four different
+jobs, and [`web/lib/roles.ts`](web/lib/roles.ts) mirrors `VIEW_MATRIX` in
+[`api/security.py`](src/truestory/api/security.py) so a role never renders a
+panel the server would refuse.
+
+| Role | Opens on | Gets | Does not get |
+|---|---|---|---|
+| **Counsel** | The docket, then the annotated script | Evidence, register, queue, overrides, unmask, cost | — |
+| **Producer** | Production risk | Exposure by person and by page, spend against a manual report, counsel workload, watches | The research itself |
+| **Writer** | Lines to look at | Their draft, verdicts, verified rewrites | Cost, evidence, register, queue |
+| **Underwriter** | The filed package | Report, clearance log, evidence appendix, watermarked | The working draft, live cost, open items |
+
+A role is also a link: `?role=truestory.producer` opens that workspace, so
+"here is what the carrier sees" is a URL rather than a set of instructions.
 
 ---
 

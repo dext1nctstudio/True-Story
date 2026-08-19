@@ -28,6 +28,7 @@ import json
 import logging
 from typing import Any
 
+from truestory.agents import corroboration as corr
 from truestory.config import settings
 from truestory.models.claims import ClaimRollup, FactualClaim
 from truestory.models.elements import ClearableElement
@@ -195,7 +196,13 @@ class Adjudicator:
             )
             return
 
-        call = await self._call_model_for_claim(claim, usable)
+        # What the record actually holds, counted before anything is decided:
+        # independent domains, source pedigree, and the conclusion the research
+        # payload reached in its own fields. The model sees this, and the post
+        # checks below apply it whatever the model says.
+        report = corr.analyse(usable)
+
+        call = await self._call_model_for_claim(claim, usable, report)
         verdict = _parse_verdict(call.get("verdict"))
         confidence = float(call.get("confidence", 0.0))
         rationale = call.get("rationale", "")
@@ -210,8 +217,9 @@ class Adjudicator:
         # ── deterministic post checks ────────────────────────────────────────
         confidence = self._cap_for_fallback(confidence, cited)
         verdict, confidence, escalation = self._post_check_claim(
-            claim, verdict, confidence, cited, bool(call.get("sources_conflict"))
+            claim, verdict, confidence, cited, bool(call.get("sources_conflict")), report
         )
+        claim.corroboration = report.to_dict()
 
         try:
             claim.record_verdict(verdict, confidence, rationale, cited)
@@ -246,8 +254,32 @@ class Adjudicator:
         confidence: float,
         evidence: list[Evidence],
         sources_conflict: bool,
+        report: corr.Corroboration | None = None,
     ) -> tuple[Verdict, float, str | None]:
         """The rubric as code. Runs after the model, never by it."""
+        report = report or corr.analyse(evidence)
+
+        # A verdict may never be more confident than its corroboration allows.
+        # One tertiary source cannot produce a 0.95 however certain the model
+        # sounded, and this is applied before every other check so that the
+        # confidence threshold below sees the honest number.
+        confidence = min(confidence, self.rubric.corroboration_cap(report.score))
+
+        # Forums, social posts and content farms may corroborate a finding.
+        # They may not settle one about a real person.
+        if (
+            self.rubric.low_trust_cannot_decide
+            and report.low_trust_only
+            and verdict in (Verdict.VERIFIED, Verdict.CONTRADICTED)
+        ):
+            return (
+                Verdict.UNSUPPORTED,
+                min(confidence, 0.4),
+                (
+                    "Every source is user generated or unattributable. Downgraded to "
+                    "unsupported: this cannot settle a claim about a real person."
+                ),
+            )
 
         # A false factual claim about a living person is the claim that gets
         # filed. It goes to a human regardless of how confident the model was.
@@ -259,11 +291,17 @@ class Adjudicator:
             )
 
         # A contradiction is the heaviest thing this system says, so it must
-        # rest on a primary source rather than a summary of one.
+        # rest on a primary source rather than a summary of one — and on a
+        # source recognised as a record, not one that merely described itself
+        # as primary. Before the classifier existed every citation defaulted to
+        # "secondary", so this rule silently downgraded every red line in the
+        # product to amber and the headline output was unreachable.
+        strict = self.rubric.contradicted_requires_classified_primary
+        primary_count = report.classified_primary_count if strict else report.primary_count
         if (
             verdict is Verdict.CONTRADICTED
             and self.rubric.contradicted_requires_primary_source
-            and not any(e.primary_source_count for e in evidence)
+            and not primary_count
         ):
             return (
                 Verdict.UNSUPPORTED,
@@ -274,13 +312,35 @@ class Adjudicator:
                 ),
             )
 
-        if sources_conflict:
+        # The model's verdict against the conclusion its own research reached.
+        # A disagreement here is the single most informative signal available
+        # and it used to be discarded on the floor of the response parser.
+        mismatch = corr.disagreement(str(verdict), report)
+        if mismatch:
+            return verdict, min(confidence, 0.55), mismatch
+
+        if sources_conflict or report.conflict:
             return (
                 verdict,
                 min(confidence, 0.6),
                 (
                     "Sources conflict. Both readings are surfaced side by side and the "
                     "system declines to choose."
+                ),
+            )
+
+        # Corroboration, counted as distinct domains. Five URLs on one site are
+        # one source, and a claim about a living person resting on one site is
+        # not a checked claim.
+        required_domains = self.rubric.min_independent_domains(claim.risk_tier)
+        if report.independent_domains < required_domains:
+            return (
+                verdict,
+                min(confidence, 0.7),
+                (
+                    f"Corroborated by {report.independent_domains} independent "
+                    f"source{'' if report.independent_domains == 1 else 's'}, and tier "
+                    f"{claim.risk_tier} requires {required_domains}."
                 ),
             )
 
@@ -369,7 +429,8 @@ class Adjudicator:
             self._queue(element.element_id, "element", "Research failed", element.canonical_form)
             return
 
-        call = await self._call_model_for_element(element, usable)
+        report = corr.analyse(usable)
+        call = await self._call_model_for_element(element, usable, report)
         status = _parse_status_enum(call.get("status"))
         confidence = self._cap_for_fallback(float(call.get("confidence", 0.0)), usable)
         cited = [
@@ -378,8 +439,9 @@ class Adjudicator:
 
         self._infer_person_facts(element, cited)
         status, confidence, escalation = self._post_check_element(
-            element, status, confidence, cited, bool(call.get("sources_conflict"))
+            element, status, confidence, cited, bool(call.get("sources_conflict")), report
         )
+        element.corroboration = report.to_dict()
 
         try:
             element.record_adjudication(
@@ -419,12 +481,51 @@ class Adjudicator:
         confidence: float,
         evidence: list[Evidence],
         sources_conflict: bool,
+        report: corr.Corroboration | None = None,
     ) -> tuple[ClearanceStatus, float, str | None]:
-        if sources_conflict:
+        report = report or corr.analyse(evidence)
+
+        # Same ceiling as a claim: a clearance position may not be more
+        # confident than the sources behind it allow.
+        confidence = min(confidence, self.rubric.corroboration_cap(report.score))
+
+        if sources_conflict or report.conflict:
             return (
                 ClearanceStatus.NEEDS_COUNSEL,
                 min(confidence, 0.6),
                 ("Sources conflict on the rights position. Both are surfaced side by side."),
+            )
+
+        # A licence requirement, a rights holder or a chain of title asserted
+        # from forum posts is not a clearance position, whatever the model's
+        # confidence. This is the same rule the claim path applies, stated for
+        # the consequences that cost money rather than for a verdict colour.
+        if (
+            self.rubric.low_trust_cannot_decide
+            and report.low_trust_only
+            and status in _CONSEQUENTIAL_FOR_PERSON
+        ):
+            return (
+                ClearanceStatus.NEEDS_COUNSEL,
+                min(confidence, 0.4),
+                (
+                    "Every source is user generated or unattributable. A rights "
+                    "position cannot rest on it."
+                ),
+            )
+
+        # Corroboration, counted as distinct domains rather than URLs.
+        required_domains = self.rubric.min_independent_domains(element.risk_tier)
+        if status in _CONSEQUENTIAL_FOR_PERSON and report.independent_domains < required_domains:
+            return (
+                ClearanceStatus.NEEDS_COUNSEL,
+                min(confidence, 0.6),
+                (
+                    f"Corroborated by {report.independent_domains} independent "
+                    f"source{'' if report.independent_domains == 1 else 's'}, and tier "
+                    f"{element.risk_tier} requires {required_domains} before a "
+                    "consequential clearance position is recorded."
+                ),
             )
 
         # Identity before consequence. Searching a name returns whoever shares
@@ -621,19 +722,27 @@ class Adjudicator:
 
     # ── model calls ──────────────────────────────────────────────────────────
     async def _call_model_for_claim(
-        self, claim: FactualClaim, evidence: list[Evidence]
+        self,
+        claim: FactualClaim,
+        evidence: list[Evidence],
+        report: corr.Corroboration | None = None,
     ) -> dict[str, Any]:
         if settings.offline:
             return _offline_claim_verdict(claim, evidence)
-        return await self._forced_call(_claim_prompt(claim, evidence), RECORD_VERDICT_DECLARATION)
+        return await self._forced_call(
+            _claim_prompt(claim, evidence, report), RECORD_VERDICT_DECLARATION
+        )
 
     async def _call_model_for_element(
-        self, element: ClearableElement, evidence: list[Evidence]
+        self,
+        element: ClearableElement,
+        evidence: list[Evidence],
+        report: corr.Corroboration | None = None,
     ) -> dict[str, Any]:
         if settings.offline:
             return _offline_element_status(element, evidence)
         return await self._forced_call(
-            _element_prompt(element, evidence), RECORD_ADJUDICATION_DECLARATION
+            _element_prompt(element, evidence, report), RECORD_ADJUDICATION_DECLARATION
         )
 
     async def _forced_call(self, prompt: str, declaration: dict[str, Any]) -> dict[str, Any]:
@@ -764,7 +873,9 @@ _DETERMINISTIC = frozenset(
 )
 
 
-def _claim_prompt(claim: FactualClaim, evidence: list[Evidence]) -> str:
+def _claim_prompt(
+    claim: FactualClaim, evidence: list[Evidence], report: corr.Corroboration | None = None
+) -> str:
     return (
         f"CLAIM ID: {claim.claim_id}\n"
         f"SUBJECT: {claim.subject_name}\n"
@@ -772,11 +883,14 @@ def _claim_prompt(claim: FactualClaim, evidence: list[Evidence]) -> str:
         f"CLAIM TYPE: {claim.claim_type}\n"
         f"REPUTATIONAL POLARITY: {claim.polarity}\n"
         f"RISK TIER: {claim.risk_tier}\n\n"
+        f"{_pedigree_block(report)}"
         "EVIDENCE:\n" + _format_evidence(evidence)
     )
 
 
-def _element_prompt(element: ClearableElement, evidence: list[Evidence]) -> str:
+def _element_prompt(
+    element: ClearableElement, evidence: list[Evidence], report: corr.Corroboration | None = None
+) -> str:
     return (
         f"ELEMENT ID: {element.element_id}\n"
         f"TYPE: {element.element_type}\n"
@@ -784,15 +898,45 @@ def _element_prompt(element: ClearableElement, evidence: list[Evidence]) -> str:
         f"OCCURRENCES: {element.occurrence_count}\n"
         f"JURISDICTIONS: {', '.join(element.jurisdictions)}\n"
         f"RISK TIER: {element.risk_tier}\n\n"
+        f"{_pedigree_block(report)}"
         "EVIDENCE:\n" + _format_evidence(evidence)
     )
+
+
+def _pedigree_block(report: corr.Corroboration | None) -> str:
+    """State what the sources are worth before the model reads them.
+
+    Without this the model sees six URLs and treats them as six sources. It is
+    told the count that actually matters, which domains they resolve to, and
+    whether any of them is a record rather than a description of one.
+    """
+    if report is None or report.citation_count == 0:
+        return ""
+    lines = [
+        "SOURCE PEDIGREE (counted, not asserted):",
+        f"  independent domains: {report.independent_domains}"
+        f" ({', '.join(report.domains[:6]) or 'none'})",
+        f"  recognised primary records: {report.classified_primary_count}"
+        f" of {report.citation_count} citations",
+        f"  user generated or unattributable sources: {report.low_trust_count}",
+        f"  research payload's own conclusion: {report.record_signal.lower()}",
+    ]
+    if report.record_quality:
+        lines.append(f"  record quality: {report.record_quality}")
+    if report.conflict:
+        lines.append("  the payload returned both supporting AND contradicting findings")
+    if report.single_source:
+        lines.append("  WARNING: every citation resolves to a single domain")
+    return "\n".join(lines) + "\n\n"
 
 
 def _format_evidence(evidence: list[Evidence]) -> str:
     blocks: list[str] = []
     for e in evidence:
         sources = "\n".join(
-            f"      - [{c.source_type}] {c.title} ({c.url})\n        {c.excerpt[:300]}"
+            f"      - [{c.source_type}/{c.source_class}"
+            f"{'' if c.verified_source else ', unrecognised host'}]"
+            f" {c.title} ({c.url})\n        {c.excerpt[:300]}"
             for c in e.citations[:6]
         )
         blocks.append(

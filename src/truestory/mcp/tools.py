@@ -168,6 +168,18 @@ _Q_ENTITY = (
     "of complaint from a current occupant."
 )
 
+_Q_INTERROGATE = (
+    "Find sources bearing on a specific question a clearance reviewer has asked "
+    "while reading one line of a screenplay.\n\n"
+    "QUESTION: {question}\n"
+    "SUBJECT: {subject}\n"
+    "JURISDICTIONS: {jurisdictions}\n\n"
+    "Return the passages that bear on the question directly, preferring records, "
+    "registers, dockets and contemporaneous reporting over summaries of them. Do "
+    "not resolve the question: return what the sources say and let the reviewer "
+    "read them."
+)
+
 
 # =============================================================================
 # tool implementations
@@ -437,6 +449,51 @@ class ClearanceTools:
         )
         results = await provider.enumerate(request)  # type: ignore[attr-defined]
         return [e.to_dict() for e in results]
+
+    async def interrogate(
+        self,
+        subject_id: str,
+        question: str,
+        *,
+        subject: str = "",
+        max_results: int = 8,
+    ) -> dict[str, Any]:
+        """Answer one ad hoc question about a subject, now, with sources.
+
+        The verification path is a multi hop research run against a schema, and
+        it is the right shape for two hundred subjects and the wrong shape for
+        the question a reviewer asks while looking at one line: "who else says
+        this", "what is the source for the 1931 date", "is there anything more
+        recent". That question wants a single round trip and excerpts, which is
+        exactly what Search is for, at a tenth of a cent.
+
+        The answer is deliberately capped at low confidence in the provider and
+        never enters adjudication. It is a lead, not a finding, and the panel
+        that shows it says so.
+        """
+        provider = self.registry.get("parallel_search")
+        objective = _Q_INTERROGATE.format(
+            question=question.strip(),
+            subject=subject or "not stated",
+            jurisdictions=", ".join(self.jurisdictions),
+        )
+        request = ResearchRequest(
+            subject_id=subject_id,
+            question=objective,
+            output_schema={},
+            schema_name="interrogation_v1",
+            tier=RiskTier.LOW,
+            processor=Processor.LITE,
+            jurisdictions=self.jurisdictions,
+            max_results=max_results,
+            # The literal queries the API also wants, kept short: the objective
+            # carries the framing, these carry the terms.
+            search_queries=tuple(q for q in (question.strip(), subject.strip()) if q)[:2],
+        )
+        evidence = await provider.investigate(request)
+        payload = evidence.to_dict()
+        payload["interrogation"] = True
+        return payload
 
     async def capture_evidence_page(self, subject_id: str, url: str) -> dict[str, Any]:
         """Preserve a registry, docket or archive page into the evidence pack.

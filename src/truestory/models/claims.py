@@ -50,6 +50,10 @@ class FactualClaim:
     confidence: float = 0.0
     rationale: str = ""
     evidence: list[Evidence] = field(default_factory=list)
+    #: How well corroborated the verdict is: independent domains, source
+    #: pedigree, and whether the research payload agreed with the verdict.
+    #: Written by the Adjudicator, read by the UI and the report.
+    corroboration: dict[str, Any] = field(default_factory=dict)
 
     # ── subject facts that change the legal standard ─────────────────────────
     subject_alive: bool | None = None
@@ -135,6 +139,7 @@ class FactualClaim:
             "awaiting_confirmation": self.awaiting_confirmation,
             "remedy_id": self.remedy_id,
             "citation_count": self.citation_count,
+            "corroboration": self.corroboration,
             "occurrences": [o.to_dict() for o in self.asserted_in],
             "adjudicated_at": self.adjudicated_at.isoformat() if self.adjudicated_at else None,
         }
