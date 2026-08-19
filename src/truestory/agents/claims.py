@@ -32,6 +32,7 @@ from truestory.config import settings
 from truestory.models.claims import FactualClaim
 from truestory.models.enums import CLAIM_BEARING, ClaimType, Polarity
 from truestory.models.spans import Occurrence, RawSpan, Scene
+from truestory.providers.model_cost import meter_response
 
 log = logging.getLogger("truestory.claims")
 
@@ -151,6 +152,7 @@ class ClaimExtractor:
                     response_schema=_CLAIM_RESPONSE_SCHEMA,
                 ),
             )
+            meter_response(self.model, response)
         except Exception as exc:
             log.warning("claim extraction failed for span %s: %s", span.span_id, exc)
             return self._extract_deterministic(span, scene)

@@ -218,8 +218,13 @@ async def list_runs(
 
     There was previously no way to discover a run's id except being handed it
     at upload time, so a run that finished while you were away from that URL
-    was effectively lost. `_RUNS` is in memory only, so this list is also
-    reset by every API restart, same as everything else in it.
+    was effectively lost.
+
+    In process runs come first because only they carry live status for a run
+    still executing. Completed runs are then merged in from the store, which
+    is what makes the list survive a restart: Firestore was being written on
+    completion but never read back, so every restart presented an empty
+    dashboard even though the runs were sitting in the database.
     """
     _require_project(principal, project_id)
     rows = [
@@ -244,7 +249,32 @@ async def list_runs(
         for state in _RUNS.values()
         if state.project_id == project_id
     ]
-    rows.sort(key=lambda r: r["started_at"], reverse=True)
+
+    live = {r["run_id"] for r in rows}
+    try:
+        for stored in get_store().list_runs(project_id):
+            run_id = stored.get("run_id")
+            if not run_id or run_id in live:
+                continue
+            summary = stored.get("summary") or {}
+            script = stored.get("script") or {}
+            created = stored.get("created_at")
+            rows.append(
+                {
+                    "run_id": run_id,
+                    "status": stored.get("status") or "COMPLETE",
+                    "script_title": script.get("title"),
+                    "started_at": created.isoformat() if hasattr(created, "isoformat") else created,
+                    "verdicts": summary.get("verdicts"),
+                    "cost_usd": summary.get("cost_usd"),
+                    "error": stored.get("error"),
+                    "restored": True,
+                }
+            )
+    except Exception:
+        log.warning("could not read persisted runs for %s", project_id, exc_info=True)
+
+    rows.sort(key=lambda r: str(r["started_at"] or ""), reverse=True)
     return {"runs": rows}
 
 
@@ -376,6 +406,7 @@ async def _execute_run(
         )
         _RUNS[run_id] = state
         get_store().create_run(config.project_id, run_id, state.to_dict())
+        _persist_artifacts(config.project_id, run_id, state)
     except Exception as exc:
         log.exception("run %s failed", run_id)
         if queue is not None:
@@ -387,13 +418,66 @@ async def _execute_run(
             source.unlink(missing_ok=True)
 
 
+def _persist_artifacts(project_id: str, run_id: str, state: RunState) -> None:
+    """Write the run's contents, not just its counters.
+
+    Persisting only the run record meant a restored run could report its
+    verdicts but never show the annotated script, because the claims, the
+    elements and the overlay lived solely in this process. The overlay is
+    stored as one document per run; the rest go to subcollections, which is
+    what `batch_put_subjects` was built for and nothing had used.
+
+    Failure here is logged and swallowed: the run itself has already
+    succeeded, and losing durability must not turn that into a failed run.
+    """
+    store = get_store()
+    try:
+        for kind, subjects in (
+            ("claims", {c.claim_id: c.to_dict() for c in state.claims}),
+            ("elements", {e.element_id: e.to_dict() for e in state.elements}),
+            ("remedies", {r.remedy_id: r.to_dict() for r in state.remedies}),
+        ):
+            if subjects:
+                store.batch_put_subjects(project_id, run_id, kind, subjects)
+
+        overlay = state.artifacts.get("report", {}).get("overlay")
+        if overlay:
+            store.put_subject(project_id, run_id, "artifacts", "overlay", overlay)
+    except Exception:
+        log.warning("could not persist artifacts for run %s", run_id, exc_info=True)
+
+
 @app.get("/v1/runs/{run_id}")
 async def get_run(run_id: str, principal: Principal = Depends(current_principal)) -> dict[str, Any]:
     state = _RUNS.get(run_id)
-    if state is None:
+    if state is not None:
+        _require_project(principal, state.project_id)
+        return apply_view(state.to_dict(), principal)
+
+    # Not in this process. It may still be a completed run from before the
+    # last restart, so fall back to the store rather than reporting a run
+    # that plainly exists as missing. The stored record carries the script,
+    # the summary and the counts; the claims and the overlay are not
+    # persisted, so a restored run opens as a summary rather than as the
+    # annotated script.
+    stored = _stored_run(run_id, principal)
+    if stored is None:
         raise HTTPException(status_code=404, detail="run not found")
-    _require_project(principal, state.project_id)
-    return apply_view(state.to_dict(), principal)
+    return apply_view({**stored, "restored": True}, principal)
+
+
+def _stored_run(run_id: str, principal: Principal) -> dict[str, Any] | None:
+    """Find a persisted run across the projects this caller may access."""
+    store = get_store()
+    for project_id in principal.project_ids:
+        try:
+            found = store.get_run(project_id, run_id)
+        except Exception:
+            log.warning("store lookup failed for %s", run_id, exc_info=True)
+            return None
+        if found:
+            return found
+    return None
 
 
 @app.get("/v1/runs/{run_id}/stream")
@@ -427,6 +511,19 @@ async def stream_run(run_id: str) -> EventSourceResponse:
 # =============================================================================
 
 
+def _stored_subjects(run_id: str, principal: Principal, kind: str) -> list[dict[str, Any]] | None:
+    """Subjects for a run restored from the store, or None if it is not there."""
+    store = get_store()
+    for project_id in principal.project_ids:
+        try:
+            if store.get_run(project_id, run_id):
+                return store.list_subjects(project_id, run_id, kind)
+        except Exception:
+            log.warning("store lookup failed for %s/%s", run_id, kind, exc_info=True)
+            return None
+    return None
+
+
 def _state_or_404(run_id: str, principal: Principal) -> RunState:
     state = _RUNS.get(run_id)
     if state is None:
@@ -440,9 +537,22 @@ async def get_overlay(
     run_id: str, principal: Principal = Depends(current_principal)
 ) -> dict[str, Any]:
     """The verdict annotated script. The money shot."""
-    state = _state_or_404(run_id, principal)
     if not can(principal, "overlay"):
         raise HTTPException(status_code=403, detail="role may not view the overlay")
+
+    # A run this process no longer holds is served from the store, so a
+    # restored run opens as the annotated script rather than as a bare
+    # summary. The overlay is rendered once at stage 8 and stored whole.
+    if run_id not in _RUNS:
+        stored = _stored_subjects(run_id, principal, "artifacts")
+        if stored is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        for record in stored:
+            if record.get("scenes"):
+                return apply_view(record, principal)
+        return apply_view({}, principal)
+
+    state = _state_or_404(run_id, principal)
     overlay = state.artifacts.get("report", {}).get("overlay", {})
     if not overlay and state.document is not None:
         # The report artifact only exists at stage 8. Build the overlay from
@@ -458,6 +568,13 @@ async def get_claims(
     verdict: str | None = None,
     principal: Principal = Depends(current_principal),
 ) -> dict[str, Any]:
+    if run_id not in _RUNS:
+        stored = _stored_subjects(run_id, principal, "claims")
+        if stored is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        rows = [c for c in stored if verdict is None or c.get("verdict") == verdict]
+        return apply_view({"claims": rows, "total": len(rows)}, principal)
+
     state = _state_or_404(run_id, principal)
     claims = [
         c.to_dict(include_evidence=principal.may_see_evidence())

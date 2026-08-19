@@ -161,6 +161,11 @@ function ScriptLine({
         dominant.color,
         isSelected ? "selected" : "",
         isFiltered ? "faded" : "",
+        // Opinion is deliberately almost unmarked, so filtering to it left the
+        // one match visually indistinguishable from the faded rest and read as
+        // nothing having happened. A match under an active filter is marked
+        // explicitly rather than relying on its verdict colour.
+        match ? "matched" : "",
       ]
         .filter(Boolean)
         .join(" ")}

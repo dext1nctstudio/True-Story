@@ -241,7 +241,12 @@ class RunSummary:
     monitors_created: int = 0
     remedies_verified: int = 0
 
+    # Research spend, priced per Parallel task run.
     cost_cents: float = 0.0
+    # Model spend, priced per Gemini token. A separate bill, reported next to
+    # the research figure rather than folded into it, because the research
+    # ceiling governs research only.
+    model_cost_cents: float = 0.0
     duration_seconds: float = 0.0
     cache_hit_rate: float = 0.0
     fallback_rate: float = 0.0
@@ -254,6 +259,15 @@ class RunSummary:
     @property
     def cost_usd(self) -> float:
         return round(self.cost_cents / 100.0, 4)
+
+    @property
+    def model_cost_usd(self) -> float:
+        return round(self.model_cost_cents / 100.0, 4)
+
+    @property
+    def total_cost_usd(self) -> float:
+        """Research plus model. What the run actually cost to produce."""
+        return round((self.cost_cents + self.model_cost_cents) / 100.0, 4)
 
     @property
     def research_subjects(self) -> int:
@@ -281,6 +295,9 @@ class RunSummary:
             "remedies_verified": self.remedies_verified,
             "cost_cents": round(self.cost_cents, 2),
             "cost_usd": self.cost_usd,
+            "model_cost_cents": round(self.model_cost_cents, 2),
+            "model_cost_usd": self.model_cost_usd,
+            "total_cost_usd": self.total_cost_usd,
             "duration_seconds": round(self.duration_seconds, 1),
             "cache_hit_rate": round(self.cache_hit_rate, 4),
             "fallback_rate": round(self.fallback_rate, 4),
