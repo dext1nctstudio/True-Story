@@ -46,12 +46,21 @@ class RunStore:
     def get_run(self, project_id: str, run_id: str) -> dict[str, Any] | None:
         raise NotImplementedError
 
+    def list_runs(self, project_id: str) -> list[dict[str, Any]]:
+        """Every persisted run for a project, newest first."""
+        raise NotImplementedError
+
     def put_subject(
         self, project_id: str, run_id: str, kind: str, subject_id: str, payload: dict[str, Any]
     ) -> None:
         raise NotImplementedError
 
     def list_subjects(self, project_id: str, run_id: str, kind: str) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    def batch_put_subjects(
+        self, project_id: str, run_id: str, kind: str, payloads: dict[str, dict[str, Any]]
+    ) -> None:
         raise NotImplementedError
 
     def put_monitor(self, project_id: str, monitor_id: str, payload: dict[str, Any]) -> None:
@@ -107,6 +116,11 @@ class MemoryRunStore(RunStore):
     def get_run(self, project_id: str, run_id: str) -> dict[str, Any] | None:
         return self._runs.get(self._key(project_id, run_id))
 
+    def list_runs(self, project_id: str) -> list[dict[str, Any]]:
+        prefix = f"{project_id}/"
+        rows = [v for k, v in self._runs.items() if k.startswith(prefix)]
+        return sorted(rows, key=lambda r: r.get("created_at") or "", reverse=True)
+
     def put_subject(
         self, project_id: str, run_id: str, kind: str, subject_id: str, payload: dict[str, Any]
     ) -> None:
@@ -114,6 +128,11 @@ class MemoryRunStore(RunStore):
 
     def list_subjects(self, project_id: str, run_id: str, kind: str) -> list[dict[str, Any]]:
         return list(self._subjects.get(self._key(project_id, run_id, kind), {}).values())
+
+    def batch_put_subjects(
+        self, project_id: str, run_id: str, kind: str, payloads: dict[str, dict[str, Any]]
+    ) -> None:
+        self._subjects.setdefault(self._key(project_id, run_id, kind), {}).update(payloads)
 
     def put_monitor(self, project_id: str, monitor_id: str, payload: dict[str, Any]) -> None:
         self._monitors[f"{project_id}/{monitor_id}"] = payload
@@ -186,6 +205,11 @@ class FirestoreRunStore(RunStore):
     def get_run(self, project_id: str, run_id: str) -> dict[str, Any] | None:
         snapshot = self._run_ref(project_id, run_id).get()
         return snapshot.to_dict() if snapshot.exists else None
+
+    def list_runs(self, project_id: str) -> list[dict[str, Any]]:
+        docs = self.db.collection("projects").document(project_id).collection("runs").stream()
+        rows = [d.to_dict() for d in docs]
+        return sorted(rows, key=lambda r: str(r.get("created_at") or ""), reverse=True)
 
     # ── subjects ─────────────────────────────────────────────────────────────
     def put_subject(

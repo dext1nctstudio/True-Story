@@ -626,11 +626,26 @@ button.counter {
 /* A header counter filter is active and this line does not match it. Fading
    rather than hiding keeps the scene readable while scanning. */
 .annotated.faded {
-  opacity: 0.24;
+  opacity: 0.14;
 }
 
 .annotated.faded:hover {
-  opacity: 0.6;
+  opacity: 0.55;
+}
+
+/* The line a filter matched. Marked explicitly because a verdict colour is
+   not enough on its own: opinion carries almost no colour by design, so
+   filtering to it otherwise looked like nothing had been found. */
+.annotated.matched {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-xs);
+  background: var(--accent-bg);
+  animation: matched-in 260ms ease-out;
+}
+
+@keyframes matched-in {
+  from { outline-color: transparent; background: transparent; }
 }
 
 .citation-badge {

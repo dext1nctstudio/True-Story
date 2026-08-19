@@ -89,7 +89,14 @@ export const listRuns = (projectId: string) =>
   get<{ runs: RunListItem[] }>(`/v1/projects/${projectId}/runs`);
 
 export const getRun = (runId: string) =>
-  get<{ run_id: string; status: string; summary: RunSummary | null }>(`/v1/runs/${runId}`);
+  get<{
+    run_id: string;
+    status: string;
+    summary: RunSummary | null;
+    /** Rebuilt from the store rather than held in the API process. Only the
+     *  run record persists, so the overlay and claims are unavailable. */
+    restored?: boolean;
+  }>(`/v1/runs/${runId}`);
 
 export const getReport = (runId: string) =>
   get<Record<string, unknown>>(`/v1/runs/${runId}/report`);

@@ -42,9 +42,24 @@ class Ledger:
     by_tier: dict[str, float] = field(default_factory=dict)
     by_provider: dict[str, float] = field(default_factory=dict)
 
+    # Model spend is a separate bill from research spend: Parallel is priced
+    # per task run, Gemini per token. Kept apart so the research ceiling still
+    # governs research, and reported together so the run's true cost is
+    # visible rather than only its research half.
+    model_cents: float = 0.0
+    model_calls: int = 0
+    model_prompt_tokens: int = 0
+    model_output_tokens: int = 0
+    by_model: dict[str, float] = field(default_factory=dict)
+
     @property
     def cache_hit_rate(self) -> float:
         return self.cache_hits / self.calls if self.calls else 0.0
+
+    @property
+    def total_cents(self) -> float:
+        """Research plus model. What the run actually costs."""
+        return self.spent_cents + self.model_cents
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -58,6 +73,14 @@ class Ledger:
             "refusals": self.refusals,
             "by_tier": {k: round(v, 4) for k, v in self.by_tier.items()},
             "by_provider": {k: round(v, 4) for k, v in self.by_provider.items()},
+            "model_cents": round(self.model_cents, 4),
+            "model_usd": round(self.model_cents / 100, 4),
+            "model_calls": self.model_calls,
+            "model_prompt_tokens": self.model_prompt_tokens,
+            "model_output_tokens": self.model_output_tokens,
+            "by_model": {k: round(v, 4) for k, v in self.by_model.items()},
+            "total_cents": round(self.total_cents, 4),
+            "total_usd": round(self.total_cents / 100, 4),
         }
 
 
@@ -193,6 +216,25 @@ class BudgetGovernor:
                     f"Run reached {self.utilisation:.0%} of its budget ceiling "
                     f"(${self.ceiling_cents / 100:.2f})."
                 )
+
+    def record_model(self, model: str, prompt_tokens: int, output_tokens: int) -> float:
+        """Meter one language model call and return what it cost, in cents.
+
+        Deliberately does not draw on the research ceiling. That ceiling exists
+        to bound how much web research a script may buy, and charging model
+        tokens against it would silently reduce the research a run can afford.
+        Model spend is reported alongside rather than inside it.
+        """
+        from truestory.providers.model_cost import cost_cents
+
+        cents = cost_cents(model, prompt_tokens, output_tokens)
+        with self._lock:
+            self.ledger.model_cents += cents
+            self.ledger.model_calls += 1
+            self.ledger.model_prompt_tokens += prompt_tokens
+            self.ledger.model_output_tokens += output_tokens
+            self.ledger.by_model[model] = self.ledger.by_model.get(model, 0.0) + cents
+        return cents
 
     def _warn(self, message: str) -> None:
         if message not in self.warnings:

@@ -29,6 +29,7 @@ from truestory.models.elements import ClearableElement, Remedy
 from truestory.models.enums import ClearanceStatus, ElementType, Verdict
 from truestory.models.evidence import Evidence
 from truestory.policy import load_rubric
+from truestory.providers.model_cost import meter_response
 
 log = logging.getLogger("truestory.remedy")
 
@@ -332,6 +333,7 @@ class RemedyLoop:
                     response_schema=_PROPOSAL_SCHEMA,
                 ),
             )
+            meter_response(self.model, response)
             return json.loads(getattr(response, "text", "") or "{}")
         except Exception as exc:
             log.warning("remedy proposal failed: %s", exc)

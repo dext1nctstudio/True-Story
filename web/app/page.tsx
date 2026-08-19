@@ -77,6 +77,9 @@ export default function Workspace() {
   const [tab, setTab] = useState<"evidence" | "persons">("evidence");
   const [stage, setStage] = useState<string>("");
   const [runStatus, setRunStatus] = useState<string>("");
+  // Rebuilt from the store rather than held in this process. Only the run
+  // record is persisted, so the annotated script is not available.
+  const [restored, setRestored] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const capabilities = CAPABILITIES[role];
@@ -103,6 +106,7 @@ export default function Workspace() {
     window.history.pushState(null, "", url);
     setRunIdState(id);
     setVerdictFilter(null);
+    setRestored(false);
   }, []);
 
   // Resolves the real ?run= value once mounted, then keeps it in sync with
@@ -163,14 +167,21 @@ export default function Workspace() {
   const load = useCallback(async () => {
     if (!runId) return;
     try {
-      const [overlayData, claimData, run, remedyData, elementData] = await Promise.all([
-        getOverlay(runId),
-        getClaims(runId),
-        getRun(runId),
-        // Remedies and elements only exist from later stages. A miss there is
-        // expected for most of the run's life, not a real error, so both are
-        // swallowed rather than joined into the same catch as the required
-        // reads.
+      // The run record is the authoritative one and the only required read.
+      // Everything else is stage dependent or, for a run restored from the
+      // store after a restart, permanently absent: only the run record is
+      // persisted, so treating a missing overlay as "not ready yet" left a
+      // completed run spinning on "Parsing the screenplay" forever.
+      const run = await getRun(runId);
+      setSummary(run.summary);
+      setRunStatus(run.status);
+      setRestored(Boolean(run.restored));
+      setJustStarted(false);
+      setError(null);
+
+      const [overlayData, claimData, remedyData, elementData] = await Promise.all([
+        getOverlay(runId).catch(() => null),
+        getClaims(runId).catch(() => ({ claims: [] as Claim[] })),
         getRemedies(runId).catch(() => ({ remedies: [] as Remedy[] })),
         getElements(runId).catch(() => ({ elements: [] as ClearableElement[] })),
       ]);
@@ -180,10 +191,6 @@ export default function Workspace() {
       setClaims(claimData.claims);
       setRemedies(remedyData.remedies);
       setElements(elementData.elements ?? []);
-      setSummary(run.summary);
-      setRunStatus(run.status);
-      setJustStarted(false);
-      setError(null);
 
       // The register is counsel and producer only, so a 403 here is the
       // governance model working rather than a failure to report.
@@ -398,6 +405,18 @@ export default function Workspace() {
                 setTab("evidence");
               }}
             />
+          ) : restored ? (
+            // Rebuilt from the store after a restart. The run record persists;
+            // the claims, elements and overlay do not, so there is no script to
+            // annotate and no amount of waiting will produce one.
+            <div className="starting">
+              <p className="starting-title">Summary only</p>
+              <p className="starting-sub">
+                This run was restored from storage after a restart. Its verdicts and
+                cost are in the header, but the annotated script is not retained
+                between restarts.
+              </p>
+            </div>
           ) : justStarted || (runStatus && runStatus !== "COMPLETE" && runStatus !== "FAILED") ? (
             // No overlay yet and the run is still moving. Covers both the
             // window before the run registers and the ingest stage after it,
