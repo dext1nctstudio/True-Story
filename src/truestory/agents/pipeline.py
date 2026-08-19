@@ -51,6 +51,7 @@ from truestory.models.evidence import MonitorHandle
 from truestory.models.spans import ScriptDocument
 from truestory.policy import load_jurisdictions
 from truestory.providers import BudgetGovernor, ProviderRegistry
+from truestory.providers.model_cost import set_meter
 
 log = logging.getLogger("truestory.pipeline")
 
@@ -165,6 +166,11 @@ class TrueStoryPipeline:
             parent_run_id=parent_run_id,
         )
         started = asyncio.get_event_loop().time()
+
+        # Point model metering at this run's governor. A context variable
+        # rather than a module global, because two runs are routinely in
+        # flight at once and their token spend must not blend.
+        set_meter(self.budget)
 
         try:
             await self._stage_ingest(state, source, draft_version)
@@ -361,6 +367,7 @@ class TrueStoryPipeline:
             remedies=state.remedies,
             monitors=state.monitors,
             cost_cents=self.budget.ledger.spent_cents,
+            model_cost_cents=self.budget.ledger.model_cents,
             duration_seconds=duration,
             cache_hit_rate=self.registry.cache_hit_rate,
             fallback_rate=self.registry.fallback_rate,

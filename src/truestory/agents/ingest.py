@@ -25,6 +25,7 @@ from typing import Any
 from truestory.config import settings
 from truestory.models.enums import ElementType, Modality
 from truestory.models.spans import RawSpan, Scene, ScriptDocument
+from truestory.providers.model_cost import meter_response
 
 log = logging.getLogger("truestory.ingest")
 
@@ -201,6 +202,7 @@ class IngestAgent:
                     safety_settings=_analysis_safety(types),
                 ),
             )
+            meter_response(self.model, response)
         except Exception as exc:
             # Never skip a scene silently. A gap in the breakdown is a gap in
             # the report, so it is flagged for manual attention and the

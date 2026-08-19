@@ -41,6 +41,7 @@ from truestory.models.enums import (
 )
 from truestory.models.evidence import Evidence
 from truestory.policy import load_rubric
+from truestory.providers.model_cost import meter_response
 
 log = logging.getLogger("truestory.adjudicator")
 
@@ -617,6 +618,7 @@ class Adjudicator:
                     ),
                 ),
             )
+            meter_response(self.model, response)
         except Exception as exc:
             log.warning("adjudication model call failed: %s", exc)
             return {"confidence": 0.0, "rationale": f"Model call failed: {exc}"}
