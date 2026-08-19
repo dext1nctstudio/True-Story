@@ -427,6 +427,46 @@ class Adjudicator:
                 ("Sources conflict on the rights position. Both are surfaced side by side."),
             )
 
+        # Identity before consequence. Searching a name returns whoever shares
+        # it, and a record that merely shares the name is not about this
+        # subject. Asserting a licence requirement, a death, a domicile or an
+        # estate on that basis is a fabricated finding about a real stranger,
+        # which this system did produce: an invented character was matched to
+        # an unrelated obituary and issued a publicity term to 2033 at 0.9
+        # confidence. The model is instructed not to do this; the rubric is
+        # what makes it so.
+        if (
+            element.element_type in _PERSON_TYPES
+            and status in _CONSEQUENTIAL_FOR_PERSON
+            and not _identity_confirmed(evidence)
+        ):
+            return (
+                ClearanceStatus.NEEDS_COUNSEL,
+                min(confidence, 0.5),
+                (
+                    "No source was confirmed to concern this person rather than someone "
+                    "who shares the name. A rights position cannot rest on a name match."
+                ),
+            )
+
+        # The same rule for a rights bearing work. Naming a licence, a rights
+        # holder or a clearance for a work nobody located is a finding about a
+        # specific owner who has not been found. The research says as much in
+        # `work_identified`; this is what makes the report say it too.
+        if (
+            element.element_type in _WORK_TYPES
+            and status in _CONSEQUENTIAL_FOR_PERSON
+            and not _work_identified(evidence)
+        ):
+            return (
+                ClearanceStatus.NEEDS_COUNSEL,
+                min(confidence, 0.5),
+                (
+                    "The specific work was not identified, so its rights holder is "
+                    "unknown. Whether a licence is required cannot be settled until it is."
+                ),
+            )
+
         # The Baby Reindeer post check. If the attribute cluster resolves to
         # real people, no confidence score makes that a machine's call.
         if element.element_type is ElementType.REAL_PERSON_IDENTIFIABLE:
@@ -661,6 +701,64 @@ def _split_escalation(raw: str) -> tuple[str, bool]:
 
 
 _PERSON_TYPES = frozenset({ElementType.REAL_PERSON_DEPICTED, ElementType.REAL_PERSON_IDENTIFIABLE})
+
+#: Statuses that assert something consequential about a subject's rights.
+#: Reaching one of these requires the record to have been tied to the subject.
+_CONSEQUENTIAL_FOR_PERSON = frozenset(
+    {
+        ClearanceStatus.NEEDS_LICENSE,
+        ClearanceStatus.NOT_CLEAR,
+        ClearanceStatus.CLEAR,
+        ClearanceStatus.CLEAR_WITH_CONDITIONS,
+    }
+)
+
+#: Rights bearing works. A licence position on one of these is a statement
+#: about a specific work with a specific owner, so the work has to have been
+#: identified first. Each schema already records whether it was.
+_WORK_TYPES = frozenset(
+    {
+        ElementType.ARTWORK_VISUAL,
+        ElementType.TATTOO,
+        ElementType.FILM_CLIP,
+        ElementType.MUSIC_CUE,
+        ElementType.PRINT_QUOTE,
+    }
+)
+
+
+def _identity_confirmed(evidence: list[Evidence]) -> bool:
+    """Whether any record was tied to the subject on more than the name.
+
+    Reads the schema field the research is asked to populate. Absent or false
+    means the provider either could not establish identity or was not asked,
+    and either way nothing consequential may rest on it.
+    """
+    for record in evidence:
+        finding = record.finding or {}
+        if finding.get("identity_confirmed") is True and finding.get("identity_basis"):
+            return True
+    return False
+
+
+def _work_identified(evidence: list[Evidence]) -> bool:
+    """Whether the specific work was located, per its own schema's field.
+
+    `visual_copyright_v1` asks `work_identified`, `quote_attribution_v1` asks
+    `quote_documented`, and a music cue is identified once it has a title of
+    record. All three were already being answered and none was being read: a
+    photograph came back `work_identified: false`, with no creator and no
+    rights holder, and was still issued a licence requirement at 0.9.
+    """
+    for record in evidence:
+        finding = record.finding or {}
+        if finding.get("work_identified") is True or finding.get("quote_documented") is True:
+            return True
+        if finding.get("title_of_record"):
+            return True
+    return False
+
+
 _DETERMINISTIC = frozenset(
     {ElementType.PHONE_NUMBER, ElementType.VEHICLE_PLATE, ElementType.URL_HANDLE}
 )
