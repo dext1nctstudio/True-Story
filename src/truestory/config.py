@@ -107,6 +107,12 @@ class Settings(BaseSettings):
     budget_degrade_on_exceed: bool = Field(default=True, alias="BUDGET_DEGRADE_ON_EXCEED")
     swarm_max_concurrency: int = Field(default=32, alias="SWARM_MAX_CONCURRENCY")
 
+    # ── freshness ────────────────────────────────────────────────────────────
+    # How old a cached research answer may be before a live run re researches
+    # it. Applies to live runs only: replay and mock keep every entry so a
+    # recorded demo and the eval set stay byte identical.
+    cache_max_age_days: int = Field(default=30, alias="TRUESTORY_CACHE_MAX_AGE_DAYS")
+
     # ── alerting ─────────────────────────────────────────────────────────────
     slack_webhook_url: str = Field(default="", alias="SLACK_WEBHOOK_URL")
     alert_email_to: str = Field(default="", alias="ALERT_EMAIL_TO")
@@ -153,9 +159,21 @@ class Settings(BaseSettings):
         if self.google_credentials and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
             key = Path(self.google_credentials).expanduser()
             if not key.is_file():
-                raise ValueError(
-                    f"GOOGLE_APPLICATION_CREDENTIALS points at {key}, which does not exist."
+                # A stale path in .env, typically one checked out on another
+                # machine, used to abort settings construction and take down
+                # every entrypoint including mock mode and the test suite. The
+                # condition is worth a loud warning and nothing more: Vertex
+                # will fail its own auth clearly if it is actually needed.
+                import warnings
+
+                warnings.warn(
+                    f"GOOGLE_APPLICATION_CREDENTIALS points at {key}, which does not "
+                    "exist. Ignoring it. Vertex AI calls will fall back to "
+                    "application default credentials.",
+                    RuntimeWarning,
+                    stacklevel=2,
                 )
+                return self
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(key)
         return self
 

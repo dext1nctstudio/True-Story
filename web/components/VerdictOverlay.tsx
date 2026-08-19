@@ -150,6 +150,59 @@ function ScriptLine({
   const isSelected = annotations.some((a) => a.id === selectedId);
   const isFiltered = filterColor !== null && !match;
 
+  // Highlight the words the verdict is actually about, not the whole line.
+  // A claim's span is frequently a clause inside a sentence, and marking the
+  // line put the colour on text nobody made an assertion in — including, on a
+  // wrapped line, on half of the sentence after it.
+  const span = locateSpan(text, dominant);
+
+  const marks = [
+    "annotated",
+    dominant.color,
+    isSelected ? "selected" : "",
+    isFiltered ? "faded" : "",
+    match ? "matched" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const badge =
+    dominant.color === "red" && dominant.citation_count > 0 ? (
+      <span className="citation-badge">{dominant.citation_count}</span>
+    ) : null;
+
+  const open = () => onSelect(dominant);
+  const onKey = (event: React.KeyboardEvent) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      open();
+    }
+  };
+
+  if (span && !dominant.masked) {
+    return (
+      <div
+        data-verdict-line={lineKey}
+        data-color={dominant.color}
+        className={`script-line ${indent} ${isFiltered ? "line-faded" : ""}`.trim()}
+      >
+        {text.slice(0, span.start)}
+        <span
+          className={marks}
+          onClick={open}
+          onKeyDown={onKey}
+          role="button"
+          tabIndex={0}
+          title={annotationTitle(dominant)}
+        >
+          {text.slice(span.start, span.end)}
+          {badge}
+        </span>
+        {text.slice(span.end)}
+      </div>
+    );
+  }
+
   return (
     <div
       data-verdict-line={lineKey}
@@ -215,6 +268,65 @@ function classifyIndent(line: string): string {
   if (/^\(.*\)$/.test(trimmed)) return "paren";
   if (/^[A-Z][A-Z0-9 '.\-]{1,38}(\s*\(.*\))?$/.test(trimmed) && trimmed.length < 40) return "cue";
   return "";
+}
+
+/**
+ * Where on this line the verdict actually applies.
+ *
+ * Tries the annotation's own surface form, then its claim text, then the
+ * longest opening run of that text, because a claim's wording is usually a
+ * rephrasing that shares its opening rather than a quotation. Returns null
+ * when nothing matches, and the caller falls back to marking the whole line —
+ * which is honest: an approximate anchor should look approximate rather than
+ * point confidently at the wrong four words.
+ */
+function locateSpan(
+  line: string,
+  annotation: Annotation,
+): { start: number; end: number } | null {
+  const haystack = line.toLowerCase();
+  if (!haystack.trim()) return null;
+
+  const candidates = [annotation.surface_form, annotation.text].filter(
+    (value): value is string => Boolean(value && value.trim()),
+  );
+
+  for (const candidate of candidates) {
+    const needle = candidate.trim().toLowerCase();
+    const at = haystack.indexOf(needle);
+    if (at !== -1 && needle.length >= 3) {
+      // Even when the match is the whole line, mark the span rather than the
+      // block: a character cue is indented two inches and a block level mark
+      // washes all of that empty space as well, which reads as the indent
+      // being flagged rather than the name.
+      return { start: at, end: at + needle.length };
+    }
+
+    // Prefix match, longest first. Six words is enough to be unambiguous on a
+    // screenplay page and short enough to survive a rewritten tail.
+    const words = needle.split(/\s+/);
+    for (let size = Math.min(words.length - 1, 10); size >= 4; size -= 1) {
+      const probe = words.slice(0, size).join(" ");
+      const found = haystack.indexOf(probe);
+      if (found !== -1) {
+        return { start: found, end: sentenceEnd(line, found + probe.length) };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Where the marked passage should stop.
+ *
+ * A prefix match ends wherever the probe ran out, which lands mid sentence and
+ * reads as a rendering fault rather than as an approximate anchor. Running on
+ * to the end of the sentence, or of the line, makes the mark look like the
+ * deliberate thing it is.
+ */
+function sentenceEnd(line: string, from: number): number {
+  const terminator = line.slice(from).search(/[.!?]/);
+  return terminator === -1 ? line.length : from + terminator + 1;
 }
 
 function annotationTitle(annotation: Annotation): string {

@@ -13,10 +13,13 @@
 import type {
   Claim,
   ClearableElement,
+  Estimate,
+  Evidence,
   Overlay,
   PersonRollup,
   Remedy,
   Role,
+  RunCost,
   RunListItem,
   RunSummary,
   StreamEvent,
@@ -100,6 +103,50 @@ export const getRun = (runId: string) =>
 
 export const getReport = (runId: string) =>
   get<Record<string, unknown>>(`/v1/runs/${runId}/report`);
+
+/** The full cost breakdown. Counsel and producer only, enforced server side. */
+export const getCost = (runId: string) => get<RunCost>(`/v1/runs/${runId}/cost`);
+
+/** Published unit prices. Nothing in the UI restates a rate of its own. */
+export const getPricing = () => get<Record<string, unknown>>(`/v1/pricing`);
+
+/** Pre flight calculator. Same prices, same subject density, as a real run. */
+export async function estimateRun(input: {
+  pages: number;
+  truth_claim_framing: boolean;
+  drafts: number;
+  cache_hit_rate: number;
+}): Promise<Estimate> {
+  const response = await fetch(`${BASE}/v1/estimate`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new ApiError(response.status, await response.text());
+  return response.json();
+}
+
+/**
+ * Ask the record a question about one line. A live search round trip, priced
+ * in tenths of a cent, whose answer is a lead rather than a finding: it never
+ * enters adjudication and never changes a verdict.
+ */
+export async function interrogate(
+  runId: string,
+  body: { question: string; subject_id?: string; subject?: string },
+): Promise<Evidence> {
+  const response = await fetch(`${BASE}/v1/runs/${runId}/interrogate`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new ApiError(response.status, await response.text());
+  return response.json();
+}
+
+/** Absolute URLs for the two exports an underwriter actually asks for. */
+export const reportPdfUrl = (runId: string) => `${BASE}/v1/runs/${runId}/report.pdf`;
+export const clearanceLogUrl = (runId: string) => `${BASE}/v1/runs/${runId}/clearance_log.csv`;
 
 export const getMonitors = (projectId: string) =>
   get<{ monitors: unknown[] }>(`/v1/projects/${projectId}/monitors`);
@@ -237,4 +284,18 @@ export function formatUsd(value: number): string {
 
 export function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
+}
+
+
+/**
+ * How a page is written in this industry: whole pages and eighths.
+ *
+ * The raw value is a float, because a span's page is derived from its line
+ * offset, and printing that float put "page 2.49" on screen in three places.
+ * Nobody in a production office has ever said page two point four nine.
+ */
+export function pageRef(occurrence?: { page?: number; page_eighths?: string } | null): string {
+  if (!occurrence) return "—";
+  if (occurrence.page_eighths) return occurrence.page_eighths;
+  return occurrence.page ? String(Math.round(occurrence.page)) : "—";
 }

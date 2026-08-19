@@ -33,6 +33,16 @@ export type Role =
   | "truestory.writer"
   | "truestory.underwriter";
 
+export type SourceClass =
+  | "official"
+  | "registry"
+  | "archive"
+  | "news"
+  | "trade"
+  | "reference"
+  | "user"
+  | "unknown";
+
 export interface Citation {
   url: string;
   title: string;
@@ -40,6 +50,15 @@ export interface Citation {
   accessed_at: string;
   source_type: "primary" | "secondary" | "tertiary";
   publisher?: string | null;
+  published_at?: string | null;
+  /** Classified from the host, not asserted by the researcher. */
+  source_class?: SourceClass;
+  /** 0..1. Weights corroboration; never shown as a bare number. */
+  trust?: number;
+  /** False when the host is not one this system recognises. */
+  verified_source?: boolean;
+  /** Registrable domain. Two citations sharing one are not two sources. */
+  domain?: string;
 }
 
 export interface Evidence {
@@ -58,6 +77,32 @@ export interface Evidence {
   cached: boolean;
   retrieved_at: string;
   error?: string | null;
+  primary_source_count?: number;
+  classified_primary_count?: number;
+  independent_domains?: string[];
+  source_strength?: number;
+}
+
+/** How well the record backs one subject. Counted, never asserted. */
+export interface Corroboration {
+  citation_count: number;
+  independent_domains: number;
+  domains: string[];
+  primary_count: number;
+  classified_primary_count: number;
+  low_trust_count: number;
+  strongest_trust: number;
+  record_signal: "SUPPORTED" | "CONTRADICTED" | "SILENT" | "OPINION" | "MIXED" | "UNKNOWN";
+  supporting_facts: number;
+  contradicting_facts: number;
+  record_quality: string;
+  conflict: boolean;
+  single_source: boolean;
+  low_trust_only: boolean;
+  newest_source_days: number | null;
+  oldest_source_days: number | null;
+  score: number;
+  notes: string[];
 }
 
 export interface Occurrence {
@@ -87,6 +132,7 @@ export interface Claim {
   counsel_reason: string;
   remedy_id?: string | null;
   citation_count: number;
+  corroboration?: Corroboration;
   occurrences: Occurrence[];
   evidence?: Evidence[];
 }
@@ -108,6 +154,7 @@ export interface ClearableElement {
   occurrence_count: number;
   first_page: number;
   citation_count: number;
+  corroboration?: Corroboration;
   escalated_by: string[];
   occurrences: Occurrence[];
   evidence?: Evidence[];
@@ -203,7 +250,78 @@ export interface BudgetSnapshot {
    *  showing research alone badly understates what a run costs. */
   model_usd?: number;
   model_calls?: number;
+  model_prompt_tokens?: number;
+  model_output_tokens?: number;
+  model_cached_tokens?: number;
   total_usd?: number;
+  reserve_usd?: number;
+  /** What the cache hits would have cost at list price. */
+  cache_saved_usd?: number;
+  by_tier?: Record<string, number>;
+  by_provider?: Record<string, number>;
+  by_model?: Record<string, number>;
+  /** The pre flight estimate, so the meter can be read against an expectation. */
+  projection?: CostProjection;
+}
+
+export interface CostProjection {
+  subjects: number;
+  projected_usd: number;
+  ceiling_usd: number;
+  within_budget: boolean;
+  by_tier: Record<string, number>;
+  by_processor: Record<string, { subjects: number; usd: number }>;
+}
+
+export interface RunCost {
+  run_id: string;
+  snapshot: BudgetSnapshot;
+  economics: {
+    total_usd: number;
+    research_usd: number;
+    model_usd: number;
+    cache_saved_usd: number;
+    per_subject_usd: number | null;
+    per_claim_usd: number | null;
+    per_page_usd: number | null;
+    manual_baseline: {
+      report_usd_low: number;
+      report_usd_high: number;
+      turnaround_days_low: number;
+      turnaround_days_high: number;
+      midpoint_usd: number;
+      source?: string;
+    };
+    savings_vs_manual_usd: number;
+    times_cheaper: number | null;
+  };
+  counts: {
+    researched_subjects: number;
+    claims: number;
+    elements: number;
+    pages: number;
+  };
+}
+
+/** The pre flight calculator's answer. Same prices the meter runs on. */
+export interface Estimate {
+  input: { pages: number; truth_claim_framing: boolean; drafts: number; cache_hit_rate: number };
+  subjects: {
+    claims: number;
+    elements: number;
+    total: number;
+    by_processor: Record<string, number>;
+  };
+  research_usd: number;
+  model_usd: number;
+  model_breakdown_usd: Record<string, number>;
+  first_draft_usd: number;
+  later_draft_usd: number;
+  total_usd: number;
+  manual_baseline_usd: number;
+  savings_usd: number;
+  times_cheaper: number | null;
+  caveat: string;
 }
 
 export interface RunListItem {

@@ -13,6 +13,8 @@
  */
 
 import { useState } from "react";
+import { AskTheRecord } from "@/components/AskTheRecord";
+import { SourceBadge, SourcePedigree } from "@/components/SourcePedigree";
 import { applyRemedy, unmaskElement } from "@/lib/api";
 import type { Annotation, Claim, ClearableElement, Evidence, Remedy } from "@/lib/types";
 
@@ -139,6 +141,12 @@ export function EvidencePanel({
         <RemedyBlock remedy={remedy} applying={applying} applied={applied} onApply={apply} />
       )}
 
+      {/* What the verdict is standing on, counted rather than asserted. A
+          citation total on its own hides the two things that decide whether a
+          finding is worth anything: how many independent domains are behind
+          it, and whether any of them is a record. */}
+      <SourcePedigree corroboration={claim?.corroboration ?? element?.corroboration} />
+
       <p className="panel-title panel-title-section">
         Sources ({evidence.reduce((n, e) => n + e.citations.length, 0)})
       </p>
@@ -150,8 +158,26 @@ export function EvidencePanel({
       {evidence.map((record) => (
         <EvidenceBlock key={record.evidence_id} evidence={record} />
       ))}
+
+      {/* The follow up question, asked against the live record rather than
+          against what this run happened to collect. */}
+      <AskTheRecord
+        runId={runId}
+        subjectId={annotation.id}
+        subject={claim?.subject_name ?? annotation.subject}
+        suggestion={askSuggestion(claim?.claim_text ?? annotation.text, annotation.subject)}
+      />
     </div>
   );
+}
+
+/** A first question worth asking about this subject, so the box is not blank. */
+function askSuggestion(text: string, subject?: string): string {
+  const trimmed = text.trim().replace(/\s+/g, " ");
+  const short = trimmed.length > 90 ? `${trimmed.slice(0, 90)}…` : trimmed;
+  return subject
+    ? `What is the source for: ${short} (${subject})`
+    : `What is the source for: ${short}`;
 }
 
 function VerdictHeader({ annotation }: { annotation: Annotation }) {
@@ -176,6 +202,9 @@ function EvidenceBlock({ evidence }: { evidence: Evidence }) {
         <span>{evidence.provider}</span>
         {evidence.is_fallback && <span>fallback, confidence capped</span>}
         {evidence.cached && <span>cached</span>}
+        {(evidence.independent_domains?.length ?? 0) > 1 && (
+          <span>{evidence.independent_domains?.length} independent domains</span>
+        )}
         <span>{Math.round(evidence.effective_confidence * 100)}% confidence</span>
       </div>
 
@@ -193,9 +222,14 @@ function EvidenceBlock({ evidence }: { evidence: Evidence }) {
             <span className={`source-tag ${citation.source_type}`}>
               {citation.source_type}
             </span>
+            <SourceBadge citation={citation} />
+            {citation.domain && <span className="citation-domain">{citation.domain}</span>}
             {/* Retrieval time is not decoration. At claim time, a source read
                 on a known date is worth far more than a live URL. */}
             <span>read {new Date(citation.accessed_at).toLocaleDateString()}</span>
+            {citation.published_at && (
+              <span>published {new Date(citation.published_at).toLocaleDateString()}</span>
+            )}
           </div>
           {citation.excerpt && <p className="citation-excerpt">{citation.excerpt}</p>}
         </div>

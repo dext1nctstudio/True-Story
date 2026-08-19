@@ -98,6 +98,9 @@ class ClearableElement:
     rationale: str = ""
     conditions: list[str] = field(default_factory=list)
     evidence: list[Evidence] = field(default_factory=list)
+    #: Independent domains, source pedigree and record agreement behind the
+    #: clearance status. Written by the Adjudicator, shown in the UI.
+    corroboration: dict[str, Any] = field(default_factory=dict)
     remedies: list[Remedy] = field(default_factory=list)
 
     # ── person facts ─────────────────────────────────────────────────────────
@@ -181,6 +184,7 @@ class ClearableElement:
             "occurrence_count": self.occurrence_count,
             "first_page": self.first_page,
             "citation_count": self.citation_count,
+            "corroboration": self.corroboration,
             "cost_cents": round(self.total_cost_cents, 4),
             "occurrences": [o.to_dict() for o in self.occurrences],
             "claims": [c.to_dict(include_evidence=False) for c in self.claims],

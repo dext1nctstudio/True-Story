@@ -114,11 +114,11 @@ class MockProvider(EnumerationProvider):
     # ── construction ─────────────────────────────────────────────────────────
     def _from_fixture(self, request: ResearchRequest, fixture: dict[str, Any]) -> Evidence:
         citations = [
-            Citation(
+            Citation.classified(
                 url=c.get("url", "https://example.invalid/fixture"),
                 title=c.get("title", "Recorded fixture source"),
                 excerpt=c.get("excerpt", ""),
-                source_type=c.get("source_type", "primary"),
+                declared_type=c.get("source_type", "primary"),
             )
             for c in fixture.get("citations", [])
         ] or [_fixture_citation()]
@@ -174,19 +174,7 @@ class MockProvider(EnumerationProvider):
             subject_id=request.subject_id,
             question=request.question,
             finding=finding,
-            citations=[
-                Citation(
-                    url=f"https://example.invalid/record/{seed % 9999}",
-                    title="Synthesised record, mock provider",
-                    excerpt=(
-                        "This envelope was produced by MockProvider and carries no "
-                        "research value. It exists so the pipeline can be exercised "
-                        "end to end with no credentials and no spend."
-                    ),
-                    source_type="primary",
-                ),
-                _fixture_citation(),
-            ],
+            citations=_synthetic_citations(seed),
             reasoning=(
                 "Synthesised by MockProvider. Not a research finding. "
                 "Set TRUESTORY_MODE=live for real verification."
@@ -200,11 +188,103 @@ class MockProvider(EnumerationProvider):
 
 
 def _fixture_citation() -> Citation:
-    return Citation(
+    return Citation.classified(
         url="https://example.invalid/mock",
         title="MockProvider",
         excerpt="Offline fixture. No real source was consulted.",
-        source_type="tertiary",
+        declared_type="tertiary",
+    )
+
+
+def _synthetic_citations(seed: int) -> list[Citation]:
+    """Fixture citations with a synthetic but structurally honest pedigree.
+
+    The URLs are reserved, non resolving hosts, so nothing here can be mistaken
+    for a real source. The pedigree fields, though, are stamped directly rather
+    than classified from those hosts: an unrecognised host correctly scores as
+    weakly trusted, and if every offline citation scored that way, every
+    offline run would land in the "not corroborated" branch and the other
+    branches would never execute outside a live run.
+
+    So the distribution is the point. Most subjects come back corroborated
+    across two independent domains with one record grade source; a slice comes
+    back single source; a smaller slice comes back on user generated sources
+    only. Each of those is a different path through the adjudicator and each
+    one gets exercised on every mock run.
+    """
+    shape = seed % 10
+
+    if shape == 9:
+        # Forum chatter only. The adjudicator must refuse to decide on this.
+        return [
+            _fixture(
+                f"https://forum.example.invalid/thread/{seed % 9999}",
+                "Synthesised forum thread, mock provider",
+                "User generated. Cannot settle a claim about a real person.",
+                "tertiary",
+                "user",
+                0.15,
+            )
+        ]
+
+    if shape == 8:
+        # One domain, however many pages. Exercises the single source branch.
+        return [
+            _fixture(
+                f"https://press.example.invalid/story/{seed % 9999}",
+                "Synthesised report, mock provider",
+                "Single secondary source. Offline fixture, no research value.",
+                "secondary",
+                "news",
+                0.74,
+            ),
+            _fixture(
+                f"https://press.example.invalid/story/{(seed + 4) % 9999}",
+                "Synthesised follow up, mock provider",
+                "Same publisher, second page. One source wearing two hats.",
+                "secondary",
+                "news",
+                0.74,
+            ),
+        ]
+
+    return [
+        _fixture(
+            f"https://records.example.invalid/record/{seed % 9999}",
+            "Synthesised record, mock provider",
+            (
+                "This envelope was produced by MockProvider and carries no research "
+                "value. It exists so the pipeline can be exercised end to end with "
+                "no credentials and no spend."
+            ),
+            "primary",
+            "official",
+            0.95,
+        ),
+        _fixture(
+            f"https://archive.example.test/report/{(seed + 13) % 9999}",
+            "Synthesised corroborating source, mock provider",
+            "Second, independent synthetic source. Offline fixture.",
+            "secondary",
+            "news",
+            0.74,
+        ),
+        _fixture_citation(),
+    ]
+
+
+def _fixture(
+    url: str, title: str, excerpt: str, source_type: str, source_class: str, trust: float
+) -> Citation:
+    return Citation(
+        url=url,
+        title=title,
+        excerpt=excerpt,
+        source_type=source_type,
+        source_class=source_class,
+        trust=trust,
+        verified_source=True,
+        publisher="MockProvider",
     )
 
 

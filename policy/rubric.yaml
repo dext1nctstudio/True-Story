@@ -42,6 +42,37 @@ confidence:
   # It requires a primary source, not a blog aggregating one.
   contradicted_requires_primary_source: true
 
+  # ...and the source has to be one this system recognises as a record. Before
+  # this flag, "primary" was whatever the research payload declared itself to
+  # be, which in practice was every URL it returned. A red line now needs a
+  # docket, a register, a statute, an official archive or a government record,
+  # classified from the host in providers/source_quality.py.
+  contradicted_requires_classified_primary: true
+
+  # Corroboration, counted as distinct registrable domains rather than as
+  # URLs. Five pages on one site are one source, and "corroborated by five
+  # sources" is the most common lie a research pipeline tells its user.
+  min_independent_domains:
+    CRITICAL: 2
+    HIGH: 2
+    MEDIUM: 1
+    LOW: 1
+    NONE: 0
+
+  # Confidence may not exceed this once corroboration is taken into account.
+  # A single tertiary source cannot produce a 0.95 verdict however certain the
+  # model sounds: floor + span * corroboration_score is the ceiling.
+  corroboration_cap_floor: 0.35
+  corroboration_cap_span: 0.65
+
+  # User generated and unattributable sources — forums, social, content farms —
+  # may corroborate but may never carry a verdict on their own.
+  low_trust_cannot_decide: true
+
+  # A source older than this is flagged on a claim about a living person, where
+  # the record moves. Not an escalation on its own; it is stated in the report.
+  stale_source_days: 1825
+
 # -----------------------------------------------------------------------------
 # mandatory escalations
 # -----------------------------------------------------------------------------
@@ -66,6 +97,16 @@ escalate_always:
     when: "verdict == 'UNVERIFIABLE' and subject.public_figure_status == 'private'"
     action: NEEDS_COUNSEL
     reason: "A private fact about a private person. Outside what public record research can settle."
+
+  - id: record_disagreement
+    when: "verdict != research_payload.verdict"
+    action: NEEDS_COUNSEL
+    reason: "The adjudicating model and its own research reached different conclusions."
+
+  - id: not_corroborated
+    when: "independent_domains < confidence.min_independent_domains[tier]"
+    action: NEEDS_COUNSEL
+    reason: "Single source. Nothing independent confirms it."
 
   - id: identifiability_hit
     when: "element_type == 'REAL_PERSON_IDENTIFIABLE' and findall.match_count > 0"

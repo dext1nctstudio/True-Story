@@ -136,11 +136,10 @@ def _citations_from_grounding(response: Any) -> list[Citation]:
                 continue
             seen.add(url)
             citations.append(
-                Citation(
+                Citation.classified(
                     url=url,
                     title=getattr(web, "title", None) or url,
-                    excerpt="",
-                    source_type="secondary",
+                    declared_type="secondary",
                 )
             )
     return citations

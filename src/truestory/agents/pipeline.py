@@ -267,10 +267,22 @@ class TrueStoryPipeline:
         )
         state.artifacts["routing_plan"] = plan.to_dict()
 
+        # The projection is registered on the governor here rather than only
+        # logged, so the live meter can show the estimate beside the actual for
+        # the whole run instead of the estimate scrolling past once.
+        projection = self.budget.project(
+            [
+                (d.processor, d.tier)
+                for d in (*plan.claim_routes.values(), *plan.element_routes.values())
+                if d.researched and d.processor is not None
+            ]
+        )
+        state.artifacts["cost_projection"] = projection
+
         # The projected cost lands on screen before a cent is spent. Two
         # hundred subjects, a couple of dollars, against a manual report priced
         # in thousands and delivered in days.
-        await self._emit({"event": "plan_ready", **plan.to_dict()})
+        await self._emit({"event": "plan_ready", **plan.to_dict(), "projection": projection})
 
     # ── stage 5 ──────────────────────────────────────────────────────────────
     async def _stage_research(self, state: RunState) -> None:

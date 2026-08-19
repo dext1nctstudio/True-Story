@@ -101,11 +101,11 @@ class ParallelFindAllProvider(EnumerationProvider):
         out: list[Evidence] = []
         for i, entity in enumerate(entities):
             citations = [
-                Citation(
+                Citation.classified(
                     url=c.get("url", ""),
                     title=c.get("title") or c.get("url", ""),
-                    excerpt=(c.get("excerpt") or "")[:800],
-                    source_type=c.get("source_type", "secondary"),
+                    excerpt=_excerpt_of(c)[:800],
+                    declared_type=c.get("source_type"),
                 )
                 for c in (entity.get("citations") or [])
                 if c.get("url")
@@ -139,11 +139,11 @@ class ParallelFindAllProvider(EnumerationProvider):
                     question=request.question,
                     finding={"matches": [], "match_count": 0},
                     citations=[
-                        Citation(
+                        Citation.classified(
                             url=body.get("search_summary_url", "https://parallel.ai"),
                             title="FindAll enumeration, no matches",
                             excerpt="Enumeration completed and returned no matching entities.",
-                            source_type="tertiary",
+                            declared_type="tertiary",
                         )
                     ],
                     reasoning="Enumeration completed with zero matches in the requested jurisdictions.",
@@ -155,3 +155,13 @@ class ParallelFindAllProvider(EnumerationProvider):
                 )
             )
         return out
+
+
+def _excerpt_of(citation: dict) -> str:
+    """FindAll citations carry `excerpts` as a list, same as Task's basis."""
+    excerpts = citation.get("excerpts")
+    if isinstance(excerpts, list):
+        joined = " … ".join(str(e).strip() for e in excerpts if str(e).strip())
+        if joined:
+            return joined
+    return str(citation.get("excerpt") or "")
