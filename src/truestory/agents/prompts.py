@@ -50,6 +50,35 @@ TAG THESE ELEMENT TYPES:
   Assertions
     REAL_EVENT  DEFAMATORY_REF  TRADE_LIBEL
 
+REAL OR INVENTED: THE DECISION THAT MUST NOT BE GUESSED.
+
+REAL_PERSON_DEPICTED means you can name the actual living or dead human being
+portrayed. It is a claim about the world, not about the script, and everything
+downstream treats it as established: the person is researched, their publicity
+rights are assessed, and their estate may be named in a legal deliverable.
+
+Apply this test, and default to PERSON_NAME_FICTIONAL whenever it fails:
+
+  * Do you recognise this specific person independently of this script, as a
+    public figure with a documented public record? Winston Churchill, yes.
+    Neil Armstrong, yes.
+  * Or does the script itself identify them as real, by pairing the name with
+    a verifiable public role, office, event or work that fixes who is meant?
+
+A name alone never satisfies the test, however plausible. Ordinary names are
+shared by thousands of real people, so tagging an invented character as real
+does not produce a cheap lookup, it produces a confident legal finding about a
+stranger who happens to share the name. That is the single worst output this
+system can produce and it has happened.
+
+A true story framing does NOT make the characters real. It raises the stakes of
+getting this wrong; it is not evidence about any particular name.
+
+An invented character tagged PERSON_NAME_FICTIONAL is still fully protected: it
+is researched for name collisions with real people, which is the correct
+question for an invented name and the one that catches an accidental
+identification.
+
 THE ONE THAT GETS MISSED: REAL_PERSON_IDENTIFIABLE.
 
 It is a composite detector and it does not need a name. Fire it whenever a
@@ -69,8 +98,12 @@ RULES
   * Note whether the span sits in dialogue, in action, in a scene heading, or
     in a parenthetical. Dialogue and action carry different legal weight.
   * When a span sits in dialogue, record the speaking character's cue.
-  * Prefer recall over precision. A false positive costs a cheap lookup. A
-    false negative is the line that gets the production sued.
+  * Prefer recall over precision when deciding WHETHER to tag a span. A false
+    positive costs a cheap lookup. A false negative is the line that gets the
+    production sued.
+  * The opposite applies to WHICH type you assign between real and invented.
+    Recall governs what you notice; evidence governs what you assert. Tag the
+    span either way, but only call a person real when the test above is met.
 
 Return only the structured output. No commentary.
 """
@@ -210,6 +243,36 @@ source summarising a primary one is weaker and your confidence must reflect
 that. If two sources disagree, do not pick a winner. Report lower confidence
 and say in your rationale that the sources conflict, and a deterministic post
 check will route it to a human.
+
+THE SOURCE MUST BE ABOUT THIS SUBJECT.
+
+Before a source counts as evidence, satisfy yourself it concerns the subject in
+front of you and not merely something with the same name or a similar
+description. A search for a name returns whoever shares it. An obituary for
+someone called Jonah Reed is not evidence about a Jonah Reed in a screenplay
+unless the record ties them together: matching profession, place, dates,
+relationships or events, not the name alone.
+
+Where the only link is the name, say so and treat the subject as unestablished.
+Return UNSUPPORTED, or for an element NEEDS_COUNSEL, with your reasoning
+stating that no source was confirmed to concern this subject. Never assert a
+licence requirement, a death, a domicile, an estate or a publicity term on the
+strength of a name collision. Those are claims about a real person's life and
+they must be earned.
+
+Background law is not evidence about a subject either. An article explaining
+the de minimis doctrine tells you how the law works; it says nothing about
+whether this particular mural is protected or who owns it. Reason from it if
+you like, but do not present it as though the subject had been researched, and
+do not let it raise your confidence.
+
+The same holds for a rights bearing work. A licence requirement names an owner,
+so a work that was not located has no owner to name. Where the research reports
+`work_identified` false, or returns no creator and no rights holder, the honest
+answer is NEEDS_COUNSEL and a rationale saying the work was not identified. Do
+not convert "this is presumptively the kind of thing that carries copyright"
+into a finding that this work does. The first is a general truth about the law;
+the second is a claim about a specific creator's property.
 
 CALIBRATION
 

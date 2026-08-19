@@ -535,10 +535,16 @@ sweep endpoint, and deploy the Firestore security rules.
 
 ## 14. Build status: done and outstanding
 
-Audited **16 August 2026** against commit `79940b6` on `main`. Every row was
-checked by running the thing rather than by reading the code, and the command
-that produced the evidence is named. Where an earlier version of this section
-claimed something that is no longer true, the row says so.
+Audited **20 August 2026** against commit `a8d2ccf`, plus three uncommitted
+files carrying the accuracy work in 14.3. Every row was checked by running the
+thing rather than by reading the code, and the command that produced the
+evidence is named. Where an earlier version of this section claimed something
+that is no longer true, the row says so.
+
+Since the 16 August audit the partner integration has been executed for real,
+every prompt has been run against Gemini, runs survive a restart, model spend
+is counted, and a class of fabricated legal findings was found and closed. The
+CI row has also been corrected: it claimed green and was not.
 
 | State | Meaning |
 |---|---|
@@ -556,17 +562,18 @@ claimed something that is no longer true, the row says so.
 | Domain models | Frozen contracts for spans, claims, elements, evidence, enums. The no verdict without evidence invariant is enforced in the model as well as by forced function calling | **Done** | `tests/test_evidence_invariant.py`, 18 tests |
 | Policy as data | `routing.yaml` including the truth claim escalation, `rubric.yaml`, `jurisdictions.yaml`, plus a validating loader | **Done** | `python -m truestory.policy.loader --validate`, green in CI |
 | Output schemas | Eleven JSON schemas, `claim_verification_v1` the workhorse | **Done** | `--validate-schemas`, green in CI |
-| Provider layer | Task, Search, FindAll, Extract and Monitor over `httpx`, plus a Gemini grounded fallback, a content addressed cache and a mock. Registry resolves cache, policy, budget, health in that fixed order | **Offline only** | Selection, degradation and fallback are unit tested. **No provider has been called against the live Parallel API** |
+| Provider layer | Task, Search, FindAll, Extract and Monitor over `httpx`, plus a Gemini grounded fallback, a content addressed cache and a mock. Registry resolves cache, policy, budget, health in that fixed order | **Done** | Supersedes the previous "no provider has been called against the live Parallel API". Live Task runs return real citations, 23 to 40 per claim, from Britannica, NASA and Wikipedia among others. Getting there took four fixes: a 422 on every subject because `metadata.jurisdictions` was sent as a list, results that could never arrive because a queued response waited on a webhook no local run can receive, mock fixtures answering live requests through a shared cache keyspace, and `entity_v1` citations being dropped because the provider read only Parallel's `basis` and that schema returns its sources in its own `sources` array |
 | Budget governor | Depth degradation, an untouchable CRITICAL reserve, coverage warnings printed on the report front page | **Done** | `tests/test_pipeline.py`, covering degradation, reserve, exhaustion and pre spend projection |
 | MCP tool boundary | Fourteen domain tools returning one uniform Evidence envelope, over HTTP and stdio | **Offline only** | `src/truestory/mcp/server.py`. The tools are exercised in process by the swarm; neither transport has been started as a server, and no MCP client has connected |
-| Four language model decision points | Ingest, claim extraction, adjudication, remedy proposal. Every prompt in one file | **Offline only** | The deterministic fallbacks run and are tested. **No prompt has been executed against Gemini**, so none is tuned |
+| Four language model decision points | Ingest, claim extraction, adjudication, remedy proposal. Every prompt in one file | **Done, not tuned** | All four now run against Gemini on Vertex. Adjudication was silently failing on every claim until fixed: `subject_alive` was declared as a JSON Schema union `["boolean","null"]`, which a Gemini function declaration rejects before the call leaves the machine, so every claim fell back to UNSUPPORTED and the report came out amber with no verdict behind it. Ingest and adjudication have since been rewritten for accuracy, see 14.3. Tuning against measured output has still not happened |
+| Cost model | Parallel priced per task run, Gemini priced per token, metered per run | **Done** | Processor prices verified 19 August against the published Parallel rates and are correct. Gemini spend was not counted at all, so a run reporting \$0.01 had actually cost \$0.18: model tokens ran roughly 17x the research spend on a short script. `providers/model_cost.py`, metered through a context variable so concurrent runs do not blend |
 | ADK wrapper | `build_adk_pipeline` maps the same eight stages onto `SequentialAgent`, `ParallelAgent` and `LoopAgent` | **Offline only** | Code is present and one to one with the local pipeline. The tree has never been constructed: not even `deploy/deploy_agent_engine.py --dry-run` has been run |
 
 ### 14.2 The product surface
 
 | Area | What exists | State | Evidence, or what is left |
 |---|---|---|---|
-| REST and SSE API | Projects, runs, upload, live stream, overlay, claims, elements, remedies, register, report, CSV, PDF, apply remedy, override, unmask, review queue | **Offline only** | Every endpoint is implemented and role gated. Run state is an in process dict, so a restart loses every run, and the service has only ever been driven by the pipeline rather than by a running server |
+| REST and SSE API | Projects, runs, upload, live stream, overlay, claims, elements, remedies, register, report, CSV, PDF, apply remedy, override, unmask, review queue | **Done** | Driven as a running server throughout. Runs now survive a restart: Firestore is enabled and a completed run persists its record, claims, elements, remedies and rendered overlay, so reopening it after a restart returns the annotated script rather than a 404. Firestore had been write only, written on completion and never read back, which is why every restart presented an empty dashboard while the runs sat in the database. A run is also registered the moment it is accepted, so it appears while it works rather than only when it finishes |
 | Verdict overlay UI | Docket, overlay, evidence panel, claim dashboard, counsel queue, cost meter, role switcher, drag and drop upload, run list | **Done** | `npm run build` and `next lint` both clean, and the whole surface was driven against a live mock run: upload, stream, overlay, evidence, remedy. Supersedes the previous item 12, which called the remedy payload a placeholder |
 | Design system | Dark chrome around a light paper script, one accent, hairline rules, an integer type scale, no gradients and no hover lifts. Screenplay set at US Letter with a 1.5in binding margin, so a line never wraps mid sentence | **Done** | `web/app/globals.css`. Verified in a browser against a completed run |
 | Artifacts | Verdict overlay JSON, claim register, E&O report as JSON and PDF, clearance log CSV, monitor manifest | **Done** | `truestory run --report`; `tests/test_pipeline.py` asserts valid CSV, a rendering PDF and a watermarked underwriter copy |
@@ -582,19 +589,53 @@ first. The three marked fixed were repaired during this audit.
 
 | # | Problem | Impact | State |
 |---|---|---|---|
-| **B1** | **CI had never been green.** Every run on `main` failed | A red badge on a public submission | **Fixed** by B2 and B3 |
+| **B1** | **CI had never been green.** Every run on `main` failed | A red badge on a public submission | **Still open, and the previous claim here was wrong.** B2 and B3 fixed lint, formatting and the Terraform parse, but the python job also runs `mypy src/truestory`, which reports **19 errors in 10 files** and fails the job. Mostly `no-any-return` in the storage and provider layers, plus missing `google.cloud.storage` stubs. Everything else is green: `pytest` 95 passed, policy and schema validation, `npm run build`, `terraform validate` |
 | **B2** | `ruff check` reported 61 errors and `ruff format --check` wanted 31 files reformatted | Failed both the 3.11 and 3.12 python jobs before the tests ever ran | **Fixed.** 52 were auto fixable; the rest were 6 `N803` in the PDF helpers, 2 collapsible `if` statements, and one deliberately grouped `__all__` that now carries its reason. `ruff check` and `ruff format --check` are both clean |
 | **B3** | `infra/main.tf` used `replication { auto {} }`, invalid HCL, in three places | `terraform validate` failed, so `make infra-apply` could not run and no Google Cloud resource had ever been created | **Fixed.** Expanded to multi line blocks. Terraform is not installed on the audit machine, so this is confirmed against the reported parse error rather than by a local `validate` |
 | **B4** | A working `.env` pointing `GOOGLE_APPLICATION_CREDENTIALS` at one developer's absolute path, with `TRUESTORY_MODE=live` | Settings validation rejects a credential path that does not exist, so on that machine the package fails to import and nothing runs until `.env` is edited. `.env` is correctly gitignored and has never been committed, so a fresh clone is unaffected | **Open.** Keep the credential path empty and the mode `mock` in any shared `.env`, exactly as `.env.example` has it |
 | **B5** | PR **#3**, 1,619 additions of live pipeline fixes and two new UI components, was unmerged | `main`, the branch a judge clones, was not the current state of the work | **Fixed.** Merged as `79940b6`. It moved the verdict mix, which is why the numbers in section 3 changed |
 | **B6** | `web/package-lock.json` was out of sync with `package.json`, so `npm ci` refused to install | Hidden by the `npm ci \|\| npm install` fallback in CI, which meant every web build silently resolved dependencies afresh rather than from the lock | **Fixed.** Lockfile regenerated. `npm ci` now exits 0, and the build and lint both pass from that install |
+| **B7** | **The system fabricated legal findings about real people.** An invented character, "Jonah Reed", was matched to an unrelated real person's obituary and issued: *"his estate controls his publicity rights until 2033. A license is required"*, at 0.9 confidence. Its own rationale noted the provider had concluded wrongly, and it issued the finding anyway | The worst output this system can produce. It names a real stranger's estate in a legal deliverable on the strength of a shared name, and it would send counsel chasing an estate that has nothing to do with the production | **Fixed**, see below. Verified by rerunning the same script: the character is now typed `PERSON_NAME_FICTIONAL` and no claim about any real person is made |
+| **B8** | **Licence requirements were asserted for works that were never identified.** A photograph came back `work_identified: false`, no creator, no rights holder, `copyright_status: unknown`, and was issued `NEEDS_LICENSE` at 0.9. Others were cited to general law review articles about the de minimis doctrine, which describe how copyright works and say nothing about the work in hand | A licence requirement names an owner. Naming one for a work nobody located is an invented obligation, and citing background law as though the subject had been researched dresses a presumption as a finding | **Fixed.** Rerun shows zero unidentified works asserting `NEEDS_LICENSE` |
+
+**How B7 and B8 were fixed.** Four changes, and only the first two are prompts,
+because the model had already demonstrated it will not police itself here.
+
+1. **Ingest now has a test for real versus invented.** It had none: both types
+   were defined, neither was given a rule for choosing between them, and the
+   surrounding instruction was *"prefer recall over precision, a false positive
+   costs a cheap lookup"*. True when deciding whether to tag a span, false when
+   deciding whether a person is real, where a false positive manufactures a
+   legal claim about a stranger. The rule is now: default to fictional unless
+   the person is independently recognisable, or the script fixes their identity
+   through a verifiable role, office, event or work. A name alone never
+   qualifies, and a true story framing raises the stakes rather than being
+   evidence about any particular name.
+2. **A source must be tied to the subject.** Matching profession, place, dates,
+   relationships or events, not the name. Background law is reasoning, not
+   evidence about a subject, and must not raise confidence.
+3. **The schema records identity.** `real_person_v2` gained a required
+   `identity_confirmed` and an `identity_basis`. `visual_copyright_v1` already
+   had `work_identified` and `quote_attribution_v1` already had
+   `quote_documented`; both were being answered honestly and neither was read.
+4. **Two deterministic post checks, which are the actual guarantee.** A person
+   reaching a consequential status without confirmed identity, or a rights
+   bearing work reaching one without having been identified, is forced to
+   `NEEDS_COUNSEL` with confidence capped at 0.5 and the reason stated on the
+   record. The rubric is code, per the design principle that everything
+   consequential happens after the model.
+
+The result is deliberately conservative, and possibly too conservative: a real
+public figure who appeared in an earlier run is now classified fictional.
+Confirming the balance needs a script with genuinely real named subjects, which
+is precisely what the demo screenplay cannot provide. See item 12.
 
 ### 14.4 What is outstanding, in dependency order
 
 | # | Item | State | Why it matters | Where |
 |---|---|---|---|---|
-| **1** | Parallel API key, and the credit allowance email | **Not built** | Nothing about the partner integration is proven until one real call returns a citation | `PARALLEL_API_KEY`, and Secret Manager as `truestory-parallel-api-key` |
-| **2** | Google Cloud project, billing, the $300 trial and the $100 hackathon credit | **Not built** | One to five business days of lead time on the credit form. It gates everything below | `make infra-apply`, unblocked by the **B3** fix |
+| **1** | Parallel API key, and the credit allowance email | **Done** | The key is wired and live Task runs return real citations into the overlay. Spend so far is a few dollars against no credit allowance, so the allowance is still worth chasing | `PARALLEL_API_KEY`, and Secret Manager as `truestory-parallel-api-key` |
+| **2** | Google Cloud project, billing, the $300 trial and the $100 hackathon credit | **Partly done** | Project `gen-lang-client-0569749083` is live with billing: Vertex AI serves all four model calls and Firestore Native is enabled in `us-central1` and persisting runs. Terraform has still never been applied, so every other resource in `infra/` remains uncreated, and the hackathon credit has not been claimed | `make infra-apply`, unblocked by the **B3** fix |
 | **3** | Webhook signing secret | **Not built** | Until it exists the receiver refuses every callback, deliberately. An unauthenticated endpoint that accepts research findings lets a stranger write into a legal deliverable | Secret Manager as `truestory-parallel-webhook-secret` |
 | **4** | Identity token verification | **Not built** | `current_principal` trusts request headers in local mode and raises `501` otherwise. **Do not deploy publicly until this is done** | [src/truestory/api/main.py](src/truestory/api/main.py) |
 | **5** | Firestore security rules deployed | **Not built** | The rules exist only as the `FIRESTORE_RULES` string constant. Per project isolation belongs in the rules, not only in the application | [src/truestory/api/security.py](src/truestory/api/security.py) → `firestore.rules` |
@@ -604,10 +645,10 @@ first. The three marked fixed were repaired during this audit.
 | **9** | Ground truth labelling | **Broken** | The committed file is a scaffold and self declares it. Eval A therefore reports **zero claim recall** today | `eval/labeled_script/ground_truth.json`; two labellers, a third adjudicates |
 | **10** | Litigation Set run end to end | **Broken** | The suite scores the routing table, not the pipeline. See [section 10](#10-evaluation). This is the differentiator that wins the track, and it is the row furthest from true | `_run_case` in [eval/run_eval.py](eval/run_eval.py) |
 | **11** | Every legal fact in the Litigation Set verified | **Not built** | All ten cases are marked `verify: required`. Appellate posture moves fastest of all | `eval/litigation_set/cases.yaml`, two person rule |
-| **12** | Demo screenplay subject | **Broken** | Every character in `the_long_shadow.fountain` is invented, so **live research can only ever return no record**. Seeds that expect VERIFIED and CONTRADICTED cannot reach those verdicts against the real web. The build specification called for a real, safely deceased public figure with an abundant documented record for exactly this reason | Either re point the script at such a figure, with the estate posture and post mortem publicity term checked by counsel, or state plainly that the demo runs on fixtures |
+| **12** | Demo screenplay subject | **Broken, and now blocking accuracy work** | Every character in `the_long_shadow.fountain` is invented, so **live research can only ever return no record**. Seeds that expect VERIFIED and CONTRADICTED cannot reach those verdicts against the real web. The build specification called for a real, safely deceased public figure with an abundant documented record for exactly this reason | Either re point the script at such a figure, with the estate posture and post mortem publicity term checked by counsel, or state plainly that the demo runs on fixtures. It also now blocks verification of the B7 fix: with no genuinely real named subject in any test script, there is no way to confirm the new conservative classifier still recognises a real person when one is present |
 | **13** | Demo screenplay scale | **Not built** | 185 lines, roughly 4 pages, 7 scenes, 54 research subjects. The specification targets 25 to 30 pages and around 200 subjects, which is what makes the cost and dedup story land | `demo/screenplay/` |
 | **14** | Monitor path end to end | **Offline only** | Provider, handles, manifest, classification and alerting are all written and never fired by a real event. A pre recorded insert of a genuine run is acceptable for the video; a staged mockup is not | `parallel_monitor.py`, `webhooks/main.py` |
-| **15** | Cost model verification | **Not built** | Several figures date to the Task API launch post. The projection printed on screen is only as good as these | `Processor.usd_per_run`, then `truestory explain` |
+| **15** | Cost model verification | **Done** | Parallel's five processor prices were checked against the published rates on 19 August and all five are correct. Gemini spend is now metered per run and reported next to the research figure, which is the larger of the two | `Processor.usd_per_run`, `providers/model_cost.py` |
 | **16** | Cloud Tasks and Cloud Scheduler client code | **Not built** | Both are provisioned in Terraform and neither is called. `/internal/sweep` returns a canned response and sweeps nothing, so a lost callback still leaves a subject pending forever | `webhooks/main.py` |
 | **17** | Async research path closed | **Offline only** | A task completion callback writes evidence to Firestore but never resumes the parked run's adjudication. In practice `_webhook_reachable()` returns false and the swarm awaits inline, which is why the demo works. The async plane is not proven | `parallel_task.py`, `webhooks/main.py` |
 | **18** | Hosted URL and the three minute video | **Not built** | Both are hard submission requirements | none yet |
@@ -628,16 +669,27 @@ first. The three marked fixed were repaired during this audit.
 
 Everything above is real work. These three are the ones that change the outcome.
 
-1. **Make one live Parallel call return a citation into the overlay.** Every
-   claim this project makes about its partner integration rests on a path that
-   has never been executed.
-2. **Fix the demo subject** (item 12). A fact verification demonstration whose
+1. **Fix the demo subject** (item 12). A fact verification demonstration whose
    subject has no public record cannot show a green verdict with receipts, which
-   is the money shot.
-3. **Make Eval B a real blind run** (item 10). It is the differentiator nobody
-   else can replicate in the final week, and today it measures a YAML file.
+   is the money shot. It now blocks twice over: it is also the only way to
+   confirm the B7 classifier still recognises a real person when one is there.
+2. **Make Eval B a real blind run** (item 10). It is the differentiator nobody
+   else can replicate, and today it measures a YAML file. It is also the only
+   mechanism that would have caught B7 and B8 before a human noticed them,
+   which is the strongest argument for building it.
+3. **Turn CI green** (B1). One job away: `mypy` reports 19 errors and nothing
+   else fails. Roughly an hour, and it is the first thing a judge sees.
 
-Turning CI green was the fourth, and it is done.
+Making one live Parallel call return a citation into the overlay was the
+fourth, and it is done.
+
+**A note on what B7 and B8 mean for the rest of this document.** Two classes of
+fabricated finding sat in a legal tool undetected until someone read the output
+closely. Both were caught by inspection, not by a test, and neither eval would
+have flagged them in its current state. Nothing else in this section should be
+read as evidence that the remaining verdicts are accurate; it is evidence that
+the pipeline runs. Accuracy is measured by item 10 and item 9, and both are
+still broken.
 
 ---
 
