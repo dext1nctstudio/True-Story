@@ -29,12 +29,18 @@ export function CostMeter({ budget, visible }: Props) {
   const utilisation = Math.min(1, budget.utilisation);
   const state = utilisation >= 1 ? "over" : utilisation >= 0.8 ? "warn" : "";
 
+  // The headline is the total, not the research half. Model tokens routinely
+  // cost an order of magnitude more than the research on a short script, so
+  // showing research alone reads as a run that cost almost nothing.
+  const total = budget.total_usd ?? budget.spent_usd;
+  const modelUsd = budget.model_usd ?? 0;
+
   return (
     <div className="cost-meter" title={tooltip(budget)}>
       <div className="cost-row">
-        <span className="cost-value">{formatUsd(budget.spent_usd)}</span>
+        <span className="cost-value">{formatUsd(total)}</span>
         <span className="counter-label">
-          of {formatUsd(budget.ceiling_usd)}
+          research {formatUsd(budget.spent_usd)} of {formatUsd(budget.ceiling_usd)}
         </span>
       </div>
 
@@ -45,6 +51,7 @@ export function CostMeter({ budget, visible }: Props) {
       <div className="cost-row">
         <span className="counter-label">
           {budget.calls} lookups
+          {modelUsd > 0 && `, ${formatUsd(modelUsd)} model`}
           {budget.cache_hits > 0 && `, ${formatPercent(budget.cache_hit_rate)} cached`}
         </span>
         {budget.degradations > 0 && (
@@ -58,10 +65,18 @@ export function CostMeter({ budget, visible }: Props) {
 }
 
 function tooltip(budget: BudgetSnapshot): string {
+  // Two bills, and only the research half is bounded by the ceiling.
   const lines = [
-    `Spent ${formatUsd(budget.spent_usd)} of a ${formatUsd(budget.ceiling_usd)} ceiling`,
+    `Research ${formatUsd(budget.spent_usd)} of a ${formatUsd(budget.ceiling_usd)} ceiling`,
     `${budget.calls} lookups, ${budget.cache_hits} served from cache`,
   ];
+  if (budget.model_usd) {
+    lines.push(
+      `Model ${formatUsd(budget.model_usd)} across ${budget.model_calls ?? 0} calls, ` +
+        "priced per token and not governed by the research ceiling",
+    );
+    lines.push(`Total ${formatUsd(budget.total_usd ?? 0)}`);
+  }
   if (budget.degradations > 0) {
     // Depth degrades before a run fails, and critical work never degrades at
     // all because it draws on a reserve nothing else can reach.

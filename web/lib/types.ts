@@ -187,6 +187,7 @@ export interface PersonRollup {
 }
 
 export interface BudgetSnapshot {
+  /** Research spend, priced per Parallel task run. Governed by the ceiling. */
   spent_cents: number;
   spent_usd: number;
   ceiling_usd: number;
@@ -197,6 +198,12 @@ export interface BudgetSnapshot {
   cache_hit_rate: number;
   degradations: number;
   warnings: string[];
+  /** Model spend, priced per Gemini token. A separate bill, and on a short
+   *  script it runs an order of magnitude above the research figure, so
+   *  showing research alone badly understates what a run costs. */
+  model_usd?: number;
+  model_calls?: number;
+  total_usd?: number;
 }
 
 export interface RunListItem {
