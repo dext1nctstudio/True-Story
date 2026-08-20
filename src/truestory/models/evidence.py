@@ -50,9 +50,32 @@ class Citation:
     trust: float = 0.5  # 0..1, weights corroboration
     verified_source: bool = False  # False: host was not in any table
 
+    # ── attribution, filled by agents.attribution ───────────────────────────
+    # A search engine returns the sources it consulted, not the sources that
+    # bear on the question. Asked whether an invented person was dismissed from
+    # an invented board, Google returned ntsb.gov and honolulu.gov and Parallel
+    # returned a teenage swimmer's results page — all real, all authoritative
+    # looking, none of them about the claim. Attaching those as evidence is the
+    # single most damaging thing this product could do, so a citation is only
+    # evidence once something has said what it does for THIS proposition and
+    # quoted the words that do it.
+    stance: str = "unassessed"  # supports | contradicts | irrelevant | unassessed
+    quote: str = ""  # verbatim span from the retrieved text
+    quote_verified: bool = False  # the span was found in the retrieved text
+    stance_reason: str = ""
+
     @property
     def is_primary(self) -> bool:
         return self.source_type == "primary"
+
+    @property
+    def is_attributed(self) -> bool:
+        """Whether this source has been shown to bear on the claim.
+
+        Both halves are required. A stance with no verified quote is a model
+        asserting relevance, which is the thing being guarded against.
+        """
+        return self.stance in ("supports", "contradicts") and self.quote_verified
 
     @property
     def is_classified_primary(self) -> bool:
@@ -210,6 +233,32 @@ class Evidence:
             "independent_domains": sorted(self.domains),
             "source_strength": round(self.source_strength, 3),
         }
+
+    def with_citations(self, citations: list[Citation]) -> Evidence:
+        """A copy carrying a different source list.
+
+        The attribution gate uses this to replace what came back with what
+        survived. Everything downstream — corroboration, the rubric, the
+        report, the overlay — then counts only sources that were shown to bear
+        on the claim, because the envelope no longer contains any others.
+        """
+        return Evidence(
+            evidence_id=self.evidence_id,
+            subject_id=self.subject_id,
+            question=self.question,
+            finding=self.finding,
+            citations=citations,
+            reasoning=self.reasoning,
+            confidence=self.confidence,
+            provider=self.provider,
+            schema_version=self.schema_version,
+            is_fallback=self.is_fallback,
+            cost_cents=self.cost_cents,
+            latency_ms=self.latency_ms,
+            cached=self.cached,
+            retrieved_at=self.retrieved_at,
+            error=self.error,
+        )
 
     @staticmethod
     def make_id(subject_id: str, question: str, provider: str) -> str:

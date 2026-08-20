@@ -54,6 +54,10 @@ class Corroboration:
     primary_count: int = 0  # declared primary
     classified_primary_count: int = 0  # primary on a recognised host
     low_trust_count: int = 0
+    #: Citations on hosts this system recognises and does not classify as user
+    #: generated. An unrecognised host is not evidence that something is false;
+    #: it is a page nobody can vouch for, and two of them are still nobody.
+    recognised_count: int = 0
     strongest_trust: float = 0.0
 
     #: What the research payload concluded, read from its own fields.
@@ -63,6 +67,11 @@ class Corroboration:
     record_quality: str = ""  # strong | moderate | thin
 
     conflict: bool = False
+    #: Stances assigned by the attribution gate, counted separately from the
+    #: research payload's own fields. Two sources quoted against each other is
+    #: a conflict whatever the payload concluded, and it was going unnoticed.
+    supporting_sources: int = 0
+    contradicting_sources: int = 0
     newest_source_days: int | None = None
     oldest_source_days: int | None = None
 
@@ -107,12 +116,15 @@ class Corroboration:
             "primary_count": self.primary_count,
             "classified_primary_count": self.classified_primary_count,
             "low_trust_count": self.low_trust_count,
+            "recognised_count": self.recognised_count,
             "strongest_trust": round(self.strongest_trust, 3),
             "record_signal": self.record_signal,
             "supporting_facts": self.supporting_facts,
             "contradicting_facts": self.contradicting_facts,
             "record_quality": self.record_quality,
             "conflict": self.conflict,
+            "supporting_sources": self.supporting_sources,
+            "contradicting_sources": self.contradicting_sources,
             "single_source": self.single_source,
             "low_trust_only": self.low_trust_only,
             "newest_source_days": self.newest_source_days,
@@ -139,6 +151,13 @@ def analyse(evidence: list[Evidence]) -> Corroboration:
         report.primary_count += record.primary_source_count
         report.classified_primary_count += record.classified_primary_count
         report.low_trust_count += record.low_trust_count
+        report.recognised_count += sum(
+            1 for c in record.citations if c.verified_source and c.source_class != "user"
+        )
+        report.supporting_sources += sum(1 for c in record.citations if c.stance == "supports")
+        report.contradicting_sources += sum(
+            1 for c in record.citations if c.stance == "contradicts"
+        )
         domains |= record.domains
         trusts.extend(c.trust for c in record.citations)
         for citation in record.citations:
@@ -163,6 +182,17 @@ def analyse(evidence: list[Evidence]) -> Corroboration:
         report.notes.append(
             f"The record cuts both ways: {report.supporting_facts} supporting and "
             f"{report.contradicting_facts} contradicting findings were returned."
+        )
+
+    # The same test over the stances the gate actually assigned. A payload can
+    # report a clean verdict while the sources quoted underneath it disagree,
+    # and the sources are the part that was checked.
+    if report.supporting_sources and report.contradicting_sources:
+        report.conflict = True
+        report.notes.append(
+            f"{report.supporting_sources} quoted source"
+            f"{'' if report.supporting_sources == 1 else 's'} support this and "
+            f"{report.contradicting_sources} contradict it. Both are shown."
         )
 
     if report.single_source:

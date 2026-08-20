@@ -121,6 +121,29 @@ PRIMARY_DOMAINS: frozenset[str] = frozenset(
         # scholarly records of record
         "doi.org",
         "pubmed.ncbi.nlm.nih.gov",
+        # Statistical registers. For a sporting or box office fact the record of
+        # record is the scorecard, not a docket, and treating those as merely
+        # "secondary" made a correctly contradicted claim get downgraded for
+        # want of a court document that could never exist for it.
+        "espncricinfo.com",
+        "icc-cricket.com",
+        "cricketarchive.com",
+        "olympics.com",
+        "olympedia.org",
+        "fifa.com",
+        "uefa.com",
+        "fiba.basketball",
+        "formula1.com",
+        "baseball-reference.com",
+        "basketball-reference.com",
+        "pro-football-reference.com",
+        "boxofficemojo.com",
+        "the-numbers.com",
+        "afi.com",
+        "catalog.afi.com",
+        "oscars.org",
+        "bafta.org",
+        "grammy.com",
     }
 )
 
@@ -166,6 +189,44 @@ NEWS_DOMAINS: frozenset[str] = frozenset(
         "thehindu.com",
         "indianexpress.com",
         "scmp.com",
+        # A clearance product for "based on a true story" work is not a product
+        # for American stories. Leaving these out classified most of the record
+        # for an India set script as "unrecognised host", which understated
+        # every corroboration score on the run and is simply wrong: these are
+        # national newspapers and wire services.
+        "hindustantimes.com",
+        "indiatoday.in",
+        "ndtv.com",
+        "livemint.com",
+        "business-standard.com",
+        "thequint.com",
+        "theprint.in",
+        "outlookindia.com",
+        "deccanherald.com",
+        "telegraphindia.com",
+        "tribuneindia.com",
+        "firstpost.com",
+        "news18.com",
+        "aninews.in",
+        "ptinews.com",
+        "dawn.com",
+        "thedailystar.net",
+        "straitstimes.com",
+        "japantimes.co.jp",
+        "abc.net.au",
+        "cbc.ca",
+        "rte.ie",
+        "irishtimes.com",
+        "lemonde.fr",
+        "spiegel.de",
+        "elpais.com",
+        "afp.com",
+        "dw.com",
+        "france24.com",
+        "cnbc.com",
+        "cricbuzz.com",
+        "sport.sky.com",
+        "skysports.com",
     }
 )
 
@@ -255,6 +316,21 @@ LOW_TRUST_DOMAINS: frozenset[str] = frozenset(
         "nickiswift.com",
         "looper.com",
         "grunge.com",
+        # Machine generated encyclopedias and Wikipedia mirrors. These read as
+        # reference works and are not one: they restate, unattributed, whatever
+        # they were trained on, so a claim resting on them rests on nothing
+        # that can be checked. Parallel returned grokipedia.com as the basis
+        # for a cricket scoreline during testing.
+        "grokipedia.com",
+        "dbpedia.org",
+        "wikiwand.com",
+        "alchetron.com",
+        "everipedia.org",
+        "prabook.com",
+        "peoplepill.com",
+        "famousbirthdays.com",
+        "wikibio.in",
+        "biographypedia.org",
     }
 )
 
@@ -339,6 +415,39 @@ _ARCHIVE_DOMAINS: frozenset[str] = frozenset(
         "timesmachine.nytimes.com",
         "trove.nla.gov.au",
         "chroniclingamerica.loc.gov",
+    }
+)
+
+#: Databases that are the record of record inside one domain of fact. A cricket
+#: scorecard, an Olympic result and a title's release data are not "reporting":
+#: they are the register, and treating them as secondary meant a correctly
+#: contradicted sporting claim was downgraded for want of a court document that
+#: could not exist for it.
+STATISTICAL_REGISTERS: frozenset[str] = frozenset(
+    {
+        "espncricinfo.com",
+        "icc-cricket.com",
+        "cricketarchive.com",
+        "olympics.com",
+        "olympedia.org",
+        "fifa.com",
+        "uefa.com",
+        "fiba.basketball",
+        "formula1.com",
+        "baseball-reference.com",
+        "basketball-reference.com",
+        "pro-football-reference.com",
+        "boxofficemojo.com",
+        "the-numbers.com",
+        "catalog.afi.com",
+        "afi.com",
+        "oscars.org",
+        "bafta.org",
+        "grammy.com",
+        # National governing bodies publishing their own records.
+        "bcci.tv",
+        "ecb.co.uk",
+        "cricketaustralia.com.au",
     }
 )
 
@@ -450,7 +559,7 @@ def classify_host(host: str) -> tuple[str, bool]:
     # different weight from a plain government page.
     if _host_matches(host, _ARCHIVE_DOMAINS):
         return SourceClass.ARCHIVE, True
-    if _host_matches(host, _REGISTRY_DOMAINS):
+    if _host_matches(host, _REGISTRY_DOMAINS) or _host_matches(host, STATISTICAL_REGISTERS):
         return SourceClass.REGISTRY, True
     if _host_matches(host, LOW_TRUST_DOMAINS):
         return SourceClass.USER, True

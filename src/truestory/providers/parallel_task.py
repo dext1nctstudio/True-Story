@@ -201,6 +201,15 @@ class ParallelTaskProvider(ResearchProvider):
         if request.idempotency_key:
             payload["metadata"]["idempotency_key"] = request.idempotency_key
 
+        # Keep the crawler away from the hosts that cannot support a finding.
+        # Machine generated encyclopedias restate their training data without
+        # attribution and content farms restate each other; a claim about a
+        # real person resting on either rests on nothing checkable. Top level
+        # field, not inside task_spec.
+        # https://docs.parallel.ai/resources/source-policy
+        if _EXCLUDED_SOURCES:
+            payload["source_policy"] = {"exclude_domains": list(_EXCLUDED_SOURCES)}
+
         # Async dispatch for the deep processors. The receiver verifies the
         # signature on every inbound callback before it touches run state.
         if (
@@ -270,6 +279,17 @@ class ParallelTaskProvider(ResearchProvider):
             harvested.add_facts(content)
         citations = harvested.build()
 
+        # A finding of "no record" has no sources by definition, and the ones
+        # the API returns alongside it are what it looked at while finding
+        # nothing. Measured on the live API: asked whether an invented person
+        # was dismissed from an invented board, Parallel correctly answered
+        # no_record and attached a citation to a teenage swimmer's results
+        # page, because the basis explains fields like record_quality rather
+        # than the verdict. Publishing that under the verdict is worse than
+        # publishing nothing, so nothing is what it publishes.
+        if _is_silence(content):
+            citations = []
+
         return Evidence(
             evidence_id=Evidence.make_id(
                 request.subject_id, request.question, self._qualified_name(request.processor)
@@ -332,11 +352,20 @@ class _CitationBag:
 
     # ── inputs ───────────────────────────────────────────────────────────────
     def add_basis(self, basis: Any) -> None:
-        """Parallel's per field citations: {url, excerpts[]}."""
+        """Parallel's per field citations: {field, citations:[{url, excerpts[]}]}.
+
+        Only the fields that carry the answer count. A Task response returns a
+        basis entry per output field, so `record_quality` and `temporal_scope`
+        come back with citations of their own — and those are provenance for a
+        piece of metadata, not evidence for the claim. Harvesting all of them
+        was the single largest source of irrelevant citations in the product.
+        """
         if not isinstance(basis, list):
             return
         for field_basis in basis:
             if not isinstance(field_basis, dict):
+                continue
+            if not _bears_on_the_answer(field_basis.get("field")):
                 continue
             for cit in field_basis.get("citations") or []:
                 if not isinstance(cit, dict):
@@ -472,3 +501,74 @@ def _parse_date(value: Any) -> datetime | None:
             continue
         return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
     return None
+
+
+#: Hosts the research is told not to read. Capped at ten, which is the
+#: documented limit, so this is the worst offenders rather than a blocklist:
+#: everything else is handled downstream by classification and attribution.
+_EXCLUDED_SOURCES: tuple[str, ...] = (
+    "grokipedia.com",
+    "wikiwand.com",
+    "alchetron.com",
+    "peoplepill.com",
+    "famousbirthdays.com",
+    "celebritynetworth.com",
+    "ranker.com",
+    "quora.com",
+    "answers.com",
+    "pinterest.com",
+)
+
+#: Output fields whose citations are evidence for the finding itself. Anything
+#: else in a Task response is a field about the research rather than about the
+#: subject, and its sources belong in neither the overlay nor the appendix.
+_ANSWER_FIELDS = frozenset(
+    {
+        "verdict",
+        "claim_restated",
+        "supporting_facts",
+        "contradicting_facts",
+        "status",
+        "recommended_action",
+        "risk",
+        "entity_exists",
+        "canonical_name",
+        "matching_persons",
+        "real_persons_matching",
+        "rights_holder",
+        "copyright_status",
+        "registration",
+        "work_identified",
+        "alive",
+        "subject_alive",
+    }
+)
+
+#: What a payload says when the record is silent. Silence is a finding; it is
+#: not a finding with sources.
+_SILENT_VERDICTS = frozenset({"no_record", "not_found", "unknown", "silent"})
+
+
+def _bears_on_the_answer(field_name: Any) -> bool:
+    if not isinstance(field_name, str) or not field_name:
+        return False
+    root = field_name.split(".", 1)[0].split("[", 1)[0].strip().lower()
+    return root in _ANSWER_FIELDS
+
+
+def _is_silence(content: Any) -> bool:
+    """Whether the payload reported that the record holds nothing either way."""
+    if not isinstance(content, dict):
+        return False
+    verdict = content.get("verdict")
+    if not isinstance(verdict, str):
+        return False
+    if verdict.strip().lower() not in _SILENT_VERDICTS:
+        return False
+    # A payload that says "no record" while listing facts on either side is
+    # contradicting itself; the facts win, because they are checkable.
+    facts = 0
+    for key, value in content.items():
+        if key.endswith("_facts") and isinstance(value, list):
+            facts += len(value)
+    return facts == 0

@@ -217,7 +217,7 @@ class ProviderRegistry:
             return Evidence.failed(request.subject_id, request.question, "registry", str(exc))
 
         try:
-            evidence = await selection.provider.investigate(effective_request)
+            evidence = await _with_retry(selection.provider, effective_request)
         except RateLimited as exc:
             # Sustained rate limiting is a health signal, not just a retry.
             self._health[selection.provider.name] = False
@@ -321,3 +321,33 @@ def _mark_fallback(evidence: Evidence) -> Evidence:
         retrieved_at=evidence.retrieved_at,
         error=evidence.error,
     )
+
+
+#: Transient failure wording. A provider returns these as a failed envelope
+#: rather than raising, so the retry decision is made on the text it wrote.
+_RETRYABLE = ("timeout", "429", "rate limit", "http 5", "temporarily", "unavailable")
+
+#: Attempts, and the pause before each retry. Short: the swarm is already
+#: running thirty of these at once and a long backoff stalls the whole run.
+_RETRY_DELAYS = (1.5, 4.0)
+
+
+async def _with_retry(provider: ResearchProvider, request: ResearchRequest) -> Evidence:
+    """Retry a research call that failed for a reason that may not recur.
+
+    Two true claims on a live run came back "research returned no citable
+    source" because their Task call timed out while thirty others were in
+    flight. To a reader that is indistinguishable from a fact nobody can
+    verify, which is exactly the confusion this product exists to remove, so a
+    transient failure is retried before it is reported as a finding.
+    """
+    evidence = await provider.investigate(request)
+    for delay in _RETRY_DELAYS:
+        if not evidence.error:
+            return evidence
+        lowered = evidence.error.lower()
+        if not any(marker in lowered for marker in _RETRYABLE):
+            return evidence
+        await asyncio.sleep(delay)
+        evidence = await provider.investigate(request)
+    return evidence

@@ -174,7 +174,7 @@ class MockProvider(EnumerationProvider):
             subject_id=request.subject_id,
             question=request.question,
             finding=finding,
-            citations=_synthetic_citations(seed),
+            citations=_synthetic_citations(seed, request.question, verdict),
             reasoning=(
                 "Synthesised by MockProvider. Not a research finding. "
                 "Set TRUESTORY_MODE=live for real verification."
@@ -196,7 +196,49 @@ def _fixture_citation() -> Citation:
     )
 
 
-def _synthetic_citations(seed: int) -> list[Citation]:
+def _subject_line(question: str) -> str:
+    """The proposition under test, lifted out of the question template.
+
+    Every question in `mcp/tools.py` puts its subject on a labelled line, so
+    the fixture can restate it and produce an excerpt that genuinely bears on
+    the claim rather than one that talks about the fixture.
+    """
+    for label in ("CLAIM:", "QUOTE:", "NAME:", "PERSON:", "MARK:", "TITLE:", "WORK:"):
+        for line in question.splitlines():
+            if line.strip().startswith(label):
+                value = line.split(":", 1)[1].strip()
+                if len(value) > 8:
+                    return value
+    for line in question.splitlines():
+        stripped = line.strip()
+        if len(stripped) > 20 and not stripped.endswith(":"):
+            return stripped
+    return "the subject of this enquiry"
+
+
+def _synthetic_excerpt(question: str, verdict: str) -> str:
+    """A passage that says something checkable about the subject."""
+    subject = _subject_line(question)[:220]
+    if verdict == "contradicted":
+        return (
+            f"The record does not support the following as stated: {subject} "
+            "Contemporaneous documents record a different account. "
+            "Synthesised by MockProvider; no real source was consulted."
+        )
+    if verdict == "no_record":
+        return (
+            f"No entry was located concerning: {subject} "
+            "Synthesised by MockProvider; no real source was consulted."
+        )
+    return (
+        f"The record confirms the following: {subject} "
+        "Synthesised by MockProvider; no real source was consulted."
+    )
+
+
+def _synthetic_citations(
+    seed: int, question: str = "", verdict: str = "supported"
+) -> list[Citation]:
     """Fixture citations with a synthetic but structurally honest pedigree.
 
     The URLs are reserved, non resolving hosts, so nothing here can be mistaken
@@ -214,13 +256,15 @@ def _synthetic_citations(seed: int) -> list[Citation]:
     """
     shape = seed % 10
 
+    body = _synthetic_excerpt(question, verdict)
+
     if shape == 9:
         # Forum chatter only. The adjudicator must refuse to decide on this.
         return [
             _fixture(
                 f"https://forum.example.invalid/thread/{seed % 9999}",
                 "Synthesised forum thread, mock provider",
-                "User generated. Cannot settle a claim about a real person.",
+                f"{body} Posted anonymously; user generated and unattributable.",
                 "tertiary",
                 "user",
                 0.15,
@@ -233,7 +277,7 @@ def _synthetic_citations(seed: int) -> list[Citation]:
             _fixture(
                 f"https://press.example.invalid/story/{seed % 9999}",
                 "Synthesised report, mock provider",
-                "Single secondary source. Offline fixture, no research value.",
+                body,
                 "secondary",
                 "news",
                 0.74,
@@ -241,7 +285,7 @@ def _synthetic_citations(seed: int) -> list[Citation]:
             _fixture(
                 f"https://press.example.invalid/story/{(seed + 4) % 9999}",
                 "Synthesised follow up, mock provider",
-                "Same publisher, second page. One source wearing two hats.",
+                f"{body} Follow up from the same publisher.",
                 "secondary",
                 "news",
                 0.74,
@@ -252,11 +296,7 @@ def _synthetic_citations(seed: int) -> list[Citation]:
         _fixture(
             f"https://records.example.invalid/record/{seed % 9999}",
             "Synthesised record, mock provider",
-            (
-                "This envelope was produced by MockProvider and carries no research "
-                "value. It exists so the pipeline can be exercised end to end with "
-                "no credentials and no spend."
-            ),
+            body,
             "primary",
             "official",
             0.95,
@@ -264,7 +304,7 @@ def _synthetic_citations(seed: int) -> list[Citation]:
         _fixture(
             f"https://archive.example.test/report/{(seed + 13) % 9999}",
             "Synthesised corroborating source, mock provider",
-            "Second, independent synthetic source. Offline fixture.",
+            f"{body} Independently reported.",
             "secondary",
             "news",
             0.74,

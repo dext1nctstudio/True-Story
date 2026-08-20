@@ -54,6 +54,14 @@ class FactualClaim:
     #: pedigree, and whether the research payload agreed with the verdict.
     #: Written by the Adjudicator, read by the UI and the report.
     corroboration: dict[str, Any] = field(default_factory=dict)
+    #: What the attribution gate did to the retrieved sources: how many were
+    #: returned, how many could be quoted against this claim, how many were
+    #: dropped as irrelevant. Shown to the user, because "six sources, one of
+    #: which is about this" is the honest description of most searches.
+    attribution: dict[str, Any] = field(default_factory=dict)
+    #: Who the subject was resolved to, or why it could not be. Written by the
+    #: identity stage before any research is dispatched.
+    identity: dict[str, Any] = field(default_factory=dict)
 
     # ── subject facts that change the legal standard ─────────────────────────
     subject_alive: bool | None = None
@@ -76,6 +84,21 @@ class FactualClaim:
     def is_opinion(self) -> bool:
         """Opinion is protected speech. It gets no research spend and no colour."""
         return self.claim_type is ClaimType.CHARACTERIZATION or self.verdict is Verdict.OPINION
+
+    @property
+    def settled_without_research(self) -> bool:
+        """Closed before dispatch because the subject is not a real subject.
+
+        Distinct from an opinion, which is protected speech about a real
+        person, and from unsupported, which is a statement about the record.
+        This one says the claim has no real-world referent at all, so there is
+        nothing to research and nothing a citation could be about.
+        """
+        return (
+            self.verdict is not None
+            and not self.evidence
+            and self.identity.get("status") in ("unidentified", "collision")
+        )
 
     @property
     def is_escalation_cocktail(self) -> bool:
@@ -140,6 +163,8 @@ class FactualClaim:
             "remedy_id": self.remedy_id,
             "citation_count": self.citation_count,
             "corroboration": self.corroboration,
+            "attribution": self.attribution,
+            "identity": self.identity,
             "occurrences": [o.to_dict() for o in self.asserted_in],
             "adjudicated_at": self.adjudicated_at.isoformat() if self.adjudicated_at else None,
         }

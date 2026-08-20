@@ -327,37 +327,100 @@ which makes this a product surface rather than a config detail.
 
 ### How a verdict is allowed to exist
 
-Three things stand between a research answer and a verdict on screen, and all
-three are code rather than prompt text.
+A research API returns the sources it consulted. It does not return the sources
+that bear on the question, and the gap between those two things is the gap
+between a fact checker and a search box with a confident voice.
 
-**1. Every citation is classified from its host.**
+Both halves of that gap were measured on the live APIs, against
+[`ms_dhoni_evidence_test.fountain`](ms_dhoni_evidence_test.fountain) (real
+people, checkable facts, one deliberate error) and
+[`UPLOAD_TEST_FULL_SYSTEM.fountain`](demo/screenplay/UPLOAD_TEST_FULL_SYSTEM.fountain)
+(entirely invented, where the only correct answer is "no record"):
+
+| Asked | What came back | What it means |
+|---|---|---|
+| Was an invented person dismissed from an invented board? | Google grounding: `ntsb.gov`, `kauai.gov`, `honolulu.gov`, `wikipedia.org` | Real, authoritative, about nobody in the script |
+| The same question | Parallel: correctly `no_record`, plus a basis citation to a teenage swimmer's results page | The basis explains fields like `record_quality`, not the verdict |
+| Did MS Dhoni score 97 in the 2011 final? | Parallel: `contradicted`, citing the scoreline | Correct, and the citation is real |
+
+So retrieval is the easy half. Four gates stand between a search result and a
+verdict on screen, and all four are code rather than prompt text.
+
+**1. Identity, before anything is researched.**
+[`identity.py`](src/truestory/agents/identity.py) asks who the subject is
+before asking anything about them. Wikidata answers first — free, immediate,
+and structurally incapable of inventing an entry — and a miss escalates to a
+grounded web search rather than being taken as proof of absence. Three
+outcomes, three different paths:
+
+```
+resolved      pinned to an identifier; claims are verified against the record
+collision     several real people share the name and none dominates. For an
+              invented character that IS the finding; for a person the script
+              presents as real it means research carefully, not stop
+unidentified  nobody bears this name. No dispatch, no spend, no citations,
+              because any source returned would be about somebody else
+```
+
+The identifier then travels into the research question itself, because asking
+about a different entity is asking a different question: without it, "ICC" came
+back researched as the International Code Council and the FIFA World Cup.
+
+**2. Every citation is classified from its host.**
 [`source_quality.py`](src/truestory/providers/source_quality.py) resolves a URL
 to a source class — official record, registry, archive, reporting, trade,
 reference, user generated — and the table wins in both directions. A
 courtlistener docket the researcher called "secondary" is promoted; a Wikipedia
-page it called "primary" is demoted. An unrecognised host keeps whatever was
-declared and is marked unverified, so a rule can require a classified record
-rather than an asserted one.
+page it called "primary" is demoted. Machine generated encyclopaedias are
+excluded at the API through Parallel's `source_policy`.
 
-This is load bearing. Parallel's Basis citations carry a URL and excerpts and
-nothing else, so before this existed every citation in a live run defaulted to
-"secondary" and the rubric's `contradicted_requires_primary_source` silently
-downgraded **every red line in the product** to amber.
+**3. The attribution gate: no source is evidence until it is quoted.**
+[`attribution.py`](src/truestory/agents/attribution.py) reads the page —
+capturing it with Extract where the excerpt is thin — and requires, per source,
+a stance and a **verbatim span**. That span is then located in the retrieved
+text by string search. A model that invented the quote cannot make `in` return
+True, and anything that fails is dropped from the envelope entirely rather than
+shown greyed out, because a citation under a verdict is read as supporting it
+whatever label it carries.
 
-**2. Corroboration is counted, not asserted.**
-[`corroboration.py`](src/truestory/agents/corroboration.py) reports independent
-domains (eTLD+1, because five pages on one site are one source), how many
-recognised records are behind the finding, how many sources are user generated,
-what the research payload itself concluded from its own schema fields, and
-whether it returned supporting and contradicting facts at the same time.
+```
+retrieve -> fetch the page -> quote it -> verify the quote is really there
+         -> assign a stance -> only then is it evidence
+```
 
-**3. Confidence may not exceed what that supports.** The corroboration score
-caps confidence before any threshold is applied, so a single tertiary source
-cannot produce a 0.95 verdict however certain the model sounded.
+**4. Corroboration and the standard of proof.**
+[`corroboration.py`](src/truestory/agents/corroboration.py) counts independent
+registrable domains, recognised records, and whether the quoted sources agree
+with each other. Confidence may not exceed what that supports. The standard for
+a contradiction then depends on what is being contradicted: a negative
+assertion about a living person needs a recognised record, because that is the
+claim that gets filed on; a sporting scoreline needs corroboration across
+independent recognised sources, because no docket for it exists and demanding
+one buried a true finding.
 
-All of it is on screen. The evidence panel shows the count of independent
-sources, how many are records, the payload's own signal, and a per source badge
-naming the class the host was classified as.
+#### What it produces
+
+The same run, on the two fixtures, after the gates:
+
+```
+THE FINISHER (real people, checkable facts)
+  [VERIFIED] MS Dhoni was named Player of the Match in the 2011 final
+    gate: 9 kept of 18 | corroboration 0.92 across 8 domains, 2 records
+    [supports] registry  espncricinfo.com  "Player Of The Match / MS Dhoni, IND / 91* (79)"
+    [supports] registry  espncricinfo.com  "Man of the match is Dhoni"
+    [supports] news      hindustantimes.com "Mahendra Singh Dhoni was named Man of the Match…"
+
+SIGNAL FIRES (entirely invented)
+  0 verified · 0 contradicted · every claim unsupported
+  dropped: achp.gov and wikipedia.org on the real town of Northbridge,
+           a USPTO record for THE WASHINGTON HERALD, a real song called
+           "Midnight Signal", a Titan submersible article for the phrase
+           "a disaster waiting to happen"
+```
+
+Neither of those is a search result. The first is a passage somebody could
+check; the second is the refusal that makes the first worth anything.
+
 
 ---
 
@@ -421,8 +484,14 @@ Five of six APIs, each doing a distinct job.
 | **Task** | Core verification and clearance research, tier routed by depth | [parallel_task.py](src/truestory/providers/parallel_task.py) |
 | **Search** | The interrogation path. One round trip for "why is this line red" | [parallel_search.py](src/truestory/providers/parallel_search.py) |
 | **FindAll** | Set valued questions. Every entity bearing this name; every person matching this cluster | [parallel_findall.py](src/truestory/providers/parallel_findall.py) |
-| **Extract** | Preservation. Registry pages captured into the evidence pack at a known timestamp | [parallel_extract.py](src/truestory/providers/parallel_extract.py) |
+| **Extract** | Capturing the page so a quote can be checked against the source, and preserving it for the appendix | [parallel_extract.py](src/truestory/providers/parallel_extract.py) |
 | **Monitor** | Living Clearance. Facts, licences and litigation after the report is filed | [parallel_monitor.py](src/truestory/providers/parallel_monitor.py) |
+
+`source_policy` is set on every Task request to keep the crawler away from
+machine generated encyclopaedias and content farms, which restate their
+training data without attribution and cannot support a claim about a real
+person. Parallel returned `grokipedia.com` as the basis for a cricket scoreline
+during testing, which is what put that list there.
 
 **Why this partner fits this product.** Every response carries citations,
 reasoning, excerpts and calibrated confidence per output field, which maps onto

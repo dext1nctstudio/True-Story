@@ -196,15 +196,59 @@ SUBJECT
 Attribute every claim to the specific real person or event it is about. A claim
 with no identifiable subject is not extractable and should be omitted.
 
+CHECKABILITY IS A PRECONDITION, NOT A PREFERENCE.
+
+Everything you emit is dispatched to a research API and checked against the
+public record. A line that no source could ever confirm or deny wastes that
+call and, worse, comes back with whatever the search engine had lying around —
+which then appears in a legal document as evidence. Emit a claim only when all
+four of these hold.
+
+  1. It asserts something about the world outside the story. Stage directions
+     are not claims. "She crosses to the window", "He circles a line in red",
+     "Maya unlocks cabinet 4B" describe the fiction, not the record.
+
+  2. It is specific enough to look up. "One question." and "That is your
+     opinion" assert nothing checkable. A claim needs a subject, a predicate,
+     and enough detail that two researchers would look for the same thing.
+
+  3. Its subject is a named real person, organisation, work or event, not a
+     pronoun and not a role. If you cannot say who it is about without reading
+     the surrounding scene, omit it.
+
+  4. Somebody outside the production could in principle have recorded it. A
+     private conversation between two characters is not on any record.
+
+WHAT THE STORY ASSERTS IS NOT THE SAME AS WHAT A CHARACTER SAYS.
+
+A character accusing another character of something is the production
+asserting that accusation about whoever the character is drawn from. Extract
+it, and mark its polarity by the effect on that person. But a character
+correcting a mistake inside the scene — "That is incorrect, he scored 91, not
+97" — contains the factual claim, not the correction. Extract the proposition
+being asserted or denied, once, in its plainest form.
+
+When a scene explicitly states a claim and then states it is wrong, extract
+both as separate claims. The record will settle which is which, and that is the
+whole product.
+
 Return only the structured output. No commentary.
 """
 
 CLAIM_EXTRACTOR_USER = """\
-REAL PERSON OR EVENT: {subject}
-KNOWN CONTEXT: {context}
+SUBJECTS TAGGED IN THIS SCENE. Every claim must be about one of them:
+{subjects}
 
 TEXT TO DECOMPOSE (scene {scene_no}, page {page}):
 {text}
+
+Decompose the whole scene once. Attribute each claim to whichever subject it
+concerns by writing that subject's name in the `subject` field exactly as it
+appears in the list above.
+
+Emit each distinct proposition exactly once. A scene that states the same fact
+twice contains one claim, not two, and a claim repeated back by another
+character is still the same claim.
 """
 
 # =============================================================================

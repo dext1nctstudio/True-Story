@@ -168,6 +168,21 @@ def _enforce_masking(payload: dict[str, Any]) -> dict[str, Any]:
             element["aliases"] = []
             for evidence in element.get("evidence", []) or []:
                 evidence["finding"] = {"withheld": True}
+            # The identity block names the real people a name resolves to,
+            # with links to their entries. That is precisely what masking
+            # exists to withhold, so it goes with the rest of it: the counts
+            # stay, because "three matching individuals" is the useful signal,
+            # and the names do not.
+            identity = element.get("identity")
+            if identity:
+                element["identity"] = {
+                    "name": None,
+                    "status": identity.get("status"),
+                    "reason": identity.get("reason"),
+                    "canonical": None,
+                    "candidates": [],
+                    "withheld": True,
+                }
 
     for entry in (
         payload.get("elements_by_status", {}).values()

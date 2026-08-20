@@ -14,7 +14,13 @@
 
 import { useState } from "react";
 import { AskTheRecord } from "@/components/AskTheRecord";
-import { SourceBadge, SourcePedigree } from "@/components/SourcePedigree";
+import {
+  AttributionSummary,
+  SourceBadge,
+  SourcePedigree,
+  SourceStance,
+} from "@/components/SourcePedigree";
+import { SubjectIdentity } from "@/components/SubjectIdentity";
 import { applyRemedy, unmaskElement } from "@/lib/api";
 import type { Annotation, Claim, ClearableElement, Evidence, Remedy } from "@/lib/types";
 
@@ -104,7 +110,12 @@ export function EvidencePanel({
 
       <VerdictHeader annotation={annotation} />
 
-      {annotation.subject && (
+      {/* Who the subject is, established before anything was researched about
+          them. A verdict on a claim about nobody is not a verdict, and this is
+          where a reviewer finds out which of those they are reading. */}
+      <SubjectIdentity identity={claim?.identity ?? element?.identity} />
+
+      {annotation.subject && !claim?.identity && !element?.identity && (
         <p className="citation-meta">Subject: {annotation.subject}</p>
       )}
 
@@ -147,12 +158,22 @@ export function EvidencePanel({
           it, and whether any of them is a record. */}
       <SourcePedigree corroboration={claim?.corroboration ?? element?.corroboration} />
 
+      {/* What the search returned versus what survived reading. The honest
+          description of most searches is "six results, one of which is about
+          this", and saying so is the difference between a fact checker and a
+          search box with a confident voice. */}
+      <AttributionSummary attribution={claim?.attribution ?? element?.attribution} />
+
       <p className="panel-title panel-title-section">
         Sources ({evidence.reduce((n, e) => n + e.citations.length, 0)})
       </p>
 
       {evidence.length === 0 && (
-        <div className="empty">No evidence records attached to this subject.</div>
+        <div className="empty">
+          {claim?.identity?.status === "unidentified" || claim?.identity?.status === "collision"
+            ? "Nothing was researched and nothing is attached. Any source returned for this name would be about somebody else."
+            : "No source could be quoted against this claim, so none is attached."}
+        </div>
       )}
 
       {evidence.map((record) => (
@@ -231,7 +252,14 @@ function EvidenceBlock({ evidence }: { evidence: Evidence }) {
               <span>published {new Date(citation.published_at).toLocaleDateString()}</span>
             )}
           </div>
-          {citation.excerpt && <p className="citation-excerpt">{citation.excerpt}</p>}
+          {/* The stance and the verbatim span it rests on. The span was found
+              in the retrieved page by string search, so a quote nothing could
+              locate never reached this list. */}
+          <SourceStance citation={citation} />
+
+          {!citation.quote && citation.excerpt && (
+            <p className="citation-excerpt">{citation.excerpt}</p>
+          )}
         </div>
       ))}
     </div>

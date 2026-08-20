@@ -15,7 +15,7 @@
  * panel cannot drift.
  */
 
-import type { Citation, Corroboration, SourceClass } from "@/lib/types";
+import type { Attribution, Citation, Corroboration, SourceClass } from "@/lib/types";
 
 const CLASS_LABEL: Record<SourceClass, string> = {
   official: "official record",
@@ -108,6 +108,59 @@ export function SourcePedigree({ corroboration }: { corroboration?: Corroboratio
   );
 }
 
+/**
+ * What the attribution gate did to the search results.
+ *
+ * The honest description of almost any search is "six results, one of which is
+ * about this". Reporting the ratio is what separates a fact checker from a
+ * search box: it says out loud that most of what came back was discarded, and
+ * why, rather than quietly showing all of it under a verdict.
+ */
+export function AttributionSummary({ attribution }: { attribution?: Attribution }) {
+  if (!attribution || attribution.assessed === 0) {
+    return null;
+  }
+
+  const dropped = attribution.dropped_irrelevant + attribution.dropped_unquotable;
+
+  return (
+    <div className="attrib">
+      <div className="attrib-head">
+        <span className="pedigree-title">Sources read</span>
+        <span className="attrib-ratio">
+          <strong>{attribution.kept}</strong> of {attribution.assessed} bear on this claim
+        </span>
+      </div>
+
+      <div className="attrib-bar" title={`${attribution.kept} kept, ${dropped} dropped`}>
+        <div
+          className="attrib-kept"
+          style={{ width: `${(attribution.kept / attribution.assessed) * 100}%` }}
+        />
+      </div>
+
+      <div className="attrib-facts">
+        {attribution.dropped_irrelevant > 0 && (
+          <span title="Returned by the search, but they do not address this claim.">
+            {attribution.dropped_irrelevant} irrelevant
+          </span>
+        )}
+        {attribution.dropped_unquotable > 0 && (
+          <span title="Nothing in the retrieved text could be quoted against the claim, so they were not counted as evidence.">
+            {attribution.dropped_unquotable} unquotable
+          </span>
+        )}
+      </div>
+
+      {attribution.notes.map((note) => (
+        <p className="attrib-note" key={note}>
+          {note}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function signalTone(signal: string): string {
   if (signal === "CONTRADICTED") return "red";
   if (signal === "SUPPORTED") return "green";
@@ -151,6 +204,33 @@ export function SourceBadge({ citation }: { citation: Citation }) {
       {CLASS_LABEL[cls] ?? cls}
       {citation.verified_source === false && <span className="source-badge-unverified">?</span>}
     </span>
+  );
+}
+
+/**
+ * What this source does for the claim, and the words it does it with.
+ *
+ * A citation under a verdict is read as supporting it whatever else is on the
+ * page, so the stance is stated rather than implied, and the quote beside it
+ * is the span that was found in the retrieved text by string search. A model
+ * that invented the quote could not have got it past that check.
+ */
+export function SourceStance({ citation }: { citation: Citation }) {
+  const stance = citation.stance;
+  if (stance !== "supports" && stance !== "contradicts") return null;
+
+  return (
+    <div className={`stance stance-${stance}`}>
+      <span className={`stance-chip ${stance === "supports" ? "green" : "red"}`}>
+        {stance}
+      </span>
+      {citation.quote && (
+        <blockquote className="stance-quote" title="Verbatim from the retrieved page.">
+          {citation.quote}
+        </blockquote>
+      )}
+      {citation.stance_reason && <p className="stance-reason">{citation.stance_reason}</p>}
+    </div>
   );
 }
 
