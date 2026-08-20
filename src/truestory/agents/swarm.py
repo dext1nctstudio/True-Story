@@ -62,10 +62,16 @@ class SwarmResult:
     def failure_rate(self) -> float:
         return len(self.failures) / self.dispatched if self.dispatched else 0.0
 
-    def add(self, subject_id: str, evidence: Evidence) -> None:
+    #: Subject id -> the human readable name, so a failure can be reported as
+    #: the thing a reviewer recognises rather than as an opaque identifier.
+    labels: dict[str, str] = field(default_factory=dict)
+
+    def add(self, subject_id: str, evidence: Evidence, label: str = "") -> None:
         self.evidence_by_subject.setdefault(subject_id, []).append(evidence)
         self.total_cost_cents += evidence.cost_cents
         self.completed += 1
+        if label:
+            self.labels.setdefault(subject_id, label)
         if evidence.error:
             self.failures[subject_id] = evidence.error
 
@@ -190,6 +196,19 @@ class ResearchSwarm:
             result.total_cost_cents / 100,
             result.duration_seconds,
         )
+        # A failed subject becomes RESEARCH_FAILED on the report and an
+        # UNSUPPORTED claim with no citations, both of which read as "the record
+        # is silent". They are not the same thing: the record was never asked.
+        # The reason was being stored and never surfaced, so a provider timeout
+        # and a rejected schema looked identical from the outside and a run
+        # could lose ten subjects without saying why.
+        for subject_id, reason in result.failures.items():
+            log.warning(
+                "research failed for %s [%s]: %s",
+                result.labels.get(subject_id, subject_id),
+                subject_id,
+                reason,
+            )
         await self._emit({"event": "swarm_complete", **result.to_dict()})
         return result
 
@@ -227,7 +246,7 @@ class ResearchSwarm:
         evidence = await self._attribute(
             evidence, proposition=claim.claim_text, subject=claim.subject_name, claim=claim
         )
-        result.add(claim.claim_id, evidence)
+        result.add(claim.claim_id, evidence, label=claim.claim_text)
 
         await self._emit(
             {
@@ -330,7 +349,11 @@ class ResearchSwarm:
             subject=element.canonical_form or element.display_form(),
             element=element,
         )
-        result.add(element.element_id, evidence)
+        result.add(
+            element.element_id,
+            evidence,
+            label=element.canonical_form or element.display_form(),
+        )
 
         # Side effects declared by the routing rule. These are what turn a
         # one off report into Living Clearance.

@@ -44,12 +44,46 @@ from truestory.providers.model_cost import meter_response
 
 log = logging.getLogger("truestory.attribution")
 
-#: A quote shorter than this proves nothing: "the" appears in every document.
-MIN_QUOTE_CHARS = 24
+# A single character floor was the wrong shape for this check, and it failed in
+# the direction that costs coverage. Measured on the live MS Dhoni run: 23 of 44
+# rejected quotes never reached the substring comparison at all, killed by a flat
+# 24 character minimum. What died there was the best evidence in the run —
+# "MS Dhoni not out 91 79." from the Cricbuzz scorecard (23 characters, one short),
+# "IND 277-4 (48.2)", "India won by 6 wkts", "Winner : India" — while padded
+# journalism and a page about the 2011 FIFA *Women's* World Cup sailed through on
+# length alone. Registry and scorecard records state facts tersely; that is what
+# makes them authoritative. A character floor therefore discarded the strongest
+# source class and kept the weakest, which is precisely backwards.
+#
+# The floor now scales with how much folding the comparison did to get its match.
+# Strictness is spent where fabrication actually hides: in the loose passes.
 
-#: How much of a page the gate is allowed to read per source. Long enough for
-#: the passage to be present, short enough to keep forty of these concurrent.
-MAX_SOURCE_CHARS = 6000
+#: Floor for an exact hit, where nothing but capture artefacts were folded. A
+#: verbatim run this long, found unchanged in the page, is not a coincidence —
+#: and it is not the only defence, since the model must also have chosen the span
+#: as bearing on the proposition and marked it about this subject.
+MIN_EXACT_QUOTE_CHARS = 10
+
+#: Floor for each part of an elided quotation. Below this a fragment is too
+#: generic to pin an ordering on.
+MIN_ELIDED_PART_CHARS = 8
+
+#: Floor for the last resort comparison, counted in WORDS rather than characters.
+#: Stripping punctuation shortens the string, so reusing a character floor here
+#: penalised a quote twice for the same folding and made the loosest rescue path
+#: the hardest to reach for the terse records that needed it. Word count is what
+#: actually resists coincidence: "the" and "India" fail it, "India won by 6 wkts"
+#: does not.
+MIN_FALLBACK_WORDS = 4
+
+#: How much of a page the gate is allowed to read per source. Raised from 6000
+#: after the same run: a scorecard page spends its opening thousands of
+#: characters on navigation, advertising and commentary, so the head slice
+#: routinely excluded the results table holding the fact under test. The gate
+#: then truthfully reported that the quote was not in the text it was given,
+#: having been given the wrong part of the page. Where a body still exceeds this,
+#: `_select_window` centres the slice on the passage rather than taking the head.
+MAX_SOURCE_CHARS = 20000
 
 
 # =============================================================================
@@ -221,7 +255,9 @@ class AttributionGate:
         for citation in citations:
             body = (texts.get(citation.url) or citation.excerpt or "").strip()
             if body:
-                candidates.append((citation, body[:MAX_SOURCE_CHARS]))
+                # The model and the verifier must read exactly the same text,
+                # so the window is chosen once, here, and carried through.
+                candidates.append((citation, _select_window(body, proposition, subject)))
             else:
                 # Nothing to read means nothing to verify. A URL with no text
                 # behind it is a link, not a source, and it is dropped rather
@@ -361,23 +397,6 @@ def _strip_markup(text: str) -> str:
     return _MD_DECORATION.sub(" ", text)
 
 
-#: Markdown that a page capture adds around the words. `[Gambhir](https://...)`
-#: is the same quotation as `Gambhir`, and treating the link as part of the
-#: wording rejected the correct passage: on a live run the ESPNcricinfo line
-#: "India 277 for 4 (Gambhir 97, Dhoni 91*)" — the exact record for the claim
-#: under test — was dropped as unverifiable because the captured markdown
-#: carried a URL inside it.
-_MD_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
-_MD_WIKILINK = re.compile(r"\[\[([^\]]*)\]\]")
-_MD_DECORATION = re.compile(r"[*_`>#|]+")
-
-
-def _strip_markup(text: str) -> str:
-    text = _MD_LINK.sub(r"\1", text)
-    text = _MD_WIKILINK.sub(r"\1", text)
-    return _MD_DECORATION.sub(" ", text)
-
-
 def _normalise(text: str) -> str:
     """Fold everything that a copy out of a web page legitimately changes.
 
@@ -404,30 +423,106 @@ def _words_only(text: str) -> str:
     return " ".join(re.findall(r"[a-z0-9]+", _normalise(text)))
 
 
+#: Words too common to locate a passage by. Deliberately short: the numbers and
+#: proper nouns in a proposition are what pin it to a row in a table.
+_WINDOW_STOPWORDS = frozenset(
+    {
+        "that", "this", "with", "from", "were", "what", "when", "where",
+        "which", "while", "would", "could", "should", "have", "been", "being",
+        "about", "into", "over", "under", "after", "before", "their", "there",
+        "they", "them", "said", "says", "than", "then", "some", "such",
+        "only", "also", "more", "most", "other", "these", "those",
+    }
+)  # fmt: skip
+
+
+def _salient_terms(proposition: str, subject: str) -> set[str]:
+    """The tokens worth locating a page window by.
+
+    Numbers are kept whatever their length, because on the sources this gate
+    reads terse ones carry the whole fact: 91, 277, 2011.
+    """
+    text = f"{subject} {proposition}".lower()
+    words = {w for w in re.findall(r"[a-z]{4,}", text) if w not in _WINDOW_STOPWORDS}
+    return words | set(re.findall(r"\d+", text))
+
+
+#: Marks where a page was elided so the gate could read the relevant part. A
+#: quotation spanning the join fails verification, which is the safe direction.
+_WINDOW_JOIN = "\n\n[…]\n\n"
+
+
+def _select_window(body: str, proposition: str, subject: str) -> str:
+    """At most MAX_SOURCE_CHARS of `body`, chosen for relevance not position.
+
+    Taking the head of a page is the wrong slice for exactly the sources worth
+    reading. A scorecard, a docket or a registry entry puts navigation,
+    advertising and commentary first and the load bearing row far down, so a
+    head slice hands the gate a page that genuinely does not contain the fact
+    and the gate correctly rejects a true quotation.
+
+    The head is still kept, because a lede and an infobox live there, and the
+    remainder of the budget goes to the densest match for the proposition.
+    """
+    if len(body) <= MAX_SOURCE_CHARS:
+        return body
+
+    terms = _salient_terms(proposition, subject)
+    head_chars = MAX_SOURCE_CHARS // 4
+    head = body[:head_chars]
+    if not terms:
+        return body[:MAX_SOURCE_CHARS]
+
+    tail_budget = MAX_SOURCE_CHARS - head_chars - len(_WINDOW_JOIN)
+    hay = body.lower()
+    stride = max(1, tail_budget // 4)
+    best_start, best_score = head_chars, -1
+    for start in range(head_chars, len(body), stride):
+        chunk = hay[start : start + tail_budget]
+        score = sum(1 for term in terms if term in chunk)
+        if score > best_score:
+            best_start, best_score = start, score
+
+    if best_score <= 0:
+        return body[:MAX_SOURCE_CHARS]
+    return head + _WINDOW_JOIN + body[best_start : best_start + tail_budget]
+
+
 def verify_quote(quote: str, source_text: str) -> bool:
     """Whether `quote` really occurs in `source_text`.
 
-    Three passes, each looser about formatting and none looser about wording:
+    Three passes, each looser about formatting and none looser about wording,
+    and each carrying its own floor because each has folded away a different
+    amount of the evidence that the quotation is real:
 
-      1. exact, after folding page artefacts
-      2. an ellipsis elided quotation, checked as its parts in order
-      3. the bare word sequence, punctuation and markup discarded
+      1. exact, after folding page artefacts   -> MIN_EXACT_QUOTE_CHARS
+      2. an ellipsis elided quotation, in order -> MIN_ELIDED_PART_CHARS per part
+      3. the bare word sequence, punctuation discarded -> MIN_FALLBACK_WORDS
 
     A model that invented the sentence fails all three, because every pass
-    still requires the same words in the same order.
+    still requires the same words in the same order. What the graded floors
+    change is only how short a *true* quotation is allowed to be, which is the
+    axis on which a flat minimum was throwing away scorecards and registries.
     """
     if not quote or not source_text:
         return False
 
     needle = _normalise(quote)
     haystack = _normalise(source_text)
-    if len(needle) < MIN_QUOTE_CHARS:
+    if not needle or not haystack:
         return False
 
-    if needle in haystack:
+    # 1. Exact. Nothing folded but capture artefacts, so the shortest floor.
+    if len(needle) >= MIN_EXACT_QUOTE_CHARS and needle in haystack:
         return True
 
-    parts = [p.strip() for p in re.split(r"\.{3}|\u2026", needle) if len(p.strip()) >= 12]
+    # 2. Elided. Ordering across parts is itself evidence, so each part may be
+    #    shorter than a standalone quote would have to be.
+    parts = [
+        p.strip()
+        for p in re.split(r"\.{3}|\u2026", needle)
+        if len(p.strip()) >= MIN_ELIDED_PART_CHARS
+    ]
     if len(parts) >= 2:
         cursor = 0
         for part in parts:
@@ -438,8 +533,12 @@ def verify_quote(quote: str, source_text: str) -> bool:
         else:
             return True
 
+    # 3. Words only. The heaviest folding, so the floor is a word count, which
+    #    is the thing punctuation stripping cannot inflate away.
     words = _words_only(quote)
-    return len(words) >= MIN_QUOTE_CHARS and words in _words_only(source_text)
+    if len(words.split()) < MIN_FALLBACK_WORDS:
+        return False
+    return words in _words_only(source_text)
 
 
 def _with_attribution(citation: Citation, *, stance: str, quote: str, reason: str) -> Citation:
@@ -507,7 +606,7 @@ def _offline_assessment(
             overlap = len(words & tokens) / max(1, len(words))
             if overlap > best_overlap:
                 best, best_overlap = sentence, overlap
-        if best_overlap >= 0.2 and len(best) >= MIN_QUOTE_CHARS:
+        if best_overlap >= 0.2 and len(best) >= MIN_EXACT_QUOTE_CHARS:
             out[index] = {
                 "index": index,
                 "stance": "supports",
