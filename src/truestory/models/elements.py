@@ -101,6 +101,10 @@ class ClearableElement:
     #: Independent domains, source pedigree and record agreement behind the
     #: clearance status. Written by the Adjudicator, shown in the UI.
     corroboration: dict[str, Any] = field(default_factory=dict)
+    #: What the attribution gate kept and dropped from the retrieved sources.
+    attribution: dict[str, Any] = field(default_factory=dict)
+    #: Whether this name denotes a real subject, several, or none.
+    identity: dict[str, Any] = field(default_factory=dict)
     remedies: list[Remedy] = field(default_factory=list)
 
     # ── person facts ─────────────────────────────────────────────────────────
@@ -185,6 +189,8 @@ class ClearableElement:
             "first_page": self.first_page,
             "citation_count": self.citation_count,
             "corroboration": self.corroboration,
+            "attribution": self.attribution,
+            "identity": self.identity,
             "cost_cents": round(self.total_cost_cents, 4),
             "occurrences": [o.to_dict() for o in self.occurrences],
             "claims": [c.to_dict(include_evidence=False) for c in self.claims],

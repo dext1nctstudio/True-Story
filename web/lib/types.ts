@@ -59,6 +59,48 @@ export interface Citation {
   verified_source?: boolean;
   /** Registrable domain. Two citations sharing one are not two sources. */
   domain?: string;
+
+  /** What this source does for the claim, decided by the attribution gate.
+   *  A search returns what it consulted, not what supports the proposition. */
+  stance?: "supports" | "contradicts" | "irrelevant" | "unassessed";
+  /** The verbatim span the stance rests on, found in the retrieved text. */
+  quote?: string;
+  /** Whether that span was located in the source by string search. */
+  quote_verified?: boolean;
+  stance_reason?: string;
+}
+
+/** What the attribution gate kept and dropped for one subject. */
+export interface Attribution {
+  assessed: number;
+  kept: number;
+  supports?: number;
+  contradicts?: number;
+  dropped_irrelevant: number;
+  dropped_unquotable: number;
+  notes: string[];
+}
+
+/** Who a named subject was resolved to, or why it could not be. */
+export interface Identity {
+  name: string;
+  status: "resolved" | "collision" | "unidentified" | "unchecked";
+  reason: string;
+  canonical?: {
+    qid: string;
+    label: string;
+    description: string;
+    url: string;
+    occupations: string[];
+    sitelinks: number;
+    deceased: boolean | null;
+    official_site?: string | null;
+  } | null;
+  candidates?: { qid: string; label: string; description: string; url: string }[];
+  web_checked?: boolean;
+  web_summary?: string;
+  web_domains?: string[];
+  official_domain?: string | null;
 }
 
 export interface Evidence {
@@ -91,6 +133,7 @@ export interface Corroboration {
   primary_count: number;
   classified_primary_count: number;
   low_trust_count: number;
+  recognised_count?: number;
   strongest_trust: number;
   record_signal: "SUPPORTED" | "CONTRADICTED" | "SILENT" | "OPINION" | "MIXED" | "UNKNOWN";
   supporting_facts: number;
@@ -133,6 +176,8 @@ export interface Claim {
   remedy_id?: string | null;
   citation_count: number;
   corroboration?: Corroboration;
+  attribution?: Attribution;
+  identity?: Identity;
   occurrences: Occurrence[];
   evidence?: Evidence[];
 }
@@ -155,6 +200,8 @@ export interface ClearableElement {
   first_page: number;
   citation_count: number;
   corroboration?: Corroboration;
+  attribution?: Attribution;
+  identity?: Identity;
   escalated_by: string[];
   occurrences: Occurrence[];
   evidence?: Evidence[];

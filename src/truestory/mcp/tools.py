@@ -200,6 +200,21 @@ class ClearanceTools:
         self.jurisdictions = jurisdictions
         self.truth_claim_framing = truth_claim_framing
         self.routing = load_routing()
+        # Identity notes, keyed by subject id, set by the swarm before dispatch.
+        # A question that names the entity it means is a different question from
+        # one that names a string, and the difference showed up as a cricket
+        # tournament being researched as a building code body.
+        self._identities: dict[str, str] = {}
+
+    # ── identity ─────────────────────────────────────────────────────────────
+    def set_identity(self, subject_id: str, note: str) -> None:
+        """Pin what this subject is, so the research asks about that thing."""
+        if note:
+            self._identities[subject_id] = note
+
+    def _identity_block(self, subject_id: str) -> str:
+        note = self._identities.get(subject_id)
+        return f"{note}\n\n" if note else ""
 
     # ── plumbing ─────────────────────────────────────────────────────────────
     async def _run(
@@ -220,7 +235,10 @@ class ClearanceTools:
 
         request = ResearchRequest(
             subject_id=subject_id,
-            question=question,
+            # The identity is part of the question, not metadata beside it:
+            # asking about a different entity is asking a different question,
+            # and the cache key is right to treat it as one.
+            question=self._identity_block(subject_id) + question,
             output_schema=load_schema(decision.schema_name or schema_name),
             schema_name=decision.schema_name or schema_name,
             tier=decision.tier,

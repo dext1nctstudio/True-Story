@@ -47,7 +47,29 @@ confidence:
   # be, which in practice was every URL it returned. A red line now needs a
   # docket, a register, a statute, an official archive or a government record,
   # classified from the host in providers/source_quality.py.
+  #
+  # Applied where the stakes justify it, which is the whole point of a standard
+  # of proof. A negative assertion about a living person is the claim that gets
+  # filed on and it gets the strict rule. A sporting scoreline does not: there
+  # is no docket for it, the register is the scorecard, and applying the strict
+  # rule everywhere downgraded correct contradictions for want of a document
+  # that could not exist.
   contradicted_requires_classified_primary: true
+  strict_record_applies_to: negative_claims_about_living_people
+
+  # The looser standard, used everywhere else. A contradiction still cannot
+  # rest on one forum post: it needs a source that was quoted against the claim
+  # and either a second independent domain or one recognised record.
+  contradicted_minimum:
+    attributed_sources: 1
+    independent_domains: 2
+    or_classified_primary: true
+
+  # No verdict of fact may rest on sources that were never shown to bear on the
+  # claim. The attribution gate assigns a stance and a verbatim quote to every
+  # source and verifies the quote is really in the retrieved text; anything
+  # that fails is not evidence and never reaches this file.
+  require_attributed_evidence: true
 
   # Corroboration, counted as distinct registrable domains rather than as
   # URLs. Five pages on one site are one source, and "corroborated by five

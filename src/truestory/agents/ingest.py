@@ -16,6 +16,7 @@ subject in the whole script.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import re
@@ -78,11 +79,18 @@ class IngestAgent:
         raw, fmt = _read_source(source)
         document = self.parse(raw, fmt=fmt, draft_version=draft_version)
 
-        spans: list[RawSpan] = []
-        for scene in document.scenes:
-            spans.extend(
-                await self.tag_scene(scene, truth_claim_framing=document.truth_claim_framing)
-            )
+        # Scenes are independent of each other, so they are tagged together.
+        # Sequentially, this was one Gemini 2.5 Pro call after another: a sixty
+        # scene feature spent tens of minutes in a loop whose iterations shared
+        # nothing, and the whole run looked hung with no way to tell.
+        spans = await _gather_bounded(
+            [
+                self.tag_scene(scene, truth_claim_framing=document.truth_claim_framing)
+                for scene in document.scenes
+            ],
+            limit=settings.ingest_max_concurrency,
+            label="scene",
+        )
 
         log.info(
             "ingest complete: %s scenes, %s spans, truth_claim_framing=%s",
@@ -470,6 +478,27 @@ def _span(
         extraction_confidence=confidence,
         character_cue=cue,
     )
+
+
+async def _gather_bounded(coros: list[Any], *, limit: int, label: str) -> list[RawSpan]:
+    """Run independent taggings together, bounded, and never let one sink the run.
+
+    A scene that fails to tag costs that scene's spans. A scene that takes the
+    whole stage down costs the production its report, so failures are logged
+    and skipped rather than raised.
+    """
+    semaphore = asyncio.Semaphore(max(1, limit))
+
+    async def guarded(coro: Any) -> list[RawSpan]:
+        async with semaphore:
+            try:
+                return await coro
+            except Exception as exc:
+                log.warning("%s tagging failed: %s", label, exc)
+                return []
+
+    batches = await asyncio.gather(*(guarded(c) for c in coros))
+    return [span for batch in batches for span in batch]
 
 
 #: How much surrounding scene text a span carries. Long enough for the offline

@@ -70,7 +70,8 @@ def test_contradiction_on_a_recognised_record_stands(adjudicator):
     assert escalation is None or "primary" not in escalation
 
 
-def test_contradiction_on_an_unrecognised_host_is_downgraded(adjudicator):
+def test_contradiction_on_unrecognised_hosts_is_downgraded(adjudicator):
+    """Two anonymous blogs are still nobody, however independent they are."""
     evidence = [
         _evidence(
             ["https://some-blog.example.xyz/a", "https://another.example.test/b"],
@@ -81,7 +82,42 @@ def test_contradiction_on_an_unrecognised_host_is_downgraded(adjudicator):
         _claim(), Verdict.CONTRADICTED, 0.93, evidence, False
     )
     assert verdict is Verdict.UNSUPPORTED
-    assert escalation and "primary" in escalation.lower()
+    assert escalation and "recognise" in escalation.lower()
+
+
+def test_a_negative_claim_about_a_living_person_needs_a_record(adjudicator):
+    """The strict standard, applied where the stakes are a filed complaint."""
+    evidence = [
+        _evidence(
+            ["https://www.bbc.co.uk/news/1", "https://apnews.com/article/1"],
+            finding={"verdict": "contradicted"},
+        )
+    ]
+    verdict, _, escalation = adjudicator._post_check_claim(
+        _claim(alive=True), Verdict.CONTRADICTED, 0.93, evidence, False
+    )
+    assert verdict is Verdict.UNSUPPORTED
+    assert escalation and "recognised record" in escalation
+
+
+def test_a_historical_contradiction_stands_on_corroborated_reporting(adjudicator):
+    """No docket exists for a scoreline, and demanding one buried a true finding.
+
+    A claim about a dead subject, contradicted by a statistical register and an
+    encyclopaedia, is exactly the shape of the fixture case: the record settles
+    it in one line and the system has to be able to say so.
+    """
+    evidence = [
+        _evidence(
+            ["https://www.espncricinfo.com/series/1/scorecard", "https://en.wikipedia.org/wiki/X"],
+            finding={"verdict": "contradicted"},
+        )
+    ]
+    verdict, confidence, _ = adjudicator._post_check_claim(
+        _claim(), Verdict.CONTRADICTED, 0.93, evidence, False
+    )
+    assert verdict is Verdict.CONTRADICTED
+    assert confidence > 0.6
 
 
 def test_forum_sources_cannot_carry_a_verdict_about_a_person(adjudicator):

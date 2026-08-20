@@ -71,6 +71,13 @@ class Settings(BaseSettings):
     model_claims: str = Field(default="gemini-2.5-pro", alias="TRUESTORY_MODEL_CLAIMS")
     model_adjudicator: str = Field(default="gemini-2.5-pro", alias="TRUESTORY_MODEL_ADJUDICATOR")
     model_remedy: str = Field(default="gemini-2.5-flash", alias="TRUESTORY_MODEL_REMEDY")
+    # The attribution gate runs once per subject over a handful of short texts.
+    # It is reading comprehension rather than judgement, and a deterministic
+    # quote check catches its mistakes, so it takes the fast model and stays
+    # cheap enough to run on every source of every claim.
+    model_attribution: str = Field(default="gemini-2.5-flash", alias="TRUESTORY_MODEL_ATTRIBUTION")
+    # Identity resolution: is this name a real person or an invention.
+    model_identity: str = Field(default="gemini-2.5-flash", alias="TRUESTORY_MODEL_IDENTITY")
 
     agent_engine_resource: str = Field(default="", alias="AGENT_ENGINE_RESOURCE_NAME")
     agent_engine_staging: str = Field(default="", alias="AGENT_ENGINE_STAGING_BUCKET")
@@ -106,6 +113,12 @@ class Settings(BaseSettings):
     budget_reserve_critical_usd: float = Field(default=1.50, alias="BUDGET_RESERVE_CRITICAL_USD")
     budget_degrade_on_exceed: bool = Field(default=True, alias="BUDGET_DEGRADE_ON_EXCEED")
     swarm_max_concurrency: int = Field(default=32, alias="SWARM_MAX_CONCURRENCY")
+    # The two model stages that run per scene and per span. Both were serial
+    # loops, which is what made a feature length script take tens of minutes
+    # before a single subject had been dispatched. Bounded rather than
+    # unbounded so a long script does not open two hundred sockets at once.
+    ingest_max_concurrency: int = Field(default=12, alias="INGEST_MAX_CONCURRENCY")
+    claims_max_concurrency: int = Field(default=16, alias="CLAIMS_MAX_CONCURRENCY")
 
     # ── freshness ────────────────────────────────────────────────────────────
     # How old a cached research answer may be before a live run re researches

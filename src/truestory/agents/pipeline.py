@@ -36,6 +36,7 @@ from typing import Any
 
 from truestory.agents.adjudicator import Adjudicator
 from truestory.agents.claims import ClaimExtractor
+from truestory.agents.identity import IdentityResolver, IdentityStatus
 from truestory.agents.ingest import IngestAgent
 from truestory.agents.ledger import LedgerAgent
 from truestory.agents.remedy import RemedyLoop
@@ -145,6 +146,10 @@ class TrueStoryPipeline:
         self.claim_extractor = ClaimExtractor()
         self.ledger = LedgerAgent(jurisdictions=self.jurisdictions)
         self.router = RiskRouter()
+        # Before anything is researched: does the subject exist. Free, fast,
+        # and the difference between checking a claim and inventing evidence
+        # for a character.
+        self.identity = IdentityResolver()
         self.swarm = ResearchSwarm(self.registry, self.tools, on_progress=self._emit_passthrough)
         self.adjudicator = Adjudicator()
         self.remedy = RemedyLoop(self.tools)
@@ -182,6 +187,7 @@ class TrueStoryPipeline:
                 on_state(state)
             await self._stage_claims(state)
             await self._stage_ledger(state)
+            await self._stage_identity(state)
             await self._stage_route(state)
             await self._stage_research(state)
             await self._stage_adjudicate(state)
@@ -253,6 +259,104 @@ class TrueStoryPipeline:
                 "reduction": round(len(state.spans) / max(1, len(state.elements)), 2),
             }
         )
+
+    # ── stage 3b ─────────────────────────────────────────────────────────────
+    async def _stage_identity(self, state: RunState) -> None:
+        """Resolve every named subject before a cent is spent researching one.
+
+        This stage exists because of a measured failure. Asked to verify claims
+        about a screenplay character called Dr Maya Rowan, the pipeline
+        dispatched research at the name and attached what came back: four
+        government domains from Google's grounding and, from Parallel, a
+        teenage swimmer's results page. Every source real, every source
+        authoritative looking, none of them about anybody in the script.
+
+        A person does not work that way. They establish who the subject is
+        first, and if the answer is nobody they stop, because the question has
+        no answer and any source offered for it is about somebody else.
+
+        Three outcomes, three different downstream paths:
+
+            resolved      research the claims against the record
+            collision     the character is invented and the name is the
+                          finding; the collision check runs, fact verification
+                          does not
+            unidentified  nothing to verify. No dispatch, no spend, no
+                          citations, and a verdict that says so
+        """
+        state.status = RunStatus.ROUTING
+        await self._emit({"event": "stage", "stage": "identity", "status": "started"})
+
+        subjects = _identifiable_subjects(state.elements)
+        if not subjects:
+            return
+
+        verdicts = await asyncio.gather(
+            *(
+                self.identity.resolve(name, hints=hints, is_person=is_person)
+                for name, hints, is_person in subjects
+            ),
+            return_exceptions=True,
+        )
+
+        by_name: dict[str, Any] = {}
+        for (name, _, _), verdict in zip(subjects, verdicts, strict=True):
+            if isinstance(verdict, BaseException):
+                log.warning("identity resolution failed for %s: %s", name, verdict)
+                continue
+            by_name[name.casefold()] = verdict
+
+        resolved = collisions = unidentified = 0
+        for element in state.elements:
+            verdict = by_name.get((element.canonical_form or "").casefold())
+            if verdict is None:
+                continue
+            element.identity = verdict.to_dict()
+            if verdict.canonical is not None and verdict.canonical.deceased is not None:
+                element.subject_alive = not verdict.canonical.deceased
+            if verdict.status == IdentityStatus.RESOLVED:
+                resolved += 1
+            elif verdict.status == IdentityStatus.COLLISION:
+                collisions += 1
+            else:
+                unidentified += 1
+
+        # Claims inherit their subject's identity, and the ones whose subject
+        # is nobody are settled here rather than researched.
+        by_element = {e.element_id: e for e in state.elements}
+        settled = 0
+        for claim in state.claims:
+            element = by_element.get(claim.subject_element_id)
+            identity = getattr(element, "identity", None) if element else None
+            if not identity:
+                identity = by_name.get(claim.subject_name.casefold())
+                identity = identity.to_dict() if identity is not None else None
+            if not identity:
+                continue
+            claim.identity = identity
+            element_type = str(element.element_type) if element is not None else ""
+            if not _blocks_research(identity, element_type):
+                continue
+            _settle_unresearchable(claim, identity)
+            settled += 1
+
+        state.artifacts["identity"] = {
+            "subjects": len(subjects),
+            "resolved": resolved,
+            "collisions": collisions,
+            "unidentified": unidentified,
+            "claims_not_researched": settled,
+        }
+        log.info(
+            "identity: %s subjects, %s resolved, %s collisions, %s unidentified, "
+            "%s claims settled without research",
+            len(subjects),
+            resolved,
+            collisions,
+            unidentified,
+            settled,
+        )
+        await self._emit({"event": "identity_resolved", **state.artifacts["identity"]})
 
     # ── stage 4 ──────────────────────────────────────────────────────────────
     async def _stage_route(self, state: RunState) -> None:
@@ -411,6 +515,119 @@ class TrueStoryPipeline:
 
     async def aclose(self) -> None:
         await self.registry.aclose()
+
+
+#: Element types whose name is supposed to denote something real, and whose
+#: claims are therefore worth checking. A phone number or a licence plate has
+#: no identity to resolve.
+_IDENTIFIABLE_TYPES = frozenset(
+    {
+        "REAL_PERSON_DEPICTED",
+        "REAL_PERSON_IDENTIFIABLE",
+        "PERSON_NAME_FICTIONAL",
+        "REAL_EVENT",
+        "ORGANIZATION",
+        "BUSINESS_NAME",
+        "BRAND_PRODUCT",
+        "REAL_LOCATION",
+    }
+)
+
+_PERSON_TYPES_FOR_IDENTITY = frozenset(
+    {"REAL_PERSON_DEPICTED", "REAL_PERSON_IDENTIFIABLE", "PERSON_NAME_FICTIONAL"}
+)
+
+
+def _identifiable_subjects(
+    elements: list[ClearableElement],
+) -> list[tuple[str, str, bool]]:
+    """(name, hints, is_person) for every subject worth identifying.
+
+    The hints are the script's own context — the professions, places and
+    attached claims around the name — and they are what separates the cricketer
+    from the film of the same name.
+    """
+    out: list[tuple[str, str, bool]] = []
+    seen: set[str] = set()
+    for element in elements:
+        if str(element.element_type) not in _IDENTIFIABLE_TYPES:
+            continue
+        name = (element.canonical_form or "").strip()
+        if len(name) < 3 or name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+
+        # The script's own words around the name. A line of dialogue and the
+        # surrounding action are exactly what tells a researcher that this
+        # Dhoni is the cricketer rather than the film about him.
+        hint_parts = [o.context for o in element.occurrences[:2] if o.context]
+        hint_parts.extend(c.claim_text for c in (element.claims or [])[:3])
+        hint_parts.extend(element.aliases[:2])
+        out.append(
+            (
+                name,
+                " ".join(hint_parts)[:400],
+                str(element.element_type) in _PERSON_TYPES_FOR_IDENTITY,
+            )
+        )
+    return out
+
+
+#: Element types whose name is expected to be invented. A collision on one of
+#: these is the finding; a collision on a person the script presents as real is
+#: an uncertain identification, which is a reason to research carefully.
+_INVENTED_BY_DESIGN = frozenset({"PERSON_NAME_FICTIONAL"})
+
+
+def _blocks_research(identity: dict[str, Any], element_type: str) -> bool:
+    """Whether this identity finding means the claim cannot be checked at all."""
+    status = identity.get("status")
+    if status == IdentityStatus.UNIDENTIFIED:
+        return True
+    if status == IdentityStatus.COLLISION:
+        return element_type in _INVENTED_BY_DESIGN
+    return False
+
+
+def _settle_unresearchable(claim: FactualClaim, identity: dict[str, Any]) -> None:
+    """Close a claim whose subject nobody can be, without researching it.
+
+    Deliberately not UNSUPPORTED. Unsupported means the record was searched and
+    said nothing, which is a statement about the record. This is a statement
+    about the claim: there is no real subject for a source to be about, so no
+    amount of searching could produce one and pretending otherwise is how a
+    swimmer's results page ends up under a screenplay character.
+    """
+    from truestory.models.enums import Verdict
+
+    status = identity.get("status")
+    if status == IdentityStatus.COLLISION:
+        rationale = (
+            "This is an invented character whose name several real people share. Nothing "
+            "asserted about it is a factual claim about any of them, so it is not verified "
+            "against the record; the name itself goes to the collision check instead."
+        )
+    else:
+        rationale = (
+            "No real subject of this name was found in the structured knowledge base or "
+            "on the open web, so this asserts nothing that a source could confirm or "
+            "contradict. Not researched, and no sources attached: any source returned "
+            "for this name would be about somebody else."
+        )
+
+    claim.verdict = Verdict.UNVERIFIABLE
+    claim.confidence = 0.0
+    claim.rationale = rationale
+    claim.evidence = []
+    claim.identity = identity
+    claim.needs_counsel = False
+    claim.attribution = {
+        "assessed": 0,
+        "kept": 0,
+        "dropped_irrelevant": 0,
+        "dropped_unquotable": 0,
+        "notes": ["Not researched: the subject could not be identified as real."],
+    }
 
 
 def _with_framing(document: ScriptDocument, framing: bool) -> ScriptDocument:

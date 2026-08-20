@@ -23,6 +23,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from truestory.agents.attribution import AttributionGate
 from truestory.config import settings
 from truestory.mcp.tools import ClearanceTools
 from truestory.models.claims import FactualClaim
@@ -33,6 +34,14 @@ from truestory.providers import ProviderRegistry
 from truestory.providers.budget import BudgetExhausted
 
 log = logging.getLogger("truestory.swarm")
+
+#: How many sources per subject are fetched in full so the gate has real text
+#: to quote from. The citation list is already ordered strongest first.
+_MAX_PAGE_FETCHES = 4
+
+#: An excerpt shorter than this is a fragment chosen to explain an output
+#: field, not a passage about the claim, so the page is worth fetching.
+_THIN_EXCERPT_CHARS = 400
 
 ProgressCallback = Callable[[dict[str, Any]], Awaitable[None]] | None
 
@@ -85,11 +94,18 @@ class ResearchSwarm:
         *,
         max_concurrency: int | None = None,
         on_progress: ProgressCallback = None,
+        attribution: AttributionGate | None = None,
     ) -> None:
         self.registry = registry
         self.tools = tools or ClearanceTools(registry)
         self.max_concurrency = max_concurrency or settings.swarm_max_concurrency
         self.on_progress = on_progress
+        # Nothing this swarm retrieves becomes evidence until the gate has read
+        # it against the specific proposition and quoted the words that bear on
+        # it. Retrieval is the easy half; deciding what a source actually says
+        # is the half that stops a run attaching four government domains to a
+        # claim about a person who does not exist.
+        self.attribution = attribution or AttributionGate()
 
     # ── entry point ──────────────────────────────────────────────────────────
     @staticmethod
@@ -115,11 +131,23 @@ class ResearchSwarm:
         result = SwarmResult()
         semaphore = asyncio.Semaphore(self.max_concurrency)
 
+        # Hand the resolved identities to the tool layer before anything is
+        # dispatched, so every question names the entity rather than the string.
+        for claim in claims:
+            self.tools.set_identity(claim.claim_id, _identity_note(claim.identity))
+        for element in elements:
+            self.tools.set_identity(element.element_id, _identity_note(element.identity))
+
         tasks: list[Awaitable[None]] = []
 
         for claim in claims:
             if claim.is_opinion:
                 continue  # settled at routing, never dispatched
+            if claim.settled_without_research:
+                # The identity stage found no real subject behind the name.
+                # Dispatching anyway is what produced a swimmer's results page
+                # as evidence for a screenplay character.
+                continue
             tasks.append(self._guarded(semaphore, self._research_claim(claim, result)))
 
         # Text the claim stage already settled as opinion. Coreference means a
@@ -195,6 +223,10 @@ class ResearchSwarm:
             )
 
         evidence = _rehydrate(payload, claim.claim_id, claim.claim_text)
+        returned = len(evidence.citations)
+        evidence = await self._attribute(
+            evidence, proposition=claim.claim_text, subject=claim.subject_name, claim=claim
+        )
         result.add(claim.claim_id, evidence)
 
         await self._emit(
@@ -204,15 +236,100 @@ class ResearchSwarm:
                 "subject": claim.subject_name,
                 "tier": str(claim.risk_tier),
                 "citations": len(evidence.citations),
+                "sources_returned": returned,
                 "cost_cents": round(evidence.cost_cents, 4),
                 "cached": evidence.cached,
             }
         )
 
+    # ── attribution ──────────────────────────────────────────────────────────
+    async def _attribute(
+        self,
+        evidence: Evidence,
+        *,
+        proposition: str,
+        subject: str,
+        claim: FactualClaim | None = None,
+        element: ClearableElement | None = None,
+    ) -> Evidence:
+        """Keep only the sources that were shown to bear on this proposition.
+
+        The order matters and is the order a person works in. Read the page
+        first, because a quote can only be checked against text that was
+        actually retrieved; then say what the page does for the claim; then
+        verify the quote is really in the page. A source that survives all
+        three is evidence. A source that does not is dropped from the envelope
+        entirely rather than shown greyed out, because a citation on screen
+        under a verdict is read as supporting it whatever label it carries.
+        """
+        if not evidence.citations or evidence.error:
+            return evidence
+
+        texts = await self._page_texts(evidence)
+        report = await self.attribution.assess(
+            proposition=proposition,
+            subject=subject,
+            citations=evidence.citations,
+            source_texts=texts,
+        )
+
+        target = claim if claim is not None else element
+        if target is not None:
+            existing = getattr(target, "attribution", None) or {}
+            merged = report.to_dict()
+            # One subject can be researched by several providers, so the
+            # counts accumulate rather than overwrite.
+            for key in ("assessed", "kept", "dropped_irrelevant", "dropped_unquotable"):
+                merged[key] = int(existing.get(key, 0)) + int(merged.get(key, 0))
+            merged["notes"] = [*existing.get("notes", []), *merged["notes"]][:6]
+            target.attribution = merged
+
+        return evidence.with_citations(report.citations)
+
+    async def _page_texts(self, evidence: Evidence) -> dict[str, str]:
+        """Fetch what each source actually says, where it is worth fetching.
+
+        A research API returns an excerpt chosen to explain its own output
+        field, which is frequently not the passage that bears on the claim, and
+        for fact level sources it returns no excerpt at all. Capturing the page
+        gives the gate real text to quote from and gives the evidence appendix
+        a copy of the source as it read on the day, which is what an
+        underwriter is actually relying on.
+
+        Bounded on purpose: the strongest few sources per subject, in parallel,
+        and any failure falls back to whatever excerpt came with the citation.
+        """
+        wanted = [
+            c.url
+            for c in evidence.citations[:_MAX_PAGE_FETCHES]
+            if c.url and len(c.excerpt or "") < _THIN_EXCERPT_CHARS
+        ]
+        if not wanted:
+            return {}
+
+        async def fetch(url: str) -> tuple[str, str]:
+            try:
+                payload = await self.tools.capture_evidence_page(evidence.subject_id, url)
+                finding = payload.get("finding") or {}
+                return url, str(finding.get("content_markdown") or "")
+            except Exception as exc:
+                log.debug("page capture failed for %s: %s", url, exc)
+                return url, ""
+
+        pages = await asyncio.gather(*(fetch(u) for u in wanted), return_exceptions=False)
+        return {url: text for url, text in pages if text}
+
     # ── elements ─────────────────────────────────────────────────────────────
     async def _research_element(self, element: ClearableElement, result: SwarmResult) -> None:
         payload = await self._dispatch_element(element)
         evidence = _rehydrate(payload, element.element_id, element.canonical_form)
+        returned = len(evidence.citations)
+        evidence = await self._attribute(
+            evidence,
+            proposition=_element_proposition(element),
+            subject=element.canonical_form or element.display_form(),
+            element=element,
+        )
         result.add(element.element_id, evidence)
 
         # Side effects declared by the routing rule. These are what turn a
@@ -227,6 +344,7 @@ class ResearchSwarm:
                 "type": str(element.element_type),
                 "tier": str(element.risk_tier),
                 "citations": len(evidence.citations),
+                "sources_returned": returned,
                 "cost_cents": round(evidence.cost_cents, 4),
                 "cached": evidence.cached,
             }
@@ -430,3 +548,52 @@ def _monitor_reason(element: ClearableElement) -> str:
 def negative_living_claims(claims: list[FactualClaim]) -> list[FactualClaim]:
     """The escalation cocktail. Every marquee case in the set is this shape."""
     return [c for c in claims if c.polarity is Polarity.NEGATIVE and c.subject_alive is True]
+
+
+def _element_proposition(element: ClearableElement) -> str:
+    """The sentence a source has to bear on for a clearance element.
+
+    A claim carries its own proposition. An element does not, so one is stated
+    for it: the question being asked of the record, in the terms the record
+    would answer in. Without this the gate has nothing specific to check
+    relevance against and falls back to matching a bare name, which is how an
+    unrelated stranger who shares a name became evidence in the first place.
+    """
+    name = element.canonical_form or element.display_form()
+    kind = str(element.element_type).replace("_", " ").lower()
+    jurisdiction = element.jurisdictions[0] if element.jurisdictions else "US"
+    return (
+        f"The {kind} known as {name!r} is a real, identifiable subject in {jurisdiction}, "
+        "and this source concerns that same subject rather than another of the same name."
+    )
+
+
+def _identity_note(identity: dict[str, Any] | None) -> str:
+    """The subject, as the research should understand it.
+
+    Written into the question itself. Without it the researcher is given a
+    string and goes looking for anything that matches: "ICC" came back as the
+    International Code Council and the FIFA World Cup on a live run, and both
+    were real, cited and completely wrong.
+    """
+    if not identity or identity.get("status") != "resolved":
+        return ""
+    canonical = identity.get("canonical") or {}
+    label = canonical.get("label") or identity.get("name") or ""
+    if not label:
+        return ""
+
+    lines = [f"SUBJECT IDENTITY, resolved before research. This and only this: {label}"]
+    if canonical.get("description"):
+        lines.append(f"  what it is: {canonical['description']}")
+    if canonical.get("occupations"):
+        lines.append(f"  known for: {', '.join(canonical['occupations'][:4])}")
+    if canonical.get("qid"):
+        lines.append(f"  Wikidata: {canonical['qid']} ({canonical.get('url', '')})")
+    if canonical.get("official_site"):
+        lines.append(f"  official site: {canonical['official_site']}")
+    lines.append(
+        "  A source about a different person, organisation or work that shares this "
+        "name is not about this subject and must not be used."
+    )
+    return "\n".join(lines)

@@ -125,21 +125,61 @@ def _parse_json(text: str) -> dict[str, Any]:
 
 
 def _citations_from_grounding(response: Any) -> list[Citation]:
+    """Turn grounding metadata into citations that carry their real pedigree.
+
+    Two things about this metadata are easy to get wrong and were both wrong
+    here.
+
+    The `uri` is not the source. It is a redirect on
+    vertexaisearch.cloud.google.com that expires, so classifying it produced
+    "unknown host" for every grounded citation in the product — including for
+    bcci.tv and theguardian.com, which the classifier knows perfectly well.
+    The real host is in `web.domain`, and that is what gets classified.
+
+    `grounding_supports` maps spans of the answer to the chunks that support
+    them. That mapping is the only part of a grounded response with any
+    attribution in it, so the supported sentence is carried onto the citation
+    as its excerpt, which gives the attribution gate something real to check a
+    quote against instead of an empty string.
+    """
+    supports_by_chunk = _supports_by_chunk(response)
     citations: list[Citation] = []
     seen: set[str] = set()
+
     for candidate in getattr(response, "candidates", []) or []:
         metadata = getattr(candidate, "grounding_metadata", None)
-        for chunk in getattr(metadata, "grounding_chunks", []) or []:
+        for index, chunk in enumerate(getattr(metadata, "grounding_chunks", []) or []):
             web = getattr(chunk, "web", None)
             url = getattr(web, "uri", None)
             if not url or url in seen:
                 continue
             seen.add(url)
+
+            domain = getattr(web, "domain", None) or getattr(web, "title", None) or ""
             citations.append(
                 Citation.classified(
-                    url=url,
-                    title=getattr(web, "title", None) or url,
+                    # Classified on the domain the redirect points at, not on
+                    # the redirect. The URL stays the redirect because that is
+                    # what resolves; the pedigree comes from the real host.
+                    url=f"https://{domain}" if domain else url,
+                    title=getattr(web, "title", None) or domain or url,
+                    excerpt=" ".join(supports_by_chunk.get(index, []))[:1200],
                     declared_type="secondary",
+                    publisher=domain or None,
                 )
             )
     return citations
+
+
+def _supports_by_chunk(response: Any) -> dict[int, list[str]]:
+    """Which sentences of the answer each grounding chunk was cited for."""
+    out: dict[int, list[str]] = {}
+    for candidate in getattr(response, "candidates", []) or []:
+        metadata = getattr(candidate, "grounding_metadata", None)
+        for support in getattr(metadata, "grounding_supports", None) or []:
+            text = getattr(getattr(support, "segment", None), "text", "") or ""
+            if not text:
+                continue
+            for index in getattr(support, "grounding_chunk_indices", None) or []:
+                out.setdefault(int(index), []).append(text.strip())
+    return out

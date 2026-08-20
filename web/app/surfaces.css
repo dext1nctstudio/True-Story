@@ -1388,3 +1388,206 @@
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
 }
+
+/* ============================================================================
+   IDENTITY AND ATTRIBUTION
+   ============================================================================
+   Two panels that answer the questions a reviewer asks before reading a single
+   citation: who is this about, and how much of what came back was actually
+   about it.
+   ========================================================================= */
+
+.identity {
+  margin: var(--space-3) 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.identity-resolved { border-left-color: var(--green); }
+.identity-collision { border-left-color: var(--amber); }
+.identity-unidentified { border-left-color: var(--neutral); }
+
+.identity-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.identity-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.identity-name {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line-focus);
+  align-self: flex-start;
+}
+
+.identity-name:hover {
+  color: var(--accent-hover);
+}
+
+.identity-desc {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+}
+
+.identity-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  font-size: var(--fs-tiny);
+  color: var(--text-tertiary);
+}
+
+.identity-reason,
+.identity-web {
+  margin: 0;
+  font-size: var(--fs-tiny);
+  line-height: 1.55;
+  color: var(--text-tertiary);
+}
+
+.identity-web {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
+}
+
+.identity-web-domains {
+  color: var(--text-quiet);
+}
+
+.identity-candidates {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-4);
+  font-size: var(--fs-tiny);
+  line-height: 1.6;
+  color: var(--text-tertiary);
+}
+
+.identity-candidates a {
+  color: var(--text-secondary);
+}
+
+/* ── attribution ────────────────────────────────────────────────────────── */
+
+.attrib {
+  margin: var(--space-3) 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.attrib-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.attrib-ratio {
+  font-size: var(--fs-tiny);
+  color: var(--text-secondary);
+}
+
+.attrib-ratio strong {
+  font-size: var(--fs-body);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.attrib-bar {
+  height: 3px;
+  margin: var(--space-2) 0;
+  border-radius: 999px;
+  background: var(--surface-input);
+  overflow: hidden;
+}
+
+.attrib-kept {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.attrib-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  font-size: var(--fs-tiny);
+  color: var(--text-tertiary);
+}
+
+.attrib-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-tiny);
+  line-height: 1.55;
+  color: var(--text-quiet);
+}
+
+/* ── per source stance ──────────────────────────────────────────────────── */
+
+.stance {
+  margin-top: var(--space-2);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--line-strong);
+}
+
+.stance-supports { border-left-color: var(--green); }
+.stance-contradicts { border-left-color: var(--red); }
+
+.stance-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.stance-chip.green {
+  background: var(--green-tint);
+  color: var(--green);
+  border: 1px solid var(--green-line);
+}
+
+.stance-chip.red {
+  background: var(--red-tint);
+  color: var(--red);
+  border: 1px solid var(--red-line);
+}
+
+/* The verbatim span. Set as a quotation because that is what it is: the words
+   found in the retrieved page, not a summary of them. */
+.stance-quote {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  font-size: var(--fs-small);
+  line-height: 1.6;
+  color: var(--text);
+  font-style: italic;
+}
+
+.stance-quote::before { content: "\201C"; }
+.stance-quote::after { content: "\201D"; }
+
+.stance-reason {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-tiny);
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}

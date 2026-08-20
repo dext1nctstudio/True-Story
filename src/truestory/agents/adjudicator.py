@@ -164,6 +164,8 @@ class Adjudicator:
         for claim in claims:
             if claim.verdict is Verdict.OPINION:
                 continue  # settled at routing, no spend and no model call
+            if claim.settled_without_research:
+                continue  # settled at identity: no real subject, so no verdict to reach
             await self.adjudicate_claim(claim, evidence_by_subject.get(claim.claim_id, []))
 
         for element in elements:
@@ -185,13 +187,39 @@ class Adjudicator:
         usable = [e for e in evidence if e.is_usable]
 
         if not usable:
+            # Two different situations end up here and they read very
+            # differently to a reviewer. The research may have failed, or it
+            # may have succeeded and returned nothing that bears on the claim —
+            # which is not a failure, it is the answer. Saying "research
+            # failed" when eleven sources were read and none of them was about
+            # the subject misdescribes the finding and invites somebody to
+            # rerun it expecting a different result.
+            gate = claim.attribution or {}
+            assessed = int(gate.get("assessed", 0))
+            if assessed:
+                dropped = int(gate.get("dropped_irrelevant", 0)) + int(
+                    gate.get("dropped_unquotable", 0)
+                )
+                rationale = (
+                    f"{assessed} source{'' if assessed == 1 else 's'} were retrieved and "
+                    f"{dropped} could not be quoted against this claim. The record is "
+                    "silent on it rather than against it, and silence is not a finding "
+                    "of falsity."
+                )
+                reason = "no source bears on this claim"
+            else:
+                rationale = (
+                    "Research returned no citable source. The system declines to make "
+                    "this call rather than guessing."
+                )
+                reason = "no usable evidence"
+
             self._escalate_claim(
                 claim,
                 Verdict.UNSUPPORTED,
-                "Research returned no citable source. The system declines to make "
-                "this call rather than guessing.",
+                rationale,
                 confidence=0.0,
-                reason="no usable evidence",
+                reason=reason,
                 evidence=evidence,
             )
             return
@@ -281,35 +309,32 @@ class Adjudicator:
                 ),
             )
 
-        # A false factual claim about a living person is the claim that gets
-        # filed. It goes to a human regardless of how confident the model was.
+        # A contradiction is the heaviest thing this system says, so what it
+        # must rest on depends on what is being contradicted. That is not a
+        # softening: it is how a standard of proof works.
+        #
+        # A negative assertion about a living person is the claim that gets
+        # filed on, and it gets the strict rule: a recognised record, not a
+        # summary of one and not a source that merely described itself as
+        # primary. Everything else gets the general rule, because applying the
+        # strict one to a sporting scoreline demanded a docket that cannot
+        # exist and downgraded a correct contradiction to amber — measured, on
+        # a claim the record settles in one line.
+        if verdict is Verdict.CONTRADICTED and self.rubric.contradicted_requires_primary_source:
+            failure = self._contradiction_shortfall(claim, report)
+            if failure:
+                return Verdict.UNSUPPORTED, min(confidence, 0.6), failure
+
+        # Only once the verdict has survived the standard of proof does the
+        # escalation fire. Ordered the other way round, as it was, the mandatory
+        # counsel review returned first and the strict record requirement never
+        # ran at all for the one category it was written for: a false statement
+        # about a living person.
         if verdict is Verdict.CONTRADICTED and claim.subject_alive:
             return (
                 verdict,
                 confidence,
-                ("Contradicted factual claim about a living person. Mandatory counsel review."),
-            )
-
-        # A contradiction is the heaviest thing this system says, so it must
-        # rest on a primary source rather than a summary of one — and on a
-        # source recognised as a record, not one that merely described itself
-        # as primary. Before the classifier existed every citation defaulted to
-        # "secondary", so this rule silently downgraded every red line in the
-        # product to amber and the headline output was unreachable.
-        strict = self.rubric.contradicted_requires_classified_primary
-        primary_count = report.classified_primary_count if strict else report.primary_count
-        if (
-            verdict is Verdict.CONTRADICTED
-            and self.rubric.contradicted_requires_primary_source
-            and not primary_count
-        ):
-            return (
-                Verdict.UNSUPPORTED,
-                min(confidence, 0.6),
-                (
-                    "Contradiction rested on secondary sources only. Downgraded to "
-                    "unsupported pending a primary source."
-                ),
+                "Contradicted factual claim about a living person. Mandatory counsel review.",
             )
 
         # The model's verdict against the conclusion its own research reached.
@@ -473,6 +498,59 @@ class Adjudicator:
                 element.awaiting_confirmation = True
 
         self._apply_masking(element)
+
+    def _contradiction_shortfall(
+        self, claim: FactualClaim, report: corr.Corroboration
+    ) -> str | None:
+        """Why this contradiction may not stand, or None if it may.
+
+        Two standards, chosen by what the claim asserts rather than by how
+        confident anything felt.
+        """
+        strict_scope = self.rubric.strict_record_scope == "negative_claims_about_living_people"
+        is_defamation_shaped = claim.polarity is Polarity.NEGATIVE and claim.subject_alive is True
+
+        if strict_scope and is_defamation_shaped:
+            if self.rubric.contradicted_requires_classified_primary:
+                if not report.classified_primary_count:
+                    return (
+                        "A negative assertion about a living person may only be called "
+                        "false on a recognised record — a docket, a register, an official "
+                        "archive. The sources here are reporting or reference. Downgraded "
+                        "to unsupported pending a record."
+                    )
+                return None
+            if not report.primary_count:
+                return "Contradiction rested on secondary sources only."
+            return None
+
+        minimum = self.rubric.contradicted_minimum()
+        if report.citation_count < int(minimum.get("attributed_sources", 1)):
+            return "No source was quoted against this claim, so nothing supports calling it false."
+        if report.low_trust_only:
+            return (
+                "The only sources contradicting this are user generated or "
+                "unattributable. Downgraded to unsupported."
+            )
+
+        if not report.recognised_count:
+            return (
+                "Every source contradicting this sits on a host this system does not "
+                "recognise, so there is nothing to weigh it against. Downgraded to "
+                "unsupported."
+            )
+
+        enough_domains = report.independent_domains >= int(minimum.get("independent_domains", 2))
+        has_record = bool(minimum.get("or_classified_primary", True)) and (
+            report.classified_primary_count > 0
+        )
+        if not (enough_domains or has_record):
+            return (
+                f"Contradicted on {report.independent_domains} independent source"
+                f"{'' if report.independent_domains == 1 else 's'} and no recognised "
+                "record. Downgraded to unsupported pending corroboration."
+            )
+        return None
 
     def _post_check_element(
         self,

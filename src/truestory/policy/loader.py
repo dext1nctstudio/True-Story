@@ -353,6 +353,25 @@ class Rubric:
         return bool(self.confidence.get("contradicted_requires_classified_primary", True))
 
     @property
+    def strict_record_scope(self) -> str:
+        """Which claims must rest on a recognised record to be contradicted."""
+        return str(
+            self.confidence.get("strict_record_applies_to", "negative_claims_about_living_people")
+        )
+
+    @property
+    def require_attributed_evidence(self) -> bool:
+        return bool(self.confidence.get("require_attributed_evidence", True))
+
+    def contradicted_minimum(self) -> dict[str, Any]:
+        return dict(
+            self.confidence.get(
+                "contradicted_minimum",
+                {"attributed_sources": 1, "independent_domains": 2, "or_classified_primary": True},
+            )
+        )
+
+    @property
     def low_trust_cannot_decide(self) -> bool:
         return bool(self.confidence.get("low_trust_cannot_decide", True))
 

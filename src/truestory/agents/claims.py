@@ -24,6 +24,7 @@ clearance elements.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -110,20 +111,99 @@ class ClaimExtractor:
         by_scene = {s.scene_no: s for s in scenes}
         claim_bearing = [s for s in spans if s.element_type in CLAIM_BEARING]
 
-        claims: list[FactualClaim] = []
+        # The scene is the unit of extraction, not the mention.
+        #
+        # Called once per claim bearing span, as this was, the extractor read
+        # the same scene eleven times and returned overlapping copies of the
+        # same sentences each time: two pages of screenplay produced two
+        # hundred and two "claims", of which perhaps ten were distinct. The
+        # dedupe could not collapse them, because a claim's identity includes
+        # the span it came from and every copy came from a different span.
+        #
+        # One call per scene, with the tagged subjects named in the prompt, is
+        # both the correct unit and an order of magnitude cheaper.
+        scenes_to_extract: dict[int, list[RawSpan]] = {}
         for span in claim_bearing:
-            scene = by_scene.get(span.scene_no)
-            claims.extend(await self.extract(span, scene))
+            scenes_to_extract.setdefault(span.scene_no, []).append(span)
+
+        semaphore = asyncio.Semaphore(max(1, settings.claims_max_concurrency))
+
+        async def extract_one_scene(scene_no: int, subjects: list[RawSpan]) -> list[FactualClaim]:
+            async with semaphore:
+                try:
+                    return await self.extract_scene(by_scene.get(scene_no), subjects)
+                except Exception as exc:
+                    log.warning("claim extraction failed for scene %s: %s", scene_no, exc)
+                    return []
+
+        batches = await asyncio.gather(
+            *(extract_one_scene(no, subs) for no, subs in scenes_to_extract.items())
+        )
+        claims: list[FactualClaim] = [claim for batch in batches for claim in batch]
 
         deduped = self._dedupe(claims)
         log.info(
-            "claim extraction: %s spans -> %s claims (%s after dedupe), %s opinions filtered",
+            "claim extraction: %s scenes, %s tagged subjects -> %s claims "
+            "(%s after dedupe), %s opinions filtered",
+            len(scenes_to_extract),
             len(claim_bearing),
             len(claims),
             len(deduped),
             sum(1 for c in deduped if c.is_opinion),
         )
         return deduped
+
+    async def extract_scene(
+        self, scene: Scene | None, subjects: list[RawSpan]
+    ) -> list[FactualClaim]:
+        """Decompose one scene, over every claim bearing subject tagged in it."""
+        if not subjects:
+            return []
+
+        distinct = _one_per_subject_per_scene(subjects)
+
+        if settings.offline:
+            out: list[FactualClaim] = []
+            for span in distinct:
+                out.extend(self._extract_deterministic(span, scene))
+            return out
+
+        from google.genai import types
+
+        from truestory.agents.prompts import CLAIM_EXTRACTOR_SYSTEM, CLAIM_EXTRACTOR_USER
+
+        primary = distinct[0]
+        text = scene.text if scene else primary.context
+        listing = "\n".join(
+            f"  - {s.surface_form} ({str(s.element_type).replace('_', ' ').lower()})"
+            for s in distinct
+        )
+
+        try:
+            response = await self._genai().aio.models.generate_content(
+                model=self.model,
+                contents=CLAIM_EXTRACTOR_USER.format(
+                    subjects=listing,
+                    scene_no=primary.scene_no,
+                    page=primary.page,
+                    text=text,
+                ),
+                config=types.GenerateContentConfig(
+                    system_instruction=CLAIM_EXTRACTOR_SYSTEM,
+                    temperature=0.0,
+                    response_mime_type="application/json",
+                    response_schema=_CLAIM_RESPONSE_SCHEMA,
+                ),
+            )
+            meter_response(self.model, response)
+        except Exception as exc:
+            log.warning("scene %s claim extraction failed: %s", primary.scene_no, exc)
+            fallback: list[FactualClaim] = []
+            for span in distinct:
+                fallback.extend(self._extract_deterministic(span, scene))
+            return fallback
+
+        return self._claims_from_scene(distinct, scene, getattr(response, "text", "") or "")
 
     # ── the model pass ───────────────────────────────────────────────────────
     async def extract(self, span: RawSpan, scene: Scene | None) -> list[FactualClaim]:
@@ -214,6 +294,61 @@ class ClaimExtractor:
             context=base.context,
             character_cue=base.character_cue,
         )
+
+    def _claims_from_scene(
+        self, subjects: list[RawSpan], scene: Scene | None, text: str
+    ) -> list[FactualClaim]:
+        """Map a scene level response back onto the subject each claim is about.
+
+        The model names the subject; this resolves that name to the span tagged
+        for it, so the claim hangs off the same identifier the ledger and the
+        overlay use. An unrecognised name falls back to the first subject
+        rather than being dropped: a claim attributed slightly wrongly is still
+        checkable, and a claim thrown away is not.
+        """
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            log.warning("unparseable claim output for scene %s", subjects[0].scene_no)
+            return []
+
+        by_name = {" ".join(s.surface_form.lower().split()): s for s in subjects}
+        out: list[FactualClaim] = []
+
+        for item in payload.get("claims", []):
+            claim_text = (item.get("claim_text") or "").strip()
+            if not claim_text:
+                continue
+
+            named = " ".join(str(item.get("subject", "")).lower().split())
+            span = by_name.get(named)
+            if span is None:
+                span = next(
+                    (s for key, s in by_name.items() if named and (named in key or key in named)),
+                    subjects[0],
+                )
+
+            try:
+                claim_type = ClaimType(item.get("claim_type", "STATUS"))
+            except ValueError:
+                claim_type = ClaimType.STATUS
+            try:
+                polarity = Polarity(item.get("polarity", "neutral"))
+            except ValueError:
+                polarity = Polarity.NEUTRAL
+
+            out.append(
+                FactualClaim(
+                    claim_id=FactualClaim.make_id(span.span_id, claim_text),
+                    subject_element_id=span.span_id,
+                    subject_name=item.get("subject") or span.surface_form,
+                    claim_text=claim_text,
+                    claim_type=claim_type,
+                    polarity=polarity,
+                    asserted_in=[self._locate(span, scene, claim_text)],
+                )
+            )
+        return out
 
     def _claims_from_response(
         self, span: RawSpan, scene: Scene | None, text: str
@@ -339,6 +474,39 @@ class ClaimExtractor:
                 if occurrence not in existing.asserted_in:
                     existing.asserted_in.append(occurrence)
         return list(merged.values())
+
+
+def _one_per_subject_per_scene(spans: list[RawSpan]) -> list[RawSpan]:
+    """One extraction call per subject per scene, not one per mention.
+
+    Ingest tags every mention, so a two page scene about one cricketer came
+    back with fifty two spans and twenty two of them were claim bearing. Each
+    one then got its own Gemini 2.5 Pro call, over the same scene text, to
+    extract overlapping copies of the same sentences — which the dedupe below
+    then threw away.
+
+    The extractor reads the whole scene, so it sees every mention whichever
+    span it was handed. Collapsing to one span per subject per scene cut the
+    model calls on the test fixture by roughly five times, and the claims that
+    come out are the same claims.
+
+    Scene granularity rather than script granularity is deliberate: the same
+    person in a later scene is a different context, and the claims made about
+    them there are different claims.
+    """
+    seen: set[tuple[int, str, str]] = set()
+    kept: list[RawSpan] = []
+    for span in spans:
+        key = (
+            span.scene_no,
+            str(span.element_type),
+            " ".join(span.surface_form.lower().split()),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(span)
+    return kept
 
 
 def _tokens(text: str) -> set[str]:
