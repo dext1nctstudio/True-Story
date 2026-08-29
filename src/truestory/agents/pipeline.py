@@ -42,7 +42,7 @@ from truestory.agents.ledger import LedgerAgent
 from truestory.agents.remedy import RemedyLoop
 from truestory.agents.report import ReportAgent, build_summary
 from truestory.agents.router import RiskRouter
-from truestory.agents.swarm import ResearchSwarm
+from truestory.agents.swarm import ResearchSwarm, SwarmResult
 from truestory.config import settings
 from truestory.mcp.tools import ClearanceTools
 from truestory.models.claims import FactualClaim
@@ -150,7 +150,12 @@ class TrueStoryPipeline:
         # and the difference between checking a claim and inventing evidence
         # for a character.
         self.identity = IdentityResolver()
-        self.swarm = ResearchSwarm(self.registry, self.tools, on_progress=self._emit_passthrough)
+        self.swarm = ResearchSwarm(
+            self.registry,
+            self.tools,
+            on_progress=self._emit_passthrough,
+            project_id=self.project.project_id,
+        )
         self.adjudicator = Adjudicator()
         self.remedy = RemedyLoop(self.tools)
         self.reporter = ReportAgent()
@@ -397,6 +402,8 @@ class TrueStoryPipeline:
         state.artifacts["swarm"] = result.to_dict()
         state.artifacts["evidence_by_subject"] = result.evidence_by_subject
 
+        self._record_research_telemetry(state, result)
+
         # Monitors are opened after research so the licence term discovered
         # during research can drive the cadence.
         for request in result.monitors_requested:
@@ -406,6 +413,37 @@ class TrueStoryPipeline:
                 for element in state.elements:
                     if element.element_id == handle.subject_id:
                         element.monitor_handle = handle.monitor_id
+
+    def _record_research_telemetry(self, state: RunState, result: SwarmResult) -> None:
+        """Write one BigQuery row per Evidence produced by the swarm.
+
+        Deliberately best effort and it swallows its own failures, because
+        telemetry is not worth failing a clearance run over. What it is worth
+        is that every unit economics number in the pitch becomes a query
+        against `cost_telemetry` rather than an estimate: cost per script, cost
+        per claim type, cache hit rate, fallback rate.
+
+        Evidence pages are archived separately, by the swarm at the moment of
+        capture, because that is the only point the page text exists.
+        """
+        try:
+            from truestory.storage.bigquery import get_sink
+        except Exception as exc:  # pragma: no cover - import guard
+            log.debug("telemetry unavailable: %s", exc)
+            return
+
+        sink = get_sink()
+        for evidence in result.records:
+            try:
+                sink.record_evidence(state.run_id, state.project_id, evidence)
+            except Exception as exc:
+                log.debug("telemetry row skipped for %s: %s", evidence.evidence_id, exc)
+
+        try:
+            sink.flush()
+            log.info("telemetry: %s rows written to BigQuery", sink.rows_written)
+        except Exception as exc:
+            log.warning("telemetry flush failed: %s", exc)
 
     async def _open_monitor(self, request: dict[str, Any]) -> MonitorHandle | None:
         try:

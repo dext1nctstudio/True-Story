@@ -18,7 +18,12 @@ import httpx
 
 from truestory.config import settings
 from truestory.models.evidence import Citation, Evidence
-from truestory.providers.base import ProviderError, ResearchProvider, ResearchRequest
+from truestory.providers.base import (
+    ProviderError,
+    ResearchProvider,
+    ResearchRequest,
+    _resolve_api_key,
+)
 
 
 class ParallelExtractProvider(ResearchProvider):
@@ -37,7 +42,7 @@ class ParallelExtractProvider(ResearchProvider):
         *,
         client: httpx.AsyncClient | None = None,
     ) -> None:
-        self.api_key = api_key or settings.parallel_api_key
+        self.api_key = api_key or _resolve_api_key()
         self.base_url = (base_url or settings.parallel_api_base).rstrip("/")
         self._client = client
 

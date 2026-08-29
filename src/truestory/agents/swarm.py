@@ -74,6 +74,12 @@ class SwarmResult:
             self.labels.setdefault(subject_id, label)
         if evidence.error:
             self.failures[subject_id] = evidence.error
+        self.records.append(evidence)
+
+    #: Every Evidence in dispatch order, so telemetry can be written once at the
+    #: end of the run rather than on the hot path. The unit economics in the
+    #: pitch are a query against this, not an estimate.
+    records: list[Evidence] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -101,11 +107,15 @@ class ResearchSwarm:
         max_concurrency: int | None = None,
         on_progress: ProgressCallback = None,
         attribution: AttributionGate | None = None,
+        project_id: str = "",
     ) -> None:
         self.registry = registry
         self.tools = tools or ClearanceTools(registry)
         self.max_concurrency = max_concurrency or settings.swarm_max_concurrency
         self.on_progress = on_progress
+        # Namespaces archived evidence pages in Cloud Storage. Empty means the
+        # run is not archiving, which is the correct default for a unit test.
+        self.project_id = project_id
         # Nothing this swarm retrieves becomes evidence until the gate has read
         # it against the specific proposition and quoted the words that bear on
         # it. Retrieval is the easy half; deciding what a source actually says
@@ -336,7 +346,36 @@ class ResearchSwarm:
                 return url, ""
 
         pages = await asyncio.gather(*(fetch(u) for u in wanted), return_exceptions=False)
-        return {url: text for url, text in pages if text}
+        captured = {url: text for url, text in pages if text}
+        self._archive_pages(evidence, captured)
+        return captured
+
+    def _archive_pages(self, evidence: Evidence, pages: dict[str, str]) -> None:
+        """Preserve each captured page to Cloud Storage.
+
+        The page is archived at the moment it is read, because that is the only
+        moment the production can prove what the source said. A citation whose
+        page later changes is worth much less at claim time than one that
+        travels with the copy the run actually quoted from.
+
+        Best effort by design: an archival failure must never fail a clearance
+        run, so it degrades to a debug line and the run continues.
+        """
+        if not pages or not self.project_id:
+            return
+        try:
+            from truestory.storage import store_evidence_page
+        except Exception:  # pragma: no cover - import guard
+            return
+        for index, (url, text) in enumerate(pages.items()):
+            try:
+                store_evidence_page(
+                    self.project_id,
+                    f"{evidence.evidence_id}-{index}",
+                    f"<!-- source: {url} -->\n\n{text}",
+                )
+            except Exception as exc:
+                log.debug("page not archived for %s: %s", url, exc)
 
     # ── elements ─────────────────────────────────────────────────────────────
     async def _research_element(self, element: ClearableElement, result: SwarmResult) -> None:
@@ -440,6 +479,10 @@ class ResearchSwarm:
                     element.element_id,
                     element.canonical_form,
                     element.jurisdictions[0] if element.jurisdictions else "US",
+                    # Which of the three enumerations this is. It was being
+                    # dropped here, so a namesake search and a company register
+                    # search issued the identical query.
+                    kind=side_effect,
                 )
                 for payload in matches:
                     result.add(
