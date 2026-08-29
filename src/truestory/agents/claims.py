@@ -37,6 +37,64 @@ from truestory.providers.model_cost import meter_response
 
 log = logging.getLogger("truestory.claims")
 
+#: Bumped when the prompt or the response schema changes in a way that makes a
+#: stored extraction wrong rather than merely older. It is part of the cache
+#: key, so a bump retires every stored extraction.
+_EXTRACTION_VERSION = "claims_v1"
+
+
+class _ExtractionCache:
+    """Replay the claim extraction for a scene we have already read.
+
+    The reason this exists is not the model spend, which is small. It is that
+    a claim's identity is a hash of its own wording, and Gemini rephrases a
+    claim between runs even at temperature zero: "MS Dhoni's score ... was
+    unbeaten" one run, "MS Dhoni's innings ... was unbeaten" the next. Both are
+    the same claim, and both produce a different `claim_id`, a different
+    research cache key, and therefore a full price re-research of a script that
+    has not changed. Caching the extraction makes the identity stable, which is
+    what makes every downstream cache actually hit.
+
+    Keyed on the exact prompt bytes, so it is a replay and never a fuzzy match.
+    Two claims that differ by one number must never share an entry.
+    """
+
+    def __init__(self) -> None:
+        self._backend: Any = None
+
+    def _store(self) -> Any:
+        if self._backend is None:
+            from truestory.providers.cached import LocalCacheBackend
+
+            self._backend = LocalCacheBackend(settings.cache_dir / "extraction")
+        return self._backend
+
+    @staticmethod
+    def key(model: str, prompt: str) -> str:
+        import hashlib
+
+        raw = f"{_EXTRACTION_VERSION}|{model}|{prompt}"
+        return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+    def get(self, model: str, prompt: str) -> str | None:
+        try:
+            entry = self._store().get(self.key(model, prompt))
+        except Exception:  # pragma: no cover - a cache miss is never fatal
+            return None
+        if isinstance(entry, dict):
+            text = entry.get("text")
+            return str(text) if text else None
+        return None
+
+    def put(self, model: str, prompt: str, text: str) -> None:
+        if not text:
+            return
+        try:
+            self._store().put(self.key(model, prompt), {"model": model, "text": text})
+        except Exception as exc:  # pragma: no cover
+            log.debug("extraction not cached: %s", exc)
+
+
 # Cheap negative valence markers used by the offline path. The model pass makes
 # a far better judgement, and this exists so mock mode still exercises the
 # escalation branch rather than producing an all neutral run.
@@ -105,6 +163,7 @@ class ClaimExtractor:
     def __init__(self, model: str | None = None, client: Any = None) -> None:
         self.model = model or settings.model_claims
         self._client = client
+        self._cache = _ExtractionCache()
 
     # ── entry point ──────────────────────────────────────────────────────────
     async def run(self, spans: list[RawSpan], scenes: list[Scene]) -> list[FactualClaim]:
@@ -179,15 +238,24 @@ class ClaimExtractor:
             for s in distinct
         )
 
+        prompt = CLAIM_EXTRACTOR_USER.format(
+            subjects=listing,
+            scene_no=primary.scene_no,
+            page=primary.page,
+            text=text,
+        )
+
+        # An unchanged scene must decompose to the same claims with the same
+        # ids, or every research cache entry downstream is dead on arrival.
+        cached = self._cache.get(self.model, prompt)
+        if cached:
+            log.debug("scene %s claim extraction replayed from cache", primary.scene_no)
+            return self._claims_from_scene(distinct, scene, cached)
+
         try:
             response = await self._genai().aio.models.generate_content(
                 model=self.model,
-                contents=CLAIM_EXTRACTOR_USER.format(
-                    subjects=listing,
-                    scene_no=primary.scene_no,
-                    page=primary.page,
-                    text=text,
-                ),
+                contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=CLAIM_EXTRACTOR_SYSTEM,
                     temperature=0.0,
@@ -203,7 +271,9 @@ class ClaimExtractor:
                 fallback.extend(self._extract_deterministic(span, scene))
             return fallback
 
-        return self._claims_from_scene(distinct, scene, getattr(response, "text", "") or "")
+        raw = getattr(response, "text", "") or ""
+        self._cache.put(self.model, prompt, raw)
+        return self._claims_from_scene(distinct, scene, raw)
 
     # ── the model pass ───────────────────────────────────────────────────────
     async def extract(self, span: RawSpan, scene: Scene | None) -> list[FactualClaim]:
