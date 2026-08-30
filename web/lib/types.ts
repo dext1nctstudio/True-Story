@@ -126,10 +126,14 @@ export interface Evidence {
 }
 
 /** How well the record backs one subject. Counted, never asserted. */
+// Every field is optional because the backend writes this block only when a
+// subject was actually researched. A claim the swarm could not reach arrives
+// as `{}`, and typing that as complete is what let an empty object reach
+// `.join()` and crash the evidence panel.
 export interface Corroboration {
-  citation_count: number;
+  citation_count?: number;
   independent_domains: number;
-  domains: string[];
+  domains?: string[];
   primary_count: number;
   classified_primary_count: number;
   low_trust_count: number;
@@ -145,7 +149,7 @@ export interface Corroboration {
   newest_source_days: number | null;
   oldest_source_days: number | null;
   score: number;
-  notes: string[];
+  notes?: string[];
 }
 
 export interface Occurrence {

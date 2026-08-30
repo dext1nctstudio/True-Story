@@ -541,7 +541,12 @@ class ClearanceTools:
             tier=RiskTier.HIGH,
             processor=Processor.BASE,
             jurisdictions=(jurisdiction,),
-            max_results=50,
+            # FindAll bills a fixed fee plus a fee per match, which made it 96%
+            # of research spend on the first runs where it worked at all: 6.85
+            # cents a call against 0.17 for a Task run. A collision check asks
+            # whether real namesakes exist and shows the closest few, so fifty
+            # matches bought a four times larger bill and no extra finding.
+            max_results=10,
             entity_type=spec["entity_type"],
             match_conditions=tuple(
                 (name, description.format(pattern=pattern, jurisdiction=jurisdiction))
