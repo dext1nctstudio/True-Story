@@ -130,7 +130,17 @@ def test_forum_sources_cannot_carry_a_verdict_about_a_person(adjudicator):
     assert escalation and "user generated" in escalation.lower()
 
 
-def test_a_single_domain_does_not_corroborate_a_high_tier_claim(adjudicator):
+def test_a_single_domain_does_not_corroborate_a_negative_claim_about_a_living_person(
+    adjudicator,
+):
+    """Five pages on one site are one source.
+
+    One source now settles an ordinary claim, because demanding two sent
+    correct verdicts to a lawyer for confirmation and saved nobody any work.
+    The carve out is this shape — a disparaging assertion about someone who
+    can sue — which keeps the two source standard, and this is the test that
+    holds the line.
+    """
     evidence = [
         _evidence(
             ["https://www.nytimes.com/a", "https://www.nytimes.com/b"],
@@ -138,9 +148,23 @@ def test_a_single_domain_does_not_corroborate_a_high_tier_claim(adjudicator):
         )
     ]
     _, _, escalation = adjudicator._post_check_claim(
-        _claim(tier=RiskTier.HIGH), Verdict.VERIFIED, 0.95, evidence, False
+        _claim(tier=RiskTier.HIGH, alive=True), Verdict.VERIFIED, 0.95, evidence, False
     )
     assert escalation and "independent" in escalation.lower()
+
+
+def test_one_domain_now_corroborates_an_ordinary_claim(adjudicator):
+    """The change the carve out above exists to make safe."""
+    evidence = [
+        _evidence(
+            ["https://www.nytimes.com/a", "https://www.nytimes.com/b"],
+            finding={"verdict": "supported"},
+        )
+    ]
+    _, _, escalation = adjudicator._post_check_claim(
+        _claim(tier=RiskTier.HIGH, alive=False), Verdict.VERIFIED, 0.95, evidence, False
+    )
+    assert not (escalation and "independent" in escalation.lower())
 
 
 def test_confidence_may_not_exceed_what_corroboration_supports(adjudicator):
