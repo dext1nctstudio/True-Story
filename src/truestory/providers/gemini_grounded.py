@@ -18,6 +18,7 @@ routes to counsel rather than quietly taking a thin answer.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from truestory.config import settings
@@ -32,7 +33,7 @@ class GeminiGroundedProvider(ResearchProvider):
     unit_cost_cents = 0.2  # inference only, no research API charge
 
     def __init__(self, model: str | None = None, client: Any = None) -> None:
-        self.model = model or settings.model_adjudicator
+        self.model = model or settings.model_grounded
         self._client = client
 
     def _genai(self) -> Any:
@@ -68,7 +69,16 @@ class GeminiGroundedProvider(ResearchProvider):
                     config=types.GenerateContentConfig(
                         tools=[types.Tool(google_search=types.GoogleSearch())],
                         temperature=0.0,  # research is not a creative task
-                        response_mime_type="application/json",
+                        # No response_mime_type here, deliberately. Vertex
+                        # refuses controlled generation together with the
+                        # Search tool -- "controlled generation is not
+                        # supported with Search tool", HTTP 400 -- so asking
+                        # for both made this provider fail every single call.
+                        # It is the fallback, so the failure only surfaced when
+                        # the primary provider missed, and it turned true
+                        # claims into UNSUPPORTED with no evidence at all.
+                        # Grounding requires free text, so the schema is asked
+                        # for in the prompt and enforced by parsing instead.
                         safety_settings=_permissive_analysis_safety(types),
                     ),
                 )
@@ -116,12 +126,44 @@ def _permissive_analysis_safety(types: Any) -> list[Any]:
     return [types.SafetySetting(category=c, threshold="BLOCK_ONLY_HIGH") for c in categories]
 
 
+#: A ```json fence, which is how a grounded model returns an object when it
+#: cannot be told to emit one.
+_JSON_FENCE = re.compile(r"```(?:json)?\s*(.+?)\s*```", re.DOTALL)
+
+
 def _parse_json(text: str) -> dict[str, Any]:
+    """Recover the JSON object from a grounded answer.
+
+    Grounding rules out controlled generation, so the model returns prose
+    shaped like JSON rather than JSON: usually a ```json fence, sometimes a
+    sentence of preamble before the object. Insisting on a clean parse threw
+    away findings that were entirely well formed a fence away.
+    """
+    candidate = text.strip()
+    if not candidate:
+        return {"raw": "", "parse_error": True}
+
+    fenced = _JSON_FENCE.search(candidate)
+    if fenced:
+        candidate = fenced.group(1).strip()
+
     try:
-        parsed = json.loads(text)
+        parsed = json.loads(candidate)
         return parsed if isinstance(parsed, dict) else {"value": parsed}
     except json.JSONDecodeError:
-        return {"raw": text[:2000], "parse_error": True}
+        pass
+
+    # Last resort: the outermost braces. A model that wrapped the object in a
+    # sentence still gave us the object.
+    start, end = candidate.find("{"), candidate.rfind("}")
+    if 0 <= start < end:
+        try:
+            parsed = json.loads(candidate[start : end + 1])
+            return parsed if isinstance(parsed, dict) else {"value": parsed}
+        except json.JSONDecodeError:
+            pass
+
+    return {"raw": text[:2000], "parse_error": True}
 
 
 def _citations_from_grounding(response: Any) -> list[Citation]:
