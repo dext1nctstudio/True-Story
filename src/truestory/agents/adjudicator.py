@@ -357,8 +357,11 @@ class Adjudicator:
         # Corroboration, counted as distinct domains. Five URLs on one site are
         # one source, and a claim about a living person resting on one site is
         # not a checked claim.
-        required_domains = self.rubric.min_independent_domains(claim.risk_tier)
-        if report.independent_domains < required_domains:
+        strict = _is_negative_about_living(claim)
+        required_domains = self.rubric.min_domains(claim.risk_tier, negative_living=strict)
+        if report.independent_domains < required_domains and not self._record_stands_in(
+            report, strict=strict
+        ):
             return (
                 verdict,
                 min(confidence, 0.7),
@@ -379,7 +382,9 @@ class Adjudicator:
                 ),
             )
 
-        if len(_all_citations(evidence)) < self.rubric.min_citations(claim.risk_tier):
+        if len(_all_citations(evidence)) < self.rubric.min_citations(
+            claim.risk_tier, negative_living=strict
+        ):
             return verdict, confidence, (f"Fewer citations than tier {claim.risk_tier} requires.")
 
         # A private fact about a private person is outside what open source
@@ -442,6 +447,41 @@ class Adjudicator:
             # misstate what happened and count against coverage quality on the
             # front page of the report.
             if element.status is ClearanceStatus.CLEAR and element.rationale:
+                return
+
+            # Nor has an element the identity stage established nobody bears.
+            # Asking the web about an invented name and being told nothing is
+            # the answer, not a failure to get one: for a name a screenwriter
+            # made up, "no real person of this name was found" is exactly the
+            # finding a clearance report is commissioned to produce.
+            #
+            # Reporting it as RESEARCH_FAILED was worse than cosmetic. On a
+            # script of invented characters — the ordinary case — a correctly
+            # working run displayed a column of failure badges and marked its
+            # own coverage down for having got the right answer.
+            if str(element.identity.get("status", "")) == "unidentified":
+                element.status = ClearanceStatus.CLEAR
+                element.rationale = (
+                    "No real bearer of this name was found in the territories searched, "
+                    "so there is no collision to clear. Established before research was "
+                    "dispatched, which is why no sources are attached."
+                )
+                return
+
+            # "The search errored" and "the search ran and the record is
+            # silent" are different findings, and reporting both as
+            # RESEARCH_FAILED told a reviewer the tool had broken when in most
+            # cases it had simply looked and found nothing. A generic set
+            # location has no record because there is nothing to have one, and
+            # that is a clearance answer rather than a malfunction.
+            errored = any(e.error for e in evidence)
+            if not errored:
+                element.status = ClearanceStatus.CLEAR
+                element.rationale = (
+                    "Searched, and the public record is silent. Nothing was found that "
+                    "attaches a right, an owner or a real subject to this, so there is "
+                    "nothing to clear."
+                )
                 return
 
             element.status = ClearanceStatus.RESEARCH_FAILED
@@ -524,7 +564,11 @@ class Adjudicator:
                 return "Contradiction rested on secondary sources only."
             return None
 
-        minimum = self.rubric.contradicted_minimum()
+        # Nobody behind the claim to injure means the lower standard applies.
+        # `subject_alive is True` is the trigger for the stricter bars, so a
+        # deceased subject, an event, a date or a place takes this branch.
+        impersonal = claim.subject_alive is not True
+        minimum = self.rubric.contradicted_minimum(impersonal=impersonal)
         if report.citation_count < int(minimum.get("attributed_sources", 1)):
             return "No source was quoted against this claim, so nothing supports calling it false."
         if report.low_trust_only:
@@ -594,7 +638,14 @@ class Adjudicator:
 
         # Corroboration, counted as distinct domains rather than URLs.
         required_domains = self.rubric.min_independent_domains(element.risk_tier)
-        if status in _CONSEQUENTIAL_FOR_PERSON and report.independent_domains < required_domains:
+        if (
+            status in _CONSEQUENTIAL_FOR_PERSON
+            and report.independent_domains < required_domains
+            # A rights position is consequential for a real person, so the
+            # substitution is allowed only on the strength of a recognised
+            # record, never on volume of ordinary reporting.
+            and not self._record_stands_in(report, strict=False)
+        ):
             return (
                 ClearanceStatus.NEEDS_COUNSEL,
                 min(confidence, 0.6),
@@ -785,6 +836,30 @@ class Adjudicator:
         claim.needs_counsel = True
         claim.counsel_reason = reason
         self._queue(claim.claim_id, "claim", reason, claim.subject_name)
+
+    def _record_stands_in(self, report: corr.Corroboration, *, strict: bool) -> bool:
+        """Whether one recognised record satisfies the domain requirement.
+
+        Counting registrable domains treats an official scorecard and a content
+        farm as one source each. That is right for guarding against a claim
+        resting on a single site's opinion, and wrong for a claim the record
+        settles outright: a scoreline on the match's own scorecard is not made
+        truer by a blog repeating it, and holding it for a second domain sent
+        correct, cited, verified claims to a lawyer.
+
+        `strict` is the negative assertion about a living person, which keeps
+        the harder standard and is never allowed this substitution.
+        """
+        if strict or not self.rubric.recognised_record_substitutes_for_domain:
+            return False
+        # A recognised host that the source table classified as primary, and
+        # nothing pulling the other way. Low trust sources may corroborate but
+        # may never be the thing a verdict rests on.
+        return (
+            report.classified_primary_count >= 1
+            and not report.conflict
+            and not report.low_trust_only
+        )
 
     def _queue(self, subject_id: str, kind: str, reason: str, label: str) -> None:
         self.review_queue.append(
@@ -1114,3 +1189,9 @@ def _offline_element_status(element: ClearableElement, evidence: list[Evidence])
 
 def polarity_is_negative(claim: FactualClaim) -> bool:
     return claim.polarity is Polarity.NEGATIVE
+
+
+def _is_negative_about_living(claim: FactualClaim) -> bool:
+    """The shape of every marquee case in this space, and the one that keeps
+    the harder standard: a disparaging assertion about someone who can sue."""
+    return claim.polarity is Polarity.NEGATIVE and claim.subject_alive is True

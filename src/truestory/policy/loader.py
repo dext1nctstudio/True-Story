@@ -363,7 +363,25 @@ class Rubric:
     def require_attributed_evidence(self) -> bool:
         return bool(self.confidence.get("require_attributed_evidence", True))
 
-    def contradicted_minimum(self) -> dict[str, Any]:
+    def contradicted_minimum(self, *, impersonal: bool = False) -> dict[str, Any]:
+        """What it takes to call a claim false.
+
+        Two standards below the strict one, because the cost of being wrong is
+        not the same: a disparaging claim about a living person can ruin them,
+        a wrong date cannot injure anybody. `impersonal` selects the lower bar
+        for claims with no living subject behind them.
+        """
+        if impersonal:
+            return dict(
+                self.confidence.get(
+                    "contradicted_minimum_impersonal",
+                    {
+                        "attributed_sources": 1,
+                        "independent_domains": 1,
+                        "or_classified_primary": True,
+                    },
+                )
+            )
         return dict(
             self.confidence.get(
                 "contradicted_minimum",
@@ -384,6 +402,11 @@ class Rubric:
         table = self.confidence.get("min_independent_domains", {})
         return int(table.get(str(tier), 1))
 
+    @property
+    def recognised_record_substitutes_for_domain(self) -> bool:
+        """Whether one recognised record may stand in for the second domain."""
+        return bool(self.confidence.get("recognised_record_substitutes_for_domain", False))
+
     def corroboration_cap(self, score: float) -> float:
         """Confidence ceiling implied by how well corroborated the finding is."""
         floor = float(self.confidence.get("corroboration_cap_floor", 0.35))
@@ -394,8 +417,21 @@ class Rubric:
     def max_remedy_iterations(self) -> int:
         return int(self.remedy.get("max_iterations", 3))
 
-    def min_citations(self, tier: RiskTier) -> int:
+    def min_citations(self, tier: RiskTier, *, negative_living: bool = False) -> int:
+        if negative_living:
+            return int(self.confidence.get("negative_living_min_citations", 2))
         return int(self.confidence.get("min_citations", {}).get(str(tier), 1))
+
+    def min_domains(self, tier: RiskTier, *, negative_living: bool = False) -> int:
+        """Independent domains required, with the negative-living carve out.
+
+        One source settles most questions. A disparaging claim about someone
+        alive is the one shape that is actually litigated, so it keeps the
+        harder standard whatever the tier table says.
+        """
+        if negative_living:
+            return int(self.confidence.get("negative_living_min_domains", 2))
+        return self.min_independent_domains(tier)
 
     def amber_threshold(self) -> tuple[float, int]:
         """(density threshold, minimum claim count before the ratio is meaningful)."""

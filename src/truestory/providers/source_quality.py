@@ -126,6 +126,15 @@ PRIMARY_DOMAINS: frozenset[str] = frozenset(
         # "secondary" made a correctly contradicted claim get downgraded for
         # want of a court document that could never exist for it.
         "espncricinfo.com",
+        # The same publication under the domains it actually serves. Parallel
+        # returns the ESPNcricinfo scorecard on cricinfo.com and espn.in as
+        # often as on espncricinfo.com, and only the last was listed: the
+        # identical scorecard, cited for the identical fact, was a recognised
+        # register on one URL and an unknown host on another. That is what
+        # downgraded a correct contradiction to unsupported, and it held three
+        # true verified claims below the review threshold in the same run.
+        "cricinfo.com",
+        "espn.in",
         "icc-cricket.com",
         "cricketarchive.com",
         "olympics.com",
@@ -426,6 +435,15 @@ _ARCHIVE_DOMAINS: frozenset[str] = frozenset(
 STATISTICAL_REGISTERS: frozenset[str] = frozenset(
     {
         "espncricinfo.com",
+        # The same publication under the domains it actually serves. Parallel
+        # returns the ESPNcricinfo scorecard on cricinfo.com and espn.in as
+        # often as on espncricinfo.com, and only the last was listed: the
+        # identical scorecard, cited for the identical fact, was a recognised
+        # register on one URL and an unknown host on another. That is what
+        # downgraded a correct contradiction to unsupported, and it held three
+        # true verified claims below the review threshold in the same run.
+        "cricinfo.com",
+        "espn.in",
         "icc-cricket.com",
         "cricketarchive.com",
         "olympics.com",
