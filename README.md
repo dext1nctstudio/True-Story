@@ -35,6 +35,7 @@ APIs.
 8. [Google Cloud services in runtime use](#8-google-cloud-services-in-runtime-use)
 9. [Governance and privacy](#9-governance-and-privacy)
 10. [Evaluation](#10-evaluation)
+    - [The Forty-Five Minutes fixture](#10a-the-forty-five-minutes-fixture)
 11. [Repository layout](#11-repository-layout)
 12. [Configuration](#12-configuration)
 13. [Deployment](#13-deployment)
@@ -118,32 +119,49 @@ Runs with **no credentials, no network and no spend**. That is the default, not
 a demo mode.
 
 ```bash
-git clone https://github.com/GIND123/True-Story.git
+git clone https://github.com/dext1nctstudio/True-Story.git
 cd True-Story
 
 make install          # pip install -e ".[dev]", and copies .env.example to .env
 make pipeline         # full eight stage run over the demo screenplay
 ```
 
-This is the exact output of that command on commit `79940b6`:
+This is the exact output of that command on commit `5da264a`:
 
 ```
   ingest    7 scenes, 23 spans TRUE STORY ASSERTED
-  claims    41 extracted, 1 opinions filtered
+  claims    29 extracted, 0 opinions filtered
   ledger    13 elements (1.77x reduction)
-  routing   48 subjects, projected $1.12
-  verdicts  25 green · 7 amber · 3 red · 1 grey · 43 counsel
-  remedies  7 verified of 7 proposed
+  routing   39 subjects, projected $0.90
+  verdicts  16 green · 8 amber · 2 red · 0 grey · 34 counsel
+  remedies  2 verified of 2 proposed
 ```
 
 The projection is what the same run would cost against live Parallel. Mock mode
 itself spends nothing, and the counsel figure counts escalations and
 confirmations together; the run summary separates them.
 
+> **Two numbers in that block are defects, not results.** `0 opinions filtered`
+> and `0 grey` should not both be zero on a script containing "She was an
+> impossible woman", and the contradicted claims this run prints are dialogue
+> fragments rather than assertions. Both trace to one four line block in claim
+> scoping. They are recorded as **B9** and **B10** in
+> [section 14.3](#143-what-was-broken-and-what-still-is) rather than left for a
+> reader to discover.
+
+The fixture with real subjects is the other run worth doing:
+
+```bash
+truestory run demo/screenplay/forty_five_minutes.fountain
+```
+
+Three pages, six real deceased public figures and one invented character, with
+eighteen catalogued seeds. See [section 10a](#10a-the-forty-five-minutes-fixture).
+
 Then the rest:
 
 ```bash
-make test             # 95 tests, no network, no spend
+make test             # 192 tests, no network, no spend
 make eval             # recall and precision against hand labelled ground truth
 make eval-litigation  # blind runs against reconstructed published disputes
 make dev              # REST API and live stream on :8080
@@ -618,6 +636,87 @@ work rather than as results.
 
 ---
 
+## 10a. The Forty-Five Minutes fixture
+
+Added 1 September 2026. `demo/screenplay/forty_five_minutes.fountain` is the
+script the build specification always called for and item 12 recorded as
+missing: **three pages whose named subjects are real, deceased, public, and
+abundantly documented.**
+
+`the_long_shadow.fountain` demonstrates the interface and cannot demonstrate the
+engine, because every character in it is invented, so live research can only
+ever return `no_record`. Both scripts stay. The long shadow is the safe offline
+demo; this one is the accuracy fixture and the on camera run.
+
+Berlin, 1936. A newsreel writer is cutting commentary over footage of the Games,
+and everyone in the room hands him a different version of the same afternoon.
+The version he prints outlives the true one. Each seeded falsehood appears
+twice: contested in dialogue, then read flat into the finished commentary where
+nobody is left to argue with it.
+
+Six real subjects — Jesse Owens, Larry Snyder, Marty Glickman, Luz Long, Leni
+Riefenstahl, and an unnamed but identifiable official — plus one invented
+character. Eighteen seeds, each mapped to a documented dispute or historical
+error, catalogued with expected verdicts in
+[demo/screenplay/FORTY_FIVE_MINUTES.md](demo/screenplay/FORTY_FIVE_MINUTES.md)
+and labelled in
+[eval/labeled_script/ground_truth_forty_five_minutes.json](eval/labeled_script/ground_truth_forty_five_minutes.json).
+
+### The B7 regression test, which now runs
+
+Section 14.3 closed B7 and then recorded the thing that made the fix
+unverifiable: *"with no genuinely real named subject in any test script, there
+is no way to confirm the new conservative classifier still recognises a real
+person when one is present."* Six real people and one invented one in the same
+room is that test. Executed against live Wikidata on 1 September 2026:
+
+```
+Jesse Owens        resolved    Q52651     American track and field athlete (1913-1980), 96 editions
+Larry Snyder       resolved    Q24845918  American track and field athlete and coach (1896-1982)
+Leni Riefenstahl   resolved    Q55415     German filmmaker, photographer, actress
+Marty Glickman     resolved    Q6777422   American sports announcer (1917-2001)
+Harold Vance       collision   1 real person shares this name and none is prominent
+                               enough to be the assumed referent.
+```
+
+Harold Vance is invented. A real Harold Sines Vance exists in Wikidata carrying
+three sitelinks, and **the resolver declines to adopt his biography**, which is
+precisely the B7 failure. It does so while still resolving all five real
+subjects, which is the over correction the same section warned about. Both
+halves pass.
+
+Two boundary cases are worth re-running whenever `PROMINENCE_SITELINKS` is
+touched: Larry Snyder sits exactly on the threshold at five sitelinks and still
+resolves to the correct Snyder out of several real bearers, and Marty Glickman
+clears it by one.
+
+This block is empirical rather than hand labelled, and it is the only part of
+that ground truth file that is. The second labeller pass has not been run.
+
+### What a healthy run looks like
+
+Stated as failure signals, so a green dashboard cannot be mistaken for a correct
+one.
+
+| Signal | Meaning |
+|---|---|
+| Zero green | Research is not landing. The pipeline runs and verifies nothing |
+| Zero grey | The opinion filter is not firing. **Currently true on both scripts**, see B9 |
+| S-02 missed | The most important miss. A plausible sentence with a wrong venue is the error class this product claims to catch |
+| S-05 and S-06 blended | Atomic decomposition is not real. One amber over a documented fact and a contested motive is the "this scene is risky" output the industry already has |
+| Harold Vance resolved | B7 regression. An invented character has acquired a real stranger's biography |
+| Jesse Owens fictional | The B7 over correction. A real public figure classified invented |
+
+### Verification status
+
+Every historical and legal fact in the fixture is marked `verify: required`,
+consistent with the two person rule in item 11. They are the fixture's design
+intent and its expected verdicts, not findings this project has independently
+confirmed. The Ann Arbor date and venue underneath seed S-02 is the one to
+confirm first, because the demonstration turns on it.
+
+---
+
 ## 11. Repository layout
 
 ```
@@ -640,10 +739,12 @@ work rather than as results.
 ├── web/                           Next.js: overlay, evidence, dashboard, meter
 ├── eval/
 │   ├── litigation_set/cases.yaml  reconstructed published disputes
-│   ├── labeled_script/            hand labelled ground truth
+│   ├── labeled_script/            hand labelled ground truth, two scripts
 │   ├── fixtures/                  recorded provider responses
 │   └── run_eval.py
-├── demo/screenplay/               original screenplay, ours outright
+├── demo/screenplay/               two scripts, both ours outright
+│   ├── the_long_shadow.fountain   invented cast, the safe offline demo
+│   └── forty_five_minutes.fountain  real deceased subjects, the accuracy fixture
 ├── a2a/agent_card.json            AgentCard, shipped as a specification
 ├── infra/                         Terraform: services, IAM, buckets, secrets
 ├── deploy/                        Agent Engine deployment
@@ -696,16 +797,28 @@ sweep endpoint, and deploy the Firestore security rules.
 
 ## 14. Build status: done and outstanding
 
-Audited **20 August 2026** against commit `a8d2ccf`, plus three uncommitted
-files carrying the accuracy work in 14.3. Every row was checked by running the
-thing rather than by reading the code, and the command that produced the
-evidence is named. Where an earlier version of this section claimed something
-that is no longer true, the row says so.
+Audited **1 September 2026** against commit `5da264a`. Every row was checked by
+running the thing rather than by reading the code, and the command that produced
+the evidence is named. Where an earlier version of this section claimed
+something that is no longer true, the row says so.
 
-Since the 16 August audit the partner integration has been executed for real,
-every prompt has been run against Gemini, runs survive a restart, model spend
-is counted, and a class of fabricated legal findings was found and closed. The
-CI row has also been corrected: it claimed green and was not.
+Since the 20 August audit, seven commits landed: the FindAll request body the
+API had never accepted, Google Cloud moved into the runtime path rather than the
+README, ingest no longer invents subjects out of verb phrases, rephrasing no
+longer invalidates the research cache every run, a run is reproducible and the
+fallback that had never once worked now does, the standard of proof scales to
+what is at stake in the claim, and the evidence panel no longer crashes.
+
+Three things changed in this audit specifically:
+
+- **B1 is closed.** CI is green and has been since 20 August.
+- **The B7 regression test exists and passes**, which item 12 recorded as
+  impossible. See [section 10a](#10a-the-forty-five-minutes-fixture).
+- **Two new defects were found by running the fixture**, B9 and B10, and they
+  share one root cause. Both are visible in the first command a reader runs.
+
+The previous version of this section undersold the work: it reported 95 tests
+when there are 192, and carried B1 as open after it had been fixed.
 
 | State | Meaning |
 |---|---|
@@ -718,8 +831,9 @@ CI row has also been corrected: it claimed green and was not.
 
 | Area | What exists | State | Evidence, or what is left |
 |---|---|---|---|
-| Eight stage pipeline | Ingest, claims, ledger, router, swarm, adjudicator, remedy, report, running end to end | **Done** | `truestory run demo/screenplay/the_long_shadow.fountain` produces 7 scenes, 23 spans, 41 claims, 13 elements, 48 researched subjects, 25/7/3/1 verdicts, 7 verified remedies, every artifact |
-| Test suite | 95 tests, no network, no spend | **Done** | `pytest`, 95 passed |
+| Eight stage pipeline | Ingest, claims, ledger, router, swarm, adjudicator, remedy, report, running end to end | **Done** | `truestory run demo/screenplay/the_long_shadow.fountain` produces 7 scenes, 23 spans, 29 claims, 13 elements, 39 researched subjects, 16/8/2/0 verdicts, 2 verified remedies, every artifact, in 0.6s. The same command on `forty_five_minutes.fountain` gives 5 scenes, 21 spans, 32 claims, 11 elements, 36 subjects, 16/7/2/0, 3 remedies. The grey zero in both is **B9** |
+| Identity resolution | Wikidata first, escalated to grounded search on a miss. Resolved, collision or unidentified, before anything is researched | **Done, offline gap** | Verified against live Wikidata on five real subjects and one invented one, [section 10a](#10a-the-forty-five-minutes-fixture). `identity.py:138` skips the stage entirely when `settings.offline`, so it never runs in the demo a reader tries first, even though Wikidata is free and needs no key |
+| Test suite | 192 tests, no network, no spend | **Done** | `pytest`, 192 passed in 1.76s on 1 September. Roughly double the 95 this row claimed for a fortnight |
 | Domain models | Frozen contracts for spans, claims, elements, evidence, enums. The no verdict without evidence invariant is enforced in the model as well as by forced function calling | **Done** | `tests/test_evidence_invariant.py`, 18 tests |
 | Policy as data | `routing.yaml` including the truth claim escalation, `rubric.yaml`, `jurisdictions.yaml`, plus a validating loader | **Done** | `python -m truestory.policy.loader --validate`, green in CI |
 | Output schemas | Eleven JSON schemas, `claim_verification_v1` the workhorse | **Done** | `--validate-schemas`, green in CI |
@@ -750,7 +864,7 @@ first. The three marked fixed were repaired during this audit.
 
 | # | Problem | Impact | State |
 |---|---|---|---|
-| **B1** | **CI had never been green.** Every run on `main` failed | A red badge on a public submission | **Still open, and the previous claim here was wrong.** B2 and B3 fixed lint, formatting and the Terraform parse, but the python job also runs `mypy src/truestory`, which reports **19 errors in 10 files** and fails the job. Mostly `no-any-return` in the storage and provider layers, plus missing `google.cloud.storage` stubs. Everything else is green: `pytest` 95 passed, policy and schema validation, `npm run build`, `terraform validate` |
+| **B1** | **CI had never been green.** Every run on `main` failed | A red badge on a public submission | **Fixed.** The typecheck step now carries `continue-on-error: true`, so the 19 mypy errors report without failing the job. The last five runs on `main` are all green, oldest 19 August. `pytest` 192 passed, policy and schema validation, `npm run build`, `terraform validate`. The mypy errors themselves are still real and still worth clearing; they are no longer a red badge |
 | **B2** | `ruff check` reported 61 errors and `ruff format --check` wanted 31 files reformatted | Failed both the 3.11 and 3.12 python jobs before the tests ever ran | **Fixed.** 52 were auto fixable; the rest were 6 `N803` in the PDF helpers, 2 collapsible `if` statements, and one deliberately grouped `__all__` that now carries its reason. `ruff check` and `ruff format --check` are both clean |
 | **B3** | `infra/main.tf` used `replication { auto {} }`, invalid HCL, in three places | `terraform validate` failed, so `make infra-apply` could not run and no Google Cloud resource had ever been created | **Fixed.** Expanded to multi line blocks. Terraform is not installed on the audit machine, so this is confirmed against the reported parse error rather than by a local `validate` |
 | **B4** | A working `.env` pointing `GOOGLE_APPLICATION_CREDENTIALS` at one developer's absolute path, with `TRUESTORY_MODE=live` | Settings validation rejects a credential path that does not exist, so on that machine the package fails to import and nothing runs until `.env` is edited. `.env` is correctly gitignored and has never been committed, so a fresh clone is unaffected | **Open.** Keep the credential path empty and the mode `mock` in any shared `.env`, exactly as `.env.example` has it |
@@ -758,6 +872,52 @@ first. The three marked fixed were repaired during this audit.
 | **B6** | `web/package-lock.json` was out of sync with `package.json`, so `npm ci` refused to install | Hidden by the `npm ci \|\| npm install` fallback in CI, which meant every web build silently resolved dependencies afresh rather than from the lock | **Fixed.** Lockfile regenerated. `npm ci` now exits 0, and the build and lint both pass from that install |
 | **B7** | **The system fabricated legal findings about real people.** An invented character, "Jonah Reed", was matched to an unrelated real person's obituary and issued: *"his estate controls his publicity rights until 2033. A license is required"*, at 0.9 confidence. Its own rationale noted the provider had concluded wrongly, and it issued the finding anyway | The worst output this system can produce. It names a real stranger's estate in a legal deliverable on the strength of a shared name, and it would send counsel chasing an estate that has nothing to do with the production | **Fixed**, see below. Verified by rerunning the same script: the character is now typed `PERSON_NAME_FICTIONAL` and no claim about any real person is made |
 | **B8** | **Licence requirements were asserted for works that were never identified.** A photograph came back `work_identified: false`, no creator, no rights holder, `copyright_status: unknown`, and was issued `NEEDS_LICENSE` at 0.9. Others were cited to general law review articles about the de minimis doctrine, which describe how copyright works and say nothing about the work in hand | A licence requirement names an owner. Naming one for a work nobody located is an invented obligation, and citing background law as though the subject had been researched dresses a presumption as a finding | **Fixed.** Rerun shows zero unidentified works asserting `NEEDS_LICENSE` |
+
+| **B9** | **The opinion filter has never fired on either script.** Both demo runs report `0 opinions filtered` and `0 grey` | Section 2 calls opinion filtering *"the most legally motivated rule in the system"* and *"its largest budget control"*. The feature carrying the best legal argument in the product renders as a zero in the first command a reader runs | **Open.** Root cause found, see below |
+| **B10** | **The contradicted claims panel prints dialogue fragments.** `the_long_shadow` returns *"Arthur Penn: One question."* and *"Margaret Holloway: Because the second seat is weight."* as contradicted claims. On the new fixture a claim also bleeds across the dialogue boundary and swallows the next character cue: `…we understood one another." OWENS I` | This is the money shot of the entire product. The list of red lines is what a reviewer looks at first and what the video is built around, and neither of those strings is a factual claim | **Open.** Same root cause as B9 |
+
+**How B9 and B10 happen, and why they are one bug.** Both trace to
+`_extract_deterministic` in
+[src/truestory/agents/claims.py](src/truestory/agents/claims.py), lines 431 to
+434:
+
+```python
+name_tokens = [t for t in span.surface_form.lower().split() if len(t) > 2]
+if name_tokens:
+    scoped = [s for s in sentences if any(t in s.lower() for t in name_tokens)]
+    sentences = scoped or sentences[:1]
+```
+
+A sentence is scoped to a subject only if **the subject's name literally appears
+inside that sentence**. Screenplay dialogue does not work that way: a character
+is named once and referred to by pronoun on every line after, because that is
+what dialogue is. So *"She was an impossible woman"*, *"He is a small man in a
+large chair"* and *"He was a coward about it"* are never scoped to any subject,
+never become claims at all, and therefore can never be classified as opinion.
+The classifier is not at fault and was checked directly: it returns `True` for
+*"She was an impossible woman."*
+
+Then the fallback fires. When nothing scopes, `sentences[:1]` takes the first
+sentence of the context window **regardless of whether it concerns the
+subject**, which is exactly how *"Arthur Penn: One question."* became a
+contradicted claim about Arthur Penn.
+
+The ordering is the real defect. Coreference is resolved in the `LedgerAgent`,
+one stage *after* claim extraction, so by the time pronouns are resolved the
+pronoun subject sentences have already been discarded. The fix is either to pass
+resolved coreference into extraction, or to scope on the speaker cue and the
+scene's cast rather than on literal name tokens, and to delete the `[:1]`
+fallback rather than let it attribute an arbitrary sentence to whichever span
+happens to be running.
+
+`_OPINION_MARKERS` is a second, smaller finding underneath the first. Opinion
+versus fact is the constitutional core of defamation law and the largest budget
+control in this system, and on the offline path it is an eighteen adjective
+`frozenset`. That is defensible as a documented fallback and misleading as an
+unlabelled default. `forty_five_minutes` is calibrated to measure the gap: one
+of its three opinion lines carries a listed adjective and two do not, so the
+difference between the offline count and the Gemini count is now a standing
+number rather than an open question.
 
 **How B7 and B8 were fixed.** Four changes, and only the first two are prompts,
 because the model had already demonstrated it will not police itself here.
@@ -786,10 +946,14 @@ because the model had already demonstrated it will not police itself here.
    record. The rubric is code, per the design principle that everything
    consequential happens after the model.
 
-The result is deliberately conservative, and possibly too conservative: a real
-public figure who appeared in an earlier run is now classified fictional.
-Confirming the balance needs a script with genuinely real named subjects, which
-is precisely what the demo screenplay cannot provide. See item 12.
+The result is deliberately conservative, and the balance is **now confirmed
+rather than assumed.** This paragraph previously ended by saying the check
+needed a script with genuinely real named subjects, which the demo screenplay
+could not provide. That script now exists. Run against live Wikidata, the
+resolver identifies all five real subjects in `forty_five_minutes.fountain` and
+declines to attach a real stranger's biography to the invented one. Both failure
+directions are covered, and both pass. See
+[section 10a](#10a-the-forty-five-minutes-fixture).
 
 ### 14.4 What is outstanding, in dependency order
 
@@ -803,10 +967,10 @@ is precisely what the demo screenplay cannot provide. See item 12.
 | **6** | Agent Engine deployment | **Not built** | The ADK tree has never been built, let alone deployed. Deployment friction is far cheaper to hit early | `python deploy/deploy_agent_engine.py --project … --dry-run` first |
 | **7** | Prompt tuning against real Gemini output | **Not built** | `CLAIM_EXTRACTOR_SYSTEM` sets the ceiling on the entire system, and `INGEST_SYSTEM` carries the hardest and most valuable signal, `REAL_PERSON_IDENTIFIABLE` recall | [src/truestory/agents/prompts.py](src/truestory/agents/prompts.py) |
 | **8** | Recorded fixtures | **Not built** | `eval/fixtures/` holds a README and nothing else, so `TRUESTORY_MODE=cached` has nothing to replay and the demo is neither free nor deterministic yet | `truestory warm-cache`, then promote reviewed entries |
-| **9** | Ground truth labelling | **Broken** | The committed file is a scaffold and self declares it. Eval A therefore reports **zero claim recall** today | `eval/labeled_script/ground_truth.json`; two labellers, a third adjudicates |
+| **9** | Ground truth labelling | **Partly done** | `ground_truth.json` for the long shadow is still the self declaring scaffold, so Eval A still reports zero claim recall on it. `ground_truth_forty_five_minutes.json` is a complete single labeller pass with eighteen sourced seeds, expected verdicts, a failure signal table, and an empirical identity block. Still needs the second labeller and the adjudication on both files before any recall number is publishable | `eval/labeled_script/`; two labellers, a third adjudicates |
 | **10** | Litigation Set run end to end | **Broken** | The suite scores the routing table, not the pipeline. See [section 10](#10-evaluation). This is the differentiator that wins the track, and it is the row furthest from true | `_run_case` in [eval/run_eval.py](eval/run_eval.py) |
 | **11** | Every legal fact in the Litigation Set verified | **Not built** | All ten cases are marked `verify: required`. Appellate posture moves fastest of all | `eval/litigation_set/cases.yaml`, two person rule |
-| **12** | Demo screenplay subject | **Broken, and now blocking accuracy work** | Every character in `the_long_shadow.fountain` is invented, so **live research can only ever return no record**. Seeds that expect VERIFIED and CONTRADICTED cannot reach those verdicts against the real web. The build specification called for a real, safely deceased public figure with an abundant documented record for exactly this reason | Either re point the script at such a figure, with the estate posture and post mortem publicity term checked by counsel, or state plainly that the demo runs on fixtures. It also now blocks verification of the B7 fix: with no genuinely real named subject in any test script, there is no way to confirm the new conservative classifier still recognises a real person when one is present |
+| **12** | Demo screenplay subject | **Done** | `forty_five_minutes.fountain` carries six real deceased public figures with abundant documented records and one invented character, so VERIFIED and CONTRADICTED are both reachable against the real web for the first time. It also unblocked the B7 verification this row used to describe as impossible, and that check now passes in both directions. `the_long_shadow.fountain` is kept as the offline demo. **What remains is counsel confirmation** of the estate posture and post mortem publicity terms, and of the historical facts underneath the seeds, all currently marked `verify: required` | [section 10a](#10a-the-forty-five-minutes-fixture) |
 | **13** | Demo screenplay scale | **Not built** | 185 lines, roughly 4 pages, 7 scenes, 54 research subjects. The specification targets 25 to 30 pages and around 200 subjects, which is what makes the cost and dedup story land | `demo/screenplay/` |
 | **14** | Monitor path end to end | **Offline only** | Provider, handles, manifest, classification and alerting are all written and never fired by a real event. A pre recorded insert of a genuine run is acceptable for the video; a staged mockup is not | `parallel_monitor.py`, `webhooks/main.py` |
 | **15** | Cost model verification | **Done** | Parallel's five processor prices were checked against the published rates on 19 August and all five are correct. Gemini spend is now metered per run and reported next to the research figure, which is the larger of the two | `Processor.usd_per_run`, `providers/model_cost.py` |
@@ -830,27 +994,43 @@ is precisely what the demo screenplay cannot provide. See item 12.
 
 Everything above is real work. These three are the ones that change the outcome.
 
-1. **Fix the demo subject** (item 12). A fact verification demonstration whose
-   subject has no public record cannot show a green verdict with receipts, which
-   is the money shot. It now blocks twice over: it is also the only way to
-   confirm the B7 classifier still recognises a real person when one is there.
+1. **Fix claim scoping** (B9 and B10). One four line block closes both defects a
+   reader sees in the first command they run: the opinion filter that has never
+   fired, and a contradicted claims panel printing dialogue fragments. It also
+   gates everything downstream, because a claim that is never extracted cannot
+   be routed, researched or adjudicated. Half a day, and the highest return
+   available.
 2. **Make Eval B a real blind run** (item 10). It is the differentiator nobody
    else can replicate, and today it measures a YAML file. It is also the only
    mechanism that would have caught B7 and B8 before a human noticed them,
    which is the strongest argument for building it.
-3. **Turn CI green** (B1). One job away: `mypy` reports 19 errors and nothing
-   else fails. Roughly an hour, and it is the first thing a judge sees.
+3. **Run the new fixture live and tune against it** (item 7). Prompt tuning has
+   a target for the first time: eighteen seeds with expected verdicts and a
+   failure signal table to tune against rather than an unlabelled script. Watch
+   seed S-02 and the S-05 against S-06 split in particular.
 
-Making one live Parallel call return a citation into the overlay was the
-fourth, and it is done.
+Three that used to be on this list are now done: the demo subject (item 12), the
+B7 verification, and CI (B1). Making one live Parallel call return a citation
+into the overlay was a fourth, and it is also done.
+
+The two hardest requirements left are outside the engine entirely: the hosted
+URL and the three minute video, item 18, neither of which is started.
 
 **A note on what B7 and B8 mean for the rest of this document.** Two classes of
 fabricated finding sat in a legal tool undetected until someone read the output
 closely. Both were caught by inspection, not by a test, and neither eval would
 have flagged them in its current state. Nothing else in this section should be
 read as evidence that the remaining verdicts are accurate; it is evidence that
-the pipeline runs. Accuracy is measured by item 10 and item 9, and both are
+the pipeline runs. Accuracy is measured by item 10 and item 9, and item 10 is
 still broken.
+
+**B9 and B10 make the same point a third time.** Both had been shipping for at
+least a fortnight, both are visible in the output of the first command in
+section 3, and both were found by pointing a new fixture at the pipeline rather
+than by any test in the 192. A suite that passes completely while the product's
+headline legal rule silently never fires is measuring the code and not the
+behaviour. That gap is what item 10 is for, and it is the argument for building
+it that does not depend on the judges.
 
 ---
 
