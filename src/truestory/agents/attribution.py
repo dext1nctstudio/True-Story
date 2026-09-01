@@ -40,6 +40,7 @@ from typing import Any
 
 from truestory.config import settings
 from truestory.models.evidence import Citation
+from truestory.providers import model_fallback
 from truestory.providers.model_cost import meter_response
 
 log = logging.getLogger("truestory.attribution")
@@ -332,7 +333,8 @@ class AttributionGate:
 
         prompt = _prompt(proposition, subject, candidates)
         try:
-            response = await self._genai().aio.models.generate_content(
+            response = await model_fallback.generate(
+                self._genai(),
                 model=self.model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
