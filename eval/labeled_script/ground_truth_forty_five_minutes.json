@@ -1,0 +1,310 @@
+{
+  "_comment": "Ground truth for demo/screenplay/forty_five_minutes.fountain. Seeds and expected verdicts are DESIGNED, sourced and rationalised in demo/screenplay/FORTY_FIVE_MINUTES.md. Element and claim labels below are a single-labeller pass and are marked as such: the two person protocol in README.md has NOT been run on this file yet. The identity block is the exception and is empirical, produced by executing the resolver against live Wikidata on 2026-09-01.",
+
+  "script": "demo/screenplay/forty_five_minutes.fountain",
+  "script_version": "v1",
+  "labelled_by": ["labeller_one_single_pass", "PENDING_labeller_two"],
+  "adjudicated_by": "PENDING_adjudicator",
+  "labelled_at": "2026-09-01",
+  "status": "single_pass_pending_second_labeller",
+
+  "expected_dedup_ratio": 2.5,
+  "_dedup_note": "Lower than the_long_shadow because this is a three page fixture with a tight cast in one location. The ratio is not the thing this script is for; the identity discrimination and the seeded verdicts are.",
+
+  "identity_expectations": {
+    "_comment": "EMPIRICAL. Produced by running IdentityResolver against live Wikidata on 2026-09-01, not by hand labelling. This block is the B7 regression test that README item 12 records as impossible to run without a script containing genuinely real named subjects. It is now runnable and it passes.",
+    "_verified_at": "2026-09-01",
+    "subjects": [
+      {
+        "name": "Jesse Owens",
+        "expected_status": "resolved",
+        "observed_status": "resolved",
+        "qid": "Q52651",
+        "sitelinks": 96,
+        "note": "The positive control. A real person must still be recognised as real after the B7 fix. This is the half that was untestable."
+      },
+      {
+        "name": "Larry Snyder",
+        "expected_status": "resolved",
+        "observed_status": "resolved",
+        "qid": "Q24845918",
+        "sitelinks": 5,
+        "note": "Sits exactly on PROMINENCE_SITELINKS. Resolved to the correct Larry Snyder, the track coach, out of several real bearers. The nearest thing in the fixture to a boundary case, and worth re-running whenever that threshold is touched."
+      },
+      {
+        "name": "Leni Riefenstahl",
+        "expected_status": "resolved",
+        "observed_status": "resolved",
+        "qid": "Q55415",
+        "sitelinks": 93
+      },
+      {
+        "name": "Marty Glickman",
+        "expected_status": "resolved",
+        "observed_status": "resolved",
+        "qid": "Q6777422",
+        "sitelinks": 6,
+        "note": "Six editions. Just above threshold, and the second boundary case."
+      },
+      {
+        "name": "Harold Vance",
+        "expected_status": "collision",
+        "observed_status": "collision",
+        "note": "THE B7 TEST. Invented character. A real Harold Sines Vance exists in Wikidata with 3 sitelinks. The resolver must NOT adopt that person's biography. It does not: it returns collision, which routes to the name collision check rather than to fact verification about a real stranger. Anything other than collision or unidentified here is a B7 regression."
+      },
+      {
+        "name": "the heavy man in evening dress",
+        "expected_status": "unidentified",
+        "note": "No name is ever spoken. Must reach REAL_PERSON_IDENTIFIABLE by attribute cluster rather than by name resolution. Naming is not the legal trigger; identifiability is."
+      }
+    ]
+  },
+
+  "elements": [
+    {
+      "canonical_form": "Jesse Owens",
+      "element_type": "REAL_PERSON_DEPICTED",
+      "aliases": ["OWENS"],
+      "note": "Deceased 1980. Ohio post mortem publicity term is the live rights question, not an academic one."
+    },
+    {
+      "canonical_form": "Larry Snyder",
+      "element_type": "REAL_PERSON_DEPICTED",
+      "aliases": ["SNYDER"],
+      "note": "Real Ohio State coach, deceased 1982. Documented, but far more thinly than Owens, which is deliberate."
+    },
+    {
+      "canonical_form": "Marty Glickman",
+      "element_type": "REAL_PERSON_DEPICTED",
+      "aliases": ["GLICKMAN"],
+      "note": "Deceased 2001. Speaks the contested motive claim himself, as he did publicly for decades."
+    },
+    {
+      "canonical_form": "Luz Long",
+      "element_type": "REAL_PERSON_DEPICTED",
+      "note": "Referenced, not present. Deceased 1943."
+    },
+    {
+      "canonical_form": "Leni Riefenstahl",
+      "element_type": "REAL_PERSON_DEPICTED",
+      "note": "Referenced. Deceased 2003, which is what makes the Olympia footage term live."
+    },
+    {
+      "canonical_form": "the heavy man in evening dress, American Olympic Committee",
+      "element_type": "REAL_PERSON_IDENTIFIABLE",
+      "note": "Never named. Role plus event plus year plus act resolves to one person. The identifiability path."
+    },
+    {
+      "canonical_form": "Harold Vance",
+      "element_type": "PERSON_NAME_FICTIONAL",
+      "aliases": ["VANCE"],
+      "note": "Invented. B7 regression test. Must route to name collision, never to fact verification."
+    },
+    {
+      "canonical_form": "adidas",
+      "element_type": "TRADEMARK_LOGO",
+      "note": "Double catch. Live mark AND an anachronism: adidas dates from 1949, the 1936 entity was Gebrueder Dassler Schuhfabrik. Corrected on the page by Owens."
+    },
+    {
+      "canonical_form": "Olympia (Riefenstahl footage)",
+      "element_type": "FILM_CLIP",
+      "note": "Third party negative cut into the deliverable. A real and still live clearance problem."
+    },
+    {
+      "canonical_form": "Pennies from Heaven",
+      "element_type": "MUSIC_CUE",
+      "note": "1936, Johnston and Burke. Two rights, composition and master, plus a monitor with an expiry window."
+    },
+    {
+      "canonical_form": "newspaper front page, August 1936, full frame six seconds",
+      "element_type": "SOURCE_MATERIAL",
+      "note": "The trap. A 1936 US publication is not public domain in 2026: 95 years from publication clears it in 2032. 'It is from 1936' is the wrong instinct."
+    },
+    {
+      "canonical_form": "THIS IS A TRUE STORY",
+      "element_type": "TRUTH_CLAIM_FRAMING",
+      "note": "Project level. Escalates every person adjacent subject one full tier."
+    }
+  ],
+
+  "claims": [
+    {
+      "claim_text": "The Chancellor rose from his box, turned his back, and left the stadium rather than shake the hand of a Black American.",
+      "subject": "Jesse Owens",
+      "claim_type": "CONDUCT",
+      "polarity": "neutral"
+    },
+    {
+      "claim_text": "He left on the first day, before Jesse had won anything at all.",
+      "subject": "Jesse Owens",
+      "claim_type": "CONDUCT",
+      "polarity": "neutral"
+    },
+    {
+      "claim_text": "In forty-five minutes on this field, one man broke four world records.",
+      "subject": "Jesse Owens",
+      "claim_type": "ACHIEVEMENT",
+      "polarity": "positive"
+    },
+    {
+      "claim_text": "Four golds. The hundred metres, the two hundred, the long jump and the relay.",
+      "subject": "Jesse Owens",
+      "claim_type": "ACHIEVEMENT",
+      "polarity": "positive"
+    },
+    {
+      "claim_text": "He could not live on the campus he won for, and ate where they would have him.",
+      "subject": "Jesse Owens",
+      "claim_type": "STATUS",
+      "polarity": "neutral"
+    },
+    {
+      "claim_text": "Luz Long told him where to plant his foot and to jump from further back.",
+      "subject": "Luz Long",
+      "claim_type": "CONDUCT",
+      "polarity": "positive"
+    },
+    {
+      "claim_text": "They pulled us this morning. Me and Sam. Two hours before the heat.",
+      "subject": "Marty Glickman",
+      "claim_type": "CONDUCT",
+      "polarity": "negative"
+    },
+    {
+      "claim_text": "He is the one who does the asking of the Germans.",
+      "subject": "the heavy man in evening dress",
+      "claim_type": "CONDUCT",
+      "polarity": "negative"
+    },
+    {
+      "claim_text": "He is a small man in a large chair.",
+      "subject": "the heavy man in evening dress",
+      "claim_type": "CHARACTERIZATION",
+      "polarity": "negative"
+    },
+    {
+      "claim_text": "He was a coward about it.",
+      "subject": "the heavy man in evening dress",
+      "claim_type": "CHARACTERIZATION",
+      "polarity": "negative"
+    },
+    {
+      "claim_text": "The Chancellor and I, we understood one another.",
+      "subject": "Jesse Owens",
+      "claim_type": "QUOTE",
+      "polarity": "neutral"
+    }
+  ],
+
+  "seeded_claims": [
+    {
+      "id": "S-01",
+      "claim_text": "The Chancellor rose from his box, turned his back, and left the stadium rather than shake the hand of a Black American.",
+      "expected_verdict": "CONTRADICTED",
+      "why": "Documented myth. Hitler left after the first day, before Owens had won anything, following an IOC requirement to greet all winners or none. Owens' own repeated account was that Hitler waved. Contradicted on the page by Snyder, and by the record.",
+      "expected_tier": "CRITICAL",
+      "expected_counsel": true,
+      "verify": "required"
+    },
+    {
+      "id": "S-02",
+      "claim_text": "In forty-five minutes on this field, one man broke four world records.",
+      "expected_verdict": "CONTRADICTED",
+      "why": "THE MONEY SHOT. Right subject, right feat, wrong place and year: four world records in roughly 45 minutes happened at the Big Ten Championships, Ann Arbor, Michigan, 25 May 1935. Nothing about the sentence is implausible, which is precisely why only a source check separates it from the truth. Appears twice: contested in dialogue, then asserted flat in the narration where nobody is left to argue.",
+      "expected_tier": "CRITICAL",
+      "expected_counsel": true,
+      "verify": "required"
+    },
+    {
+      "id": "S-03",
+      "claim_text": "Four golds. The hundred metres, the two hundred, the long jump and the relay.",
+      "expected_verdict": "VERIFIED",
+      "why": "Green with receipts. A run that returns no green is a failed run, and this fixture is the first that can say so. Flagging this is a paranoia failure.",
+      "expected_tier": "HIGH",
+      "verify": "required"
+    },
+    {
+      "id": "S-04",
+      "claim_text": "He could not live on the campus he won for, and ate where they would have him.",
+      "expected_verdict": "VERIFIED",
+      "why": "True, documented, and unflattering to an institution rather than to the subject. Proves green is reachable on a substantive claim and not only on a sports statistic.",
+      "expected_tier": "HIGH",
+      "verify": "required"
+    },
+    {
+      "id": "S-05",
+      "claim_text": "They pulled us this morning. Me and Sam. Two hours before the heat.",
+      "expected_verdict": "VERIFIED",
+      "why": "The documented half of the pair. Glickman and Stoller were withdrawn from the 4x100 relay on the morning of the heat. Must reach a DIFFERENT verdict from S-06 despite same speaker, same paragraph.",
+      "expected_tier": "HIGH",
+      "verify": "required"
+    },
+    {
+      "id": "S-06",
+      "claim_text": "He is the one who does the asking of the Germans.",
+      "expected_verdict": "UNSUPPORTED",
+      "expected_status": "NEEDS_COUNSEL",
+      "why": "THE HIGHEST VALUE SEED. The Richard Jewell shape: a real, identifiable, unnamed person given an unproven motive in a production framed as true. The withdrawal is documented; the motive has been contested for decades. If the pipeline blends S-05 and S-06 into one amber instead of splitting them, the atomic decomposition claim in README section 2 is not true and this seed proves it.",
+      "expected_tier": "CRITICAL",
+      "expected_counsel": true,
+      "verify": "required"
+    },
+    {
+      "id": "S-07",
+      "claim_text": "Luz Long told him where to plant his foot and to jump from further back.",
+      "expected_verdict": "UNSUPPORTED",
+      "why": "Rests substantially on Owens' own later accounts. Not provably false, not independently documented. Structurally amber. A green here means the adjudicator is treating a repeated anecdote as a record, which is the failure mode this product exists to remove.",
+      "expected_tier": "HIGH",
+      "verify": "required"
+    },
+    {
+      "id": "S-08",
+      "claim_text": "He is a small man in a large chair.",
+      "expected_verdict": "OPINION",
+      "why": "Pure characterisation about an identifiable real person, which is exactly when the protection matters. Classified, coloured grey, never researched.",
+      "expected_tier": "NONE",
+      "expected_research_cost": 0
+    },
+    {
+      "id": "S-09",
+      "claim_text": "He was a coward about it.",
+      "expected_verdict": "OPINION",
+      "why": "Second unmistakable opinion, deliberately redundant. Both runs of the pipeline currently report '0 opinions filtered' and '0 grey', so the feature README section 2 calls the most legally motivated rule in the system renders as a zero on screen. Three unmissable opinion lines make that number impossible to misread in either direction.",
+      "expected_tier": "NONE",
+      "expected_research_cost": 0
+    },
+    {
+      "id": "S-10",
+      "claim_text": "The Chancellor and I, we understood one another.",
+      "expected_verdict": "CONTRADICTED",
+      "expected_schema": "quote_attribution_v1",
+      "why": "A quote attributed to Owens and denied by him on the page. Must route to the quote attribution path and come back quote_documented: false. A verdict issued here without a located source is the B8 shape.",
+      "expected_tier": "CRITICAL",
+      "expected_counsel": true,
+      "verify": "required"
+    }
+  ],
+
+  "expected_summary": {
+    "_comment": "A three page fixture. Denser in seeds and thinner in volume than the_long_shadow, because its job is discrimination rather than scale.",
+    "scenes": 5,
+    "claims": "25 to 40",
+    "elements": "10 to 18",
+    "green": "3 or more, with citations",
+    "red": "2 to 4, and S-02 must be among them",
+    "grey": "3, at zero research cost",
+    "amber": "S-06 and S-07 present and SEPARATE",
+    "identity_resolved": "5 of 6 named subjects, Harold Vance excepted",
+    "cost_live": "well under one dollar at this length"
+  },
+
+  "failure_signals": {
+    "_comment": "What a bad run looks like. Stated up front so a green dashboard cannot be mistaken for a correct one.",
+    "zero_green": "Research is not landing. The pipeline runs and verifies nothing.",
+    "zero_grey": "The opinion filter is not firing. Currently TRUE on both demo scripts.",
+    "s02_missed": "The single most important miss. A plausible sentence with a wrong venue is the error class this product claims to catch.",
+    "s05_s06_blended": "Atomic decomposition is not real. One amber over a documented fact and a contested motive is exactly the 'this scene is risky' output the README says the industry already has.",
+    "vance_resolved": "B7 regression. An invented character has acquired a real stranger's biography.",
+    "owens_fictional": "The B7 over correction the README warned about. A real public figure classified invented."
+  }
+}
