@@ -37,6 +37,11 @@ _API = "https://www.wikidata.org/w/api.php"
 _USER_AGENT = "truestory-clearance/0.1 (https://github.com/dext1nctstudio/True-Story)"
 
 #: Property ids used here. Wikidata is stable on these.
+#: Label languages to read, in preference order. `mul` is Wikidata's shared
+#: multilingual label for names that read the same in every language, which is
+#: where personal names increasingly live.
+_LABEL_LANGUAGES = ("en", "mul")
+
 _P_INSTANCE_OF = "P31"
 _P_OFFICIAL_SITE = "P856"
 _P_DATE_OF_DEATH = "P570"
@@ -64,6 +69,10 @@ class EntityCandidate:
     qid: str
     label: str
     description: str = ""
+    #: Every other string this item is known by. Wikidata holds "MS Dhoni" as
+    #: an alias of "Mahendra Singh Dhoni", and a name check that reads only the
+    #: label refuses the match a script actually wrote.
+    aliases: list[str] = field(default_factory=list)
     instance_of: list[str] = field(default_factory=list)
     occupations: list[str] = field(default_factory=list)
     official_site: str | None = None
@@ -180,8 +189,15 @@ class WikidataClient:
             params={
                 "action": "wbgetentities",
                 "ids": "|".join(qids[:12]),
-                "props": "labels|descriptions|claims|sitelinks",
-                "languages": "en",
+                "props": "labels|aliases|descriptions|claims|sitelinks",
+                # `mul` is Wikidata's shared multilingual label, used when a
+                # name reads the same across languages. Personal names are
+                # exactly that case and are increasingly stored there rather
+                # than under `en`: Q470774 carries no English label at all and
+                # holds "MS Dhoni" under `mul`. Asking only for English got
+                # back an empty label, so the candidate was named after its own
+                # identifier and every name comparison against it failed.
+                "languages": "en|mul",
                 "format": "json",
             },
         )
@@ -208,6 +224,7 @@ class WikidataClient:
                     description=(entity.get("descriptions", {}).get("en", {}) or {}).get(
                         "value", ""
                     ),
+                    aliases=_aliases(entity),
                     instance_of=instance_ids,
                     occupations=[labels.get(o, o) for o in _id_values(entity, _P_OCCUPATION)[:4]],
                     official_site=_first_string(entity, _P_OFFICIAL_SITE),
@@ -246,7 +263,34 @@ class WikidataClient:
 
 
 def _first_label(entity: dict[str, Any]) -> str:
-    return (entity.get("labels", {}).get("en", {}) or {}).get("value", entity.get("id", ""))
+    """The item's name, falling back through aliases before giving up.
+
+    Q470774, MS Dhoni, came back from the live API with no English label and
+    this function returned the string "Q470774". Downstream that is worse than
+    an empty label: the name check compared the script's "MS Dhoni" against the
+    literal text "Q470774", found nothing in common, and refused a correct
+    identification. An alias is a real name for the item and a far better
+    answer than its identifier.
+    """
+    labels = entity.get("labels", {}) or {}
+    for lang in _LABEL_LANGUAGES:
+        value = (labels.get(lang, {}) or {}).get("value", "")
+        if value:
+            return value
+    aliases = _aliases(entity)
+    return aliases[0] if aliases else entity.get("id", "")
+
+
+def _aliases(entity: dict[str, Any]) -> list[str]:
+    """Every other string this item is known by, English and multilingual."""
+    out: list[str] = []
+    raw = entity.get("aliases", {}) or {}
+    for lang in _LABEL_LANGUAGES:
+        for alias in raw.get(lang, []) or []:
+            value = alias.get("value") if isinstance(alias, dict) else None
+            if value and value not in out:
+                out.append(value)
+    return out[:12]
 
 
 def _id_values(entity: dict[str, Any], prop: str) -> list[str]:

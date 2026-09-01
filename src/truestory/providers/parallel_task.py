@@ -30,11 +30,17 @@ from truestory.models.enums import Processor
 from truestory.models.evidence import Citation, Evidence
 from truestory.providers.base import (
     ProviderError,
+    ProviderOutOfService,
     RateLimited,
     ResearchProvider,
     ResearchRequest,
     _resolve_api_key,
 )
+
+#: Status codes that mean the account, not the request, is the problem. These
+#: answer identically for every remaining subject, so they end the provider's
+#: participation in the run instead of being recorded as a research result.
+_OUT_OF_SERVICE = frozenset({401, 402, 403})
 
 
 class ParallelTaskProvider(ResearchProvider):
@@ -94,6 +100,14 @@ class ParallelTaskProvider(ResearchProvider):
 
                 if resp.status_code == 429:
                     raise RateLimited(self.name, float(resp.headers.get("retry-after", 30)))
+                if resp.status_code in _OUT_OF_SERVICE:
+                    # 402 drained, 401 rejected key, 403 revoked permission.
+                    # None of these will answer differently for the next
+                    # subject, so the provider leaves service now rather than
+                    # failing every remaining subject the same way.
+                    raise ProviderOutOfService(
+                        self.name, f"HTTP {resp.status_code}: {resp.text[:300]}"
+                    )
                 if resp.status_code >= 400:
                     raise ProviderError(
                         self.name,
@@ -103,7 +117,11 @@ class ParallelTaskProvider(ResearchProvider):
 
                 body = resp.json()
 
-            except RateLimited:
+            except (RateLimited, ProviderOutOfService):
+                # Both propagate. Recording either as failed evidence would
+                # bury an account level fault inside a per subject result,
+                # which is exactly how a drained account came to read as a
+                # silent public record.
                 raise
             except httpx.TimeoutException:
                 return Evidence.failed(

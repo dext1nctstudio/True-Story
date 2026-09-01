@@ -62,6 +62,11 @@ class FactualClaim:
     #: Who the subject was resolved to, or why it could not be. Written by the
     #: identity stage before any research is dispatched.
     identity: dict[str, Any] = field(default_factory=dict)
+    #: The research never ran for this claim: a timeout, a rejected key, a
+    #: drained account. Distinct from UNSUPPORTED, which means the record was
+    #: searched and is silent. Collapsing the two is how an empty Parallel
+    #: account produced a report that read like a clean one.
+    research_failed: bool = False
 
     # ── subject facts that change the legal standard ─────────────────────────
     subject_alive: bool | None = None
@@ -165,6 +170,7 @@ class FactualClaim:
             "corroboration": self.corroboration,
             "attribution": self.attribution,
             "identity": self.identity,
+            "research_failed": self.research_failed,
             "occurrences": [o.to_dict() for o in self.asserted_in],
             "adjudicated_at": self.adjudicated_at.isoformat() if self.adjudicated_at else None,
         }

@@ -151,7 +151,21 @@ class BudgetGovernor:
     # ── availability ─────────────────────────────────────────────────────────
     @property
     def remaining_cents(self) -> float:
-        return max(0.0, self.ceiling_cents - self.ledger.spent_cents)
+        """Ceiling less what is spent **and** less what is already committed.
+
+        The reservation used to be incremented and never read. `reserve()` says
+        it "holds spend before dispatching, so concurrent workers cannot
+        overshoot", and with the reserved figure left out of this calculation it
+        did nothing of the kind: the swarm runs thirty two subjects at once, all
+        thirty two read the same `spent_cents` before any of them had recorded
+        anything, and all thirty two were funded.
+
+        A live run on a $3.00 ceiling spent $6.38. The ceiling is the number the
+        cost story rests on, so a ceiling that only counts settled spend is not
+        a ceiling.
+        """
+        committed = self.ledger.spent_cents + self.ledger.reserved_cents
+        return max(0.0, self.ceiling_cents - committed)
 
     @property
     def general_remaining_cents(self) -> float:

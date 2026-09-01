@@ -36,7 +36,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from truestory.agents.nameguard import is_nameable, label_matches_any
 from truestory.config import settings
+from truestory.providers import model_fallback
 from truestory.providers.model_cost import meter_response
 from truestory.providers.wikidata import EntityCandidate, WikidataClient
 
@@ -135,6 +137,22 @@ class IdentityResolver:
         return verdict
 
     async def _resolve(self, name: str, hints: str, is_person: bool) -> IdentityVerdict:
+        # Before the knowledge base is asked anything: is this the kind of
+        # string that denotes a subject at all. A pronoun is not, and asking
+        # Wikidata for "her" returns hertz, the SI unit, carried by 97
+        # Wikipedia editions, which clears every prominence test this class
+        # applies. See nameguard for the full incident.
+        nameable, why = is_nameable(name)
+        if not nameable:
+            return IdentityVerdict(
+                name=name,
+                status=IdentityStatus.UNIDENTIFIED,
+                reason=(
+                    f"Not researched: {why}. A claim filed under this subject has no "
+                    "real world referent, so any source offered for it is about somebody else."
+                ),
+            )
+
         if settings.offline:
             # Mock mode makes no outbound call of any kind, and that contract
             # covers the knowledge base too. An unchecked identity blocks
@@ -155,7 +173,16 @@ class IdentityResolver:
         # identification would be its own kind of wrong.
         real = [c for c in candidates if not c.is_fictional]
         if is_person:
-            real = [c for c in real if c.is_human] or real
+            # No `or real` fallback. That fallback is what accepted hertz for
+            # "her": when the human filter emptied the list it silently handed
+            # back the unfiltered one. Asking for a person and being given an
+            # SI unit is the wrong kind of thing, not a weaker answer, and
+            # every downstream stage would go on treating it as a person.
+            real = [c for c in real if c.is_human]
+
+        # The answer has to resemble the question. A knowledge base search is a
+        # fuzzy string match and its ranking is not an identification.
+        real = [c for c in real if label_matches_any(name, c.label, c.aliases)]
 
         if real:
             best = _best_match(real, hints, name)
@@ -189,7 +216,10 @@ class IdentityResolver:
             retry = await self.wikidata.search(simplified)
             retry_real = [c for c in retry if not c.is_fictional]
             if is_person:
-                retry_real = [c for c in retry_real if c.is_human] or retry_real
+                retry_real = [c for c in retry_real if c.is_human]
+            retry_real = [
+                c for c in retry_real if label_matches_any(simplified, c.label, c.aliases)
+            ]
             if retry_real:
                 best = _best_match(retry_real, hints, simplified)
                 verdict.candidates = retry
@@ -205,6 +235,22 @@ class IdentityResolver:
         # plenty of real private individuals have no entry, so the open web
         # gets a vote before a name is called an invention.
         summary, domains = await self._web_second_opinion(name, hints, is_person)
+
+        if summary is None:
+            # The second opinion never ran. Neither conclusion is available:
+            # resolving would confirm an identity nothing checked, and calling
+            # it an invention would drop a real subject over a transient
+            # failure. UNCHECKED is the honest third answer, and it leaves the
+            # deterministic post checks to cap anything consequential built on
+            # it.
+            verdict.status = IdentityStatus.UNCHECKED
+            verdict.reason = (
+                "Not in the knowledge base, and the grounded web check could not be run. "
+                "Identity is unconfirmed rather than denied: research may proceed, but "
+                "nothing consequential may rest on this subject being who the script says."
+            )
+            return verdict
+
         verdict.web_checked = True
         verdict.web_summary = summary
         verdict.web_domains = domains
@@ -227,7 +273,7 @@ class IdentityResolver:
     # ── the grounded second opinion ──────────────────────────────────────────
     async def _web_second_opinion(
         self, name: str, hints: str, is_person: bool
-    ) -> tuple[str, list[str]]:
+    ) -> tuple[str | None, list[str]]:
         """Ask the open web whether this name denotes anybody at all.
 
         Grounded rather than free running, so the answer is drawn from search
@@ -256,7 +302,8 @@ class IdentityResolver:
         )
 
         try:
-            response = await self._genai().aio.models.generate_content(
+            response = await model_fallback.generate(
+                self._genai(),
                 model=self.model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
@@ -266,8 +313,14 @@ class IdentityResolver:
             )
             meter_response(self.model, response)
         except Exception as exc:
+            # None, not "". They are different facts and were being conflated:
+            # "" means the check ran and said nothing, which `_reads_as_existing`
+            # deliberately reads as exists rather than concluding absence from
+            # silence. None means the check never ran, and a subject must not
+            # be declared real because the machine that would have checked it
+            # was unreachable.
             log.warning("identity web check failed for %r: %s", name, exc)
-            return ("", [])
+            return (None, [])
 
         text = (getattr(response, "text", "") or "").strip()
         domains: list[str] = []

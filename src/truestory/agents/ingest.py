@@ -23,10 +23,12 @@ import re
 from pathlib import Path
 from typing import Any
 
+from truestory.agents.nameguard import is_nameable
 from truestory.agents.stage_cache import StagePromptCache
 from truestory.config import settings
 from truestory.models.enums import ElementType, Modality
 from truestory.models.spans import RawSpan, Scene, ScriptDocument
+from truestory.providers import model_fallback
 from truestory.providers.model_cost import meter_response
 
 log = logging.getLogger("truestory.ingest")
@@ -212,7 +214,8 @@ class IngestAgent:
             return self._spans_from_response(scene, cached)
 
         try:
-            response = await self._genai().aio.models.generate_content(
+            response = await model_fallback.generate(
+                self._genai(),
                 model=self.model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
@@ -274,6 +277,16 @@ class IngestAgent:
                 # called "sank on its third voyage", finds none, and blocks
                 # research on the claim attached to it.
                 log.debug("dropped predicate span %r as %s", surface[:48], element_type)
+                continue
+            nameable, why = is_nameable(surface)
+            if not nameable:
+                # The model tags what a sentence is about, and in dialogue that
+                # is routinely a pronoun. `_is_predicate` does not catch it: it
+                # only runs on `_MUST_BE_NAMEABLE` types, on the assumption
+                # that a person or a place is always a name. "her" is the
+                # counterexample, and it cost a live run a defamation claim
+                # filed against hertz, the SI unit of frequency.
+                log.debug("dropped unnameable span %r as %s: %s", surface[:48], element_type, why)
                 continue
             spans.append(
                 RawSpan(

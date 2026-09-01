@@ -94,6 +94,29 @@ class ProviderUnavailable(ProviderError):
     """Health check failed or the circuit is open. Triggers the fallback path."""
 
 
+class ProviderOutOfService(ProviderUnavailable):
+    """The provider will refuse every request in this run, not just this one.
+
+    A drained account, a rejected key or a revoked permission is not a property
+    of the question that was asked. Treating it as a per request failure is what
+    produced the worst run this system has recorded: Parallel returned
+    ``HTTP 402: Insufficient credit in account`` to every single subject, each
+    one was caught individually, and each was rendered to the reviewer as
+
+        "Research returned no citable source. The system declines to make this
+         call rather than guessing."
+
+    That sentence describes a silent public record. The record was never asked.
+    A clearance report that says "no record found" for two hundred subjects
+    because the account was empty is worse than no report, because it reads
+    exactly like a clean one.
+
+    Raised once, this takes the provider out of service for the rest of the run
+    so the fallback carries the remaining subjects, and it is reported as an
+    infrastructure failure rather than as a finding.
+    """
+
+
 class RateLimited(ProviderError):
     """Back off and retry. Cloud Tasks owns the schedule, not this layer."""
 
