@@ -23,6 +23,7 @@ from typing import Any
 
 from truestory.config import settings
 from truestory.models.evidence import Citation, Evidence
+from truestory.providers import model_fallback
 from truestory.providers.base import ResearchProvider, ResearchRequest
 
 
@@ -63,7 +64,8 @@ class GeminiGroundedProvider(ResearchProvider):
 
         with self._timed() as timing:
             try:
-                response = await self._genai().aio.models.generate_content(
+                response = await model_fallback.generate(
+                    self._genai(),
                     model=self.model,
                     contents=prompt,
                     config=types.GenerateContentConfig(

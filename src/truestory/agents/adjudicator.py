@@ -42,6 +42,7 @@ from truestory.models.enums import (
 )
 from truestory.models.evidence import Evidence
 from truestory.policy import load_rubric
+from truestory.providers import model_fallback
 from truestory.providers.model_cost import meter_response
 
 log = logging.getLogger("truestory.adjudicator")
@@ -196,6 +197,38 @@ class Adjudicator:
             # rerun it expecting a different result.
             gate = claim.attribution or {}
             assessed = int(gate.get("assessed", 0))
+
+            # A third situation, and the one that matters most. The research
+            # never ran: the provider timed out, the key was rejected, or the
+            # account was drained. The element path has always checked this and
+            # the claim path never did, so a run against a Parallel account
+            # returning HTTP 402 to every request reported every claim as
+            # "no record found either way", at 0.0 confidence, with the words
+            # "the system declines to make this call rather than guessing".
+            #
+            # Nothing declined anything. Nothing was asked. A clearance report
+            # that says the record is silent for two hundred subjects because
+            # the account was empty reads exactly like a clean one, which makes
+            # it the most dangerous output this system can produce.
+            errors = [e.error for e in evidence if e.error]
+            if errors and not assessed:
+                detail = errors[0][:200]
+                self._escalate_claim(
+                    claim,
+                    Verdict.UNSUPPORTED,
+                    (
+                        "RESEARCH DID NOT RUN for this claim, so the record has not been "
+                        f"checked and no conclusion is available. The provider reported: "
+                        f"{detail}. This is an infrastructure failure, not a finding about "
+                        "the subject, and it must not be read as one."
+                    ),
+                    confidence=0.0,
+                    reason="research failed, claim never checked",
+                    evidence=evidence,
+                )
+                claim.research_failed = True
+                return
+
             if assessed:
                 dropped = int(gate.get("dropped_irrelevant", 0)) + int(
                     gate.get("dropped_unquotable", 0)
@@ -905,7 +938,8 @@ class Adjudicator:
         from truestory.agents.prompts import ADJUDICATOR_SYSTEM
 
         try:
-            response = await self._genai().aio.models.generate_content(
+            response = await model_fallback.generate(
+                self._genai(),
                 model=self.model,
                 contents=prompt,
                 config=types.GenerateContentConfig(

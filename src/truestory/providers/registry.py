@@ -26,6 +26,7 @@ from truestory.models.enums import Processor, RiskTier
 from truestory.models.evidence import Evidence
 from truestory.policy import RoutingDecision
 from truestory.providers.base import (
+    ProviderOutOfService,
     ProviderUnavailable,
     RateLimited,
     ResearchProvider,
@@ -73,6 +74,10 @@ class ProviderRegistry:
         self.budget = budget or BudgetGovernor()
         self._providers: dict[str, ResearchProvider] = providers or self._build_default()
         self._health: dict[str, bool] = {}
+        #: Provider name -> why it left service mid run. Read by the report so
+        #: an infrastructure failure is stated as one on the front page rather
+        #: than distributed silently across every subject as "no record".
+        self.outages: dict[str, str] = {}
         self._health_lock = asyncio.Lock()
         self.cache = CachedProvider(backend=LocalCacheBackend())
         self.selections: list[Selection] = []
@@ -218,6 +223,18 @@ class ProviderRegistry:
 
         try:
             evidence = await _with_retry(selection.provider, effective_request)
+        except ProviderOutOfService as exc:
+            # The account is drained or the key is rejected. Every remaining
+            # subject would fail identically, so the provider leaves service
+            # for the rest of the run and the next call selects the fallback.
+            # Recorded on the registry so the report can say plainly that the
+            # research provider stopped answering, rather than presenting two
+            # hundred empty results as a silent record.
+            self._health[selection.provider.name] = False
+            self.outages.setdefault(selection.provider.name, str(exc))
+            evidence = Evidence.failed(
+                request.subject_id, request.question, selection.provider.name, str(exc)
+            )
         except RateLimited as exc:
             # Sustained rate limiting is a health signal, not just a retry.
             self._health[selection.provider.name] = False
@@ -289,6 +306,7 @@ class ProviderRegistry:
             "fallback_rate": round(self.fallback_rate, 4),
             "cache_hit_rate": round(self.cache_hit_rate, 4),
             "degradations": sum(1 for s in self.selections if s.degraded),
+            "outages": dict(self.outages),
             "budget": self.budget.snapshot(),
         }
 

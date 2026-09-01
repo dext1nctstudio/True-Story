@@ -295,7 +295,11 @@ def warm_cache(
 
 
 @app.command()
-def doctor() -> None:
+def doctor(
+    models: bool = typer.Option(
+        False, "--models", help="Also probe every configured Gemini model with one live call"
+    ),
+) -> None:
     """Check the environment and report exactly what is still unwired."""
     from truestory.policy import load_routing, load_rubric
 
@@ -345,6 +349,64 @@ def doctor() -> None:
     console.print(
         "\n[dim]Mock mode needs none of the above. Every red row is a live mode "
         "prerequisite and each maps to a numbered item in the README build status.[/dim]"
+    )
+
+    if models:
+        _probe_models()
+
+
+def _probe_models() -> None:
+    """One real call per configured model, so a bad name is found here.
+
+    A model identifier is configuration, and the failure mode is that it looks
+    correct and is not served in this project or region. Without this the first
+    place anyone learns that is the middle of a run, and the newest models are
+    exactly the ones most likely to be unavailable somewhere.
+    """
+    from truestory.providers import model_fallback
+
+    table = Table(title="models", show_header=True)
+    table.add_column("decision point")
+    table.add_column("model")
+    table.add_column("status")
+    table.add_column("detail", style="dim")
+
+    try:
+        from google import genai
+
+        client = genai.Client(
+            vertexai=settings.use_vertex,
+            project=settings.gcp_project or None,
+            location=settings.gcp_location,
+        )
+    except Exception as exc:
+        console.print(f"\n[red]could not build a Gemini client:[/red] {exc}")
+        return
+
+    probed: dict[str, tuple[str, str]] = {}
+    for point, model in settings.models_in_use.items():
+        if model in probed:
+            status, detail = probed[model]
+        else:
+            try:
+                client.models.generate_content(model=model, contents="Reply with: ok")
+                status, detail = "[green]available[/green]", ""
+            except Exception as exc:
+                if model_fallback.is_model_unavailable(exc):
+                    chain = model_fallback.chain_for(model)[1:]
+                    status = "[yellow]unavailable[/yellow]"
+                    detail = f"would fall back to {chain[0] if chain else 'nothing'}"
+                else:
+                    status, detail = "[red]error[/red]", f"{type(exc).__name__}: {exc}"[:70]
+            probed[model] = (status, detail)
+        table.add_row(point, model, status, detail)
+
+    console.print()
+    console.print(table)
+    console.print(
+        "\n[dim]An unavailable model degrades through the fallback chain rather than "
+        "ending a run, so a yellow row costs quality and not the demo. A red row is a "
+        "credentials or quota problem and is not about the model.[/dim]"
     )
 
 
