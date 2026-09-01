@@ -29,6 +29,7 @@ import json
 import logging
 from typing import Any
 
+from truestory.agents.stage_cache import StagePromptCache
 from truestory.config import settings
 from truestory.models.claims import FactualClaim
 from truestory.models.enums import CLAIM_BEARING, ClaimType, Polarity
@@ -105,6 +106,7 @@ class ClaimExtractor:
     def __init__(self, model: str | None = None, client: Any = None) -> None:
         self.model = model or settings.model_claims
         self._client = client
+        self._cache = StagePromptCache("extraction", "claims_v1")
 
     # ── entry point ──────────────────────────────────────────────────────────
     async def run(self, spans: list[RawSpan], scenes: list[Scene]) -> list[FactualClaim]:
@@ -179,15 +181,24 @@ class ClaimExtractor:
             for s in distinct
         )
 
+        prompt = CLAIM_EXTRACTOR_USER.format(
+            subjects=listing,
+            scene_no=primary.scene_no,
+            page=primary.page,
+            text=text,
+        )
+
+        # An unchanged scene must decompose to the same claims with the same
+        # ids, or every research cache entry downstream is dead on arrival.
+        cached = self._cache.get(self.model, prompt)
+        if cached:
+            log.debug("scene %s claim extraction replayed from cache", primary.scene_no)
+            return self._claims_from_scene(distinct, scene, cached)
+
         try:
             response = await self._genai().aio.models.generate_content(
                 model=self.model,
-                contents=CLAIM_EXTRACTOR_USER.format(
-                    subjects=listing,
-                    scene_no=primary.scene_no,
-                    page=primary.page,
-                    text=text,
-                ),
+                contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=CLAIM_EXTRACTOR_SYSTEM,
                     temperature=0.0,
@@ -203,7 +214,9 @@ class ClaimExtractor:
                 fallback.extend(self._extract_deterministic(span, scene))
             return fallback
 
-        return self._claims_from_scene(distinct, scene, getattr(response, "text", "") or "")
+        raw = getattr(response, "text", "") or ""
+        self._cache.put(self.model, prompt, raw)
+        return self._claims_from_scene(distinct, scene, raw)
 
     # ── the model pass ───────────────────────────────────────────────────────
     async def extract(self, span: RawSpan, scene: Scene | None) -> list[FactualClaim]:

@@ -42,13 +42,13 @@ from truestory.agents.ledger import LedgerAgent
 from truestory.agents.remedy import RemedyLoop
 from truestory.agents.report import ReportAgent, build_summary
 from truestory.agents.router import RiskRouter
-from truestory.agents.swarm import ResearchSwarm
+from truestory.agents.swarm import ResearchSwarm, SwarmResult
 from truestory.config import settings
 from truestory.mcp.tools import ClearanceTools
 from truestory.models.claims import FactualClaim
 from truestory.models.elements import ClearableElement, Remedy, RunSummary
 from truestory.models.enums import RunStatus
-from truestory.models.evidence import MonitorHandle
+from truestory.models.evidence import Evidence, MonitorHandle
 from truestory.models.spans import ScriptDocument
 from truestory.policy import load_jurisdictions
 from truestory.providers import BudgetGovernor, ProviderRegistry
@@ -150,7 +150,12 @@ class TrueStoryPipeline:
         # and the difference between checking a claim and inventing evidence
         # for a character.
         self.identity = IdentityResolver()
-        self.swarm = ResearchSwarm(self.registry, self.tools, on_progress=self._emit_passthrough)
+        self.swarm = ResearchSwarm(
+            self.registry,
+            self.tools,
+            on_progress=self._emit_passthrough,
+            project_id=self.project.project_id,
+        )
         self.adjudicator = Adjudicator()
         self.remedy = RemedyLoop(self.tools)
         self.reporter = ReportAgent()
@@ -397,6 +402,8 @@ class TrueStoryPipeline:
         state.artifacts["swarm"] = result.to_dict()
         state.artifacts["evidence_by_subject"] = result.evidence_by_subject
 
+        self._record_research_telemetry(state, result)
+
         # Monitors are opened after research so the licence term discovered
         # during research can drive the cadence.
         for request in result.monitors_requested:
@@ -406,6 +413,37 @@ class TrueStoryPipeline:
                 for element in state.elements:
                     if element.element_id == handle.subject_id:
                         element.monitor_handle = handle.monitor_id
+
+    def _record_research_telemetry(self, state: RunState, result: SwarmResult) -> None:
+        """Write one BigQuery row per Evidence produced by the swarm.
+
+        Deliberately best effort and it swallows its own failures, because
+        telemetry is not worth failing a clearance run over. What it is worth
+        is that every unit economics number in the pitch becomes a query
+        against `cost_telemetry` rather than an estimate: cost per script, cost
+        per claim type, cache hit rate, fallback rate.
+
+        Evidence pages are archived separately, by the swarm at the moment of
+        capture, because that is the only point the page text exists.
+        """
+        try:
+            from truestory.storage.bigquery import get_sink
+        except Exception as exc:  # pragma: no cover - import guard
+            log.debug("telemetry unavailable: %s", exc)
+            return
+
+        sink = get_sink()
+        for evidence in result.records:
+            try:
+                sink.record_evidence(state.run_id, state.project_id, evidence)
+            except Exception as exc:
+                log.debug("telemetry row skipped for %s: %s", evidence.evidence_id, exc)
+
+        try:
+            sink.flush()
+            log.info("telemetry: %s rows written to BigQuery", sink.rows_written)
+        except Exception as exc:
+            log.warning("telemetry flush failed: %s", exc)
 
     async def _open_monitor(self, request: dict[str, Any]) -> MonitorHandle | None:
         try:
@@ -431,6 +469,7 @@ class TrueStoryPipeline:
         await self._emit({"event": "stage", "stage": "adjudication", "status": "started"})
 
         evidence = state.artifacts.get("evidence_by_subject", {})
+        _share_claim_evidence_with_subjects(state, evidence)
         state.review_queue = await self.adjudicator.run(state.claims, state.elements, evidence)
 
         from truestory.models.enums import Verdict
@@ -580,10 +619,30 @@ _INVENTED_BY_DESIGN = frozenset({"PERSON_NAME_FICTIONAL"})
 
 
 def _blocks_research(identity: dict[str, Any], element_type: str) -> bool:
-    """Whether this identity finding means the claim cannot be checked at all."""
+    """Whether this identity finding means the claim cannot be checked at all.
+
+    The reason this gate exists is specific: searching a *name* returns whoever
+    shares it, so a claim about a person nobody bears the name of must not be
+    researched, because every source returned would be about somebody else.
+    That argument is about people. It does not hold for anything else, and
+    applying it to everything is what made this gate suppress research on true,
+    well documented claims.
+
+    A four line Titanic scene produced the subjects "the sinking", "sank on 15
+    April 1912" and "sank on its third voyage" — predicates that ingest typed
+    as REAL_EVENT. Identity dutifully searched for a real entity named "sank on
+    its third voyage", found none, and blocked the claim. "The Titanic struck
+    an iceberg" was returned unsupported with zero citations, never having been
+    researched at all.
+
+    So the block is now scoped to person subjects. A claim whose subject is an
+    event, an organisation or a phrase is researched on its own words: the
+    claim text names the Titanic whatever the ledger filed it under, and a
+    thin subject is a reason to research carefully, not a reason to refuse.
+    """
     status = identity.get("status")
     if status == IdentityStatus.UNIDENTIFIED:
-        return True
+        return element_type in _PERSON_TYPES_FOR_IDENTITY
     if status == IdentityStatus.COLLISION:
         return element_type in _INVENTED_BY_DESIGN
     return False
@@ -729,3 +788,53 @@ async def run_pipeline(
     finally:
         if settings.mode is not settings.mode.MOCK:
             await pipeline.aclose()
+
+
+def _share_claim_evidence_with_subjects(
+    state: RunState, evidence: dict[str, list[Evidence]]
+) -> None:
+    """Let an element see what its own claims found out about it.
+
+    An element and the claims filed under it are researched as separate
+    subjects, and the results were never pooled. So a run could resolve Apollo
+    11 against Wikidata, verify three claims about Apollo 11 with citations,
+    and still report the Apollo 11 element as RESEARCH_FAILED, because its own
+    lookup happened to come back thin. Two questions about the same thing, one
+    answered, and the answer thrown away.
+
+    The report a reviewer reads is the one that said "research failed" beside a
+    subject the run had in fact researched successfully, which reads as a
+    broken tool and undercounts coverage on the front page.
+
+    Nothing is invented here and no gate is relaxed. Evidence that already
+    passed the attribution gate for a claim is made visible to the subject that
+    claim is about, and every downstream check runs against it unchanged.
+    """
+    if not evidence:
+        return
+
+    claims_by_element: dict[str, list[FactualClaim]] = {}
+    for claim in state.claims:
+        if claim.subject_element_id:
+            claims_by_element.setdefault(claim.subject_element_id, []).append(claim)
+
+    shared = 0
+    for element in state.elements:
+        own = [e for e in evidence.get(element.element_id, []) if e.is_usable]
+        if own:
+            continue  # its own lookup answered; nothing to borrow
+
+        inherited: list[Evidence] = []
+        seen: set[str] = set()
+        for claim in claims_by_element.get(element.element_id, []):
+            for item in evidence.get(claim.claim_id, []):
+                if item.is_usable and item.evidence_id not in seen:
+                    seen.add(item.evidence_id)
+                    inherited.append(item)
+
+        if inherited:
+            evidence.setdefault(element.element_id, []).extend(inherited)
+            shared += 1
+
+    if shared:
+        log.info("evidence sharing: %s elements answered by their own claims", shared)

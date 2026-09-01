@@ -32,9 +32,21 @@ const CLASS_LABEL: Record<SourceClass, string> = {
 const RECORD_CLASSES = new Set<SourceClass>(["official", "registry", "archive"]);
 
 export function SourcePedigree({ corroboration }: { corroboration?: Corroboration }) {
-  if (!corroboration || corroboration.citation_count === 0) return null;
+  // A claim the swarm could not research at all arrives with `corroboration`
+  // present but empty: `{}`, not null and not zeroed. The old guard tested
+  // `citation_count === 0`, which is false for `undefined`, so an empty object
+  // fell straight through and the first `.join()` took the whole page down with
+  // it. There is nothing to draw without a citation count, so say so once here
+  // rather than defending every field below.
+  if (!corroboration || !corroboration.citation_count) return null;
 
   const c = corroboration;
+  // Optional even so. This panel is the last thing between a reviewer and the
+  // evidence, and a partially written block is not a reason to show them a
+  // stack trace instead of the verdict.
+  const domains = c.domains ?? [];
+  const notes = c.notes ?? [];
+  const recordSignal = c.record_signal ?? "UNKNOWN";
   const tone = c.score >= 0.75 ? "green" : c.score >= 0.45 ? "amber" : "red";
 
   return (
@@ -59,7 +71,7 @@ export function SourcePedigree({ corroboration }: { corroboration?: Corroboratio
           value={c.independent_domains}
           label={c.independent_domains === 1 ? "independent source" : "independent sources"}
           tone={c.independent_domains >= 2 ? "" : "amber"}
-          title={c.domains.join(", ")}
+          title={domains.join(", ")}
         />
         <Fact
           value={c.classified_primary_count}
@@ -68,7 +80,7 @@ export function SourcePedigree({ corroboration }: { corroboration?: Corroboratio
           title="Dockets, registers, statutes and official archives, recognised by host."
         />
         <Fact
-          value={c.citation_count}
+          value={c.citation_count ?? 0}
           label="citations"
           title="Total sources attached, before independence is counted."
         />
@@ -85,8 +97,8 @@ export function SourcePedigree({ corroboration }: { corroboration?: Corroboratio
       {/* The signal the research payload itself reported, which is a different
           thing from the verdict and is worth showing when they diverge. */}
       <div className="pedigree-signal">
-        <span className={`signal-chip ${signalTone(c.record_signal)}`}>
-          record: {c.record_signal.toLowerCase()}
+        <span className={`signal-chip ${signalTone(recordSignal)}`}>
+          record: {recordSignal.toLowerCase()}
         </span>
         {c.record_quality && <span className="signal-chip">{c.record_quality} record</span>}
         {c.conflict && <span className="signal-chip red">sources conflict</span>}
@@ -97,9 +109,9 @@ export function SourcePedigree({ corroboration }: { corroboration?: Corroboratio
         )}
       </div>
 
-      {c.notes.length > 0 && (
+      {notes.length > 0 && (
         <ul className="pedigree-notes">
-          {c.notes.map((note) => (
+          {notes.map((note) => (
             <li key={note}>{note}</li>
           ))}
         </ul>
@@ -152,7 +164,7 @@ export function AttributionSummary({ attribution }: { attribution?: Attribution 
         )}
       </div>
 
-      {attribution.notes.map((note) => (
+      {(attribution.notes ?? []).map((note) => (
         <p className="attrib-note" key={note}>
           {note}
         </p>

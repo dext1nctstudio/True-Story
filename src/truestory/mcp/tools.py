@@ -180,6 +180,72 @@ _Q_INTERROGATE = (
     "read them."
 )
 
+# The routing table asks for enumeration in three distinct situations, and they
+# are three different questions against three different populations. Stating the
+# entity type and the criteria is not optional courtesy to the API: FindAll
+# requires both, and a namesake search that asks for "entities" gets companies.
+_ENUMERATION_KINDS: dict[str, dict[str, Any]] = {
+    # A real person is depicted. Who else bears this name, and could a reader
+    # take the depiction to be about one of them?
+    "findall_similar_persons": {
+        "entity_type": "people",
+        "schema": "person_collision_v1",
+        "objective": (
+            "Find real, identifiable people publicly known by the name {pattern}, "
+            "who could be mistaken for the person of that name depicted in a film. "
+            "Jurisdiction of interest: {jurisdiction}."
+        ),
+        "conditions": (
+            ("bears_the_name", "The person is publicly known by the name {pattern}."),
+            (
+                "publicly_identifiable",
+                "The person is identifiable from public sources, with a documented "
+                "occupation, affiliation or public record. Exclude passing mentions.",
+            ),
+        ),
+    },
+    # The Baby Reindeer rule. The character was never named, and it did not help.
+    "findall_matching_persons": {
+        "entity_type": "people",
+        "schema": "identifiability_v1",
+        "objective": (
+            "Find real people who match this cluster of attributes closely enough "
+            "that an audience could identify them as its subject: {pattern}. "
+            "Jurisdiction of interest: {jurisdiction}."
+        ),
+        "conditions": (
+            (
+                "matches_the_cluster",
+                "The person matches the described combination of role, place, period "
+                "and relationship: {pattern}.",
+            ),
+            (
+                "identifiable_without_a_name",
+                "The match rests on attributes an audience could search, not on a "
+                "name, since no name is given.",
+            ),
+        ),
+    },
+    # Marks and business names. A register, not a reputation.
+    "findall_registered_entities": {
+        "entity_type": "companies",
+        "schema": "person_collision_v1",
+        "objective": (
+            "Find registered businesses, trading names and registered trade marks "
+            "using the name {pattern}, in {jurisdiction} and in any territory whose "
+            "register reaches it."
+        ),
+        "conditions": (
+            ("uses_the_name", "The entity trades under, or holds a mark for, {pattern}."),
+            (
+                "on_a_register",
+                "The entity appears on a companies register, a trade mark register or "
+                "an equivalent official record, rather than only in press coverage.",
+            ),
+        ),
+    },
+}
+
 
 # =============================================================================
 # tool implementations
@@ -451,19 +517,41 @@ class ClearanceTools:
 
     # ── enumeration and capture ──────────────────────────────────────────────
     async def enumerate_matching_entities(
-        self, subject_id: str, pattern: str, jurisdiction: str = "US"
+        self,
+        subject_id: str,
+        pattern: str,
+        jurisdiction: str = "US",
+        kind: str = "findall_registered_entities",
     ) -> list[dict[str, Any]]:
-        """Set valued research. One Evidence per matched entity."""
+        """Set valued research. One Evidence per matched entity.
+
+        `kind` is the routing table's side effect name. The three are different
+        questions against different populations, and collapsing them into one
+        query was asking the crawler to find companies when the subject was a
+        person. FindAll needs the entity type and the criteria stated, so they
+        are stated here rather than left to the model.
+        """
+        spec = _ENUMERATION_KINDS.get(kind, _ENUMERATION_KINDS["findall_registered_entities"])
         provider = self.registry.get("parallel_findall")
         request = ResearchRequest(
             subject_id=subject_id,
-            question=f"Enumerate every entity matching: {pattern}. Jurisdiction: {jurisdiction}.",
-            output_schema=load_schema("person_collision_v1"),
-            schema_name="person_collision_v1",
+            question=spec["objective"].format(pattern=pattern, jurisdiction=jurisdiction),
+            output_schema=load_schema(spec["schema"]),
+            schema_name=spec["schema"],
             tier=RiskTier.HIGH,
             processor=Processor.BASE,
             jurisdictions=(jurisdiction,),
-            max_results=50,
+            # FindAll bills a fixed fee plus a fee per match, which made it 96%
+            # of research spend on the first runs where it worked at all: 6.85
+            # cents a call against 0.17 for a Task run. A collision check asks
+            # whether real namesakes exist and shows the closest few, so fifty
+            # matches bought a four times larger bill and no extra finding.
+            max_results=10,
+            entity_type=spec["entity_type"],
+            match_conditions=tuple(
+                (name, description.format(pattern=pattern, jurisdiction=jurisdiction))
+                for name, description in spec["conditions"]
+            ),
         )
         results = await provider.enumerate(request)  # type: ignore[attr-defined]
         return [e.to_dict() for e in results]

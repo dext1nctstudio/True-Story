@@ -31,12 +31,28 @@ confidence:
   critical_clear_requires_human: true
 
   # Minimum citations before a verdict may be recorded at all, by tier.
+  #
+  # One good source settles most questions, and demanding two made the system
+  # ask a lawyer to confirm things it had already answered correctly: on a
+  # measured run it produced eighteen right verdicts and still sent twenty one
+  # items for review. A reviewer who has to read everything has been saved
+  # nothing, which is the paranoia engine this rubric exists to avoid.
+  #
+  # The exception below is not a hedge. A disparaging claim about someone
+  # living is the one shape that is actually litigated, and it keeps the old
+  # standard.
   min_citations:
-    CRITICAL: 2
+    CRITICAL: 1
     HIGH: 1
     MEDIUM: 1
     LOW: 0
     NONE: 0
+
+  # The shape every marquee case in this space takes. A negative assertion
+  # about a living person keeps the two source standard for both citations and
+  # independent domains, whatever the tier table above says.
+  negative_living_min_citations: 2
+  negative_living_min_domains: 2
 
   # A CONTRADICTED verdict is the most consequential thing this system says.
   # It requires a primary source, not a blog aggregating one.
@@ -57,12 +73,38 @@ confidence:
   contradicted_requires_classified_primary: true
   strict_record_applies_to: negative_claims_about_living_people
 
-  # The looser standard, used everywhere else. A contradiction still cannot
-  # rest on one forum post: it needs a source that was quoted against the claim
-  # and either a second independent domain or one recognised record.
+  # The looser standard, used where a living person is at stake but the claim
+  # is not disparaging. A contradiction still cannot rest on one forum post: it
+  # needs a source that was quoted against the claim and either a second
+  # independent domain or one recognised record.
   contradicted_minimum:
     attributed_sources: 1
     independent_domains: 2
+    or_classified_primary: true
+
+  # The third standard, for a claim with nobody behind it to injure: a date, a
+  # scoreline, a place, an event that happened. The standard of proof should
+  # scale with what is at stake in being wrong, and these three are not the
+  # same risk:
+  #
+  #   "X was convicted of stalking"  — a living person, ruinous if wrong
+  #   "X captained the side"         — a living person, embarrassing if wrong
+  #   "Apollo 11 landed in 1972"     — a calendar year, wrong in a textbook
+  #
+  # Applying the middle standard to the third case cost a correct finding. The
+  # run identified Apollo 11 against Wikidata, asked the right question, got
+  # back that the claim is false, and then demoted it to unsupported because
+  # only one page survived the attribution gate and Wikipedia classifies as
+  # reference rather than record. A writer then reads "no record either way"
+  # on a flatly false line and leaves it in the script.
+  #
+  # So an impersonal claim may be called false on a single recognised,
+  # attributed, non user generated source. Everything protective stays: the
+  # source still had to be quoted and verified, forums still cannot decide, and
+  # the instant a living person is the subject the standards above take over.
+  contradicted_minimum_impersonal:
+    attributed_sources: 1
+    independent_domains: 1
     or_classified_primary: true
 
   # No verdict of fact may rest on sources that were never shown to bear on the
@@ -75,11 +117,27 @@ confidence:
   # URLs. Five pages on one site are one source, and "corroborated by five
   # sources" is the most common lie a research pipeline tells its user.
   min_independent_domains:
-    CRITICAL: 2
-    HIGH: 2
+    CRITICAL: 1
+    HIGH: 1
     MEDIUM: 1
     LOW: 1
     NONE: 0
+
+  # One recognised record may stand in for the second domain, exactly as it
+  # already may for a contradiction above. Counting domains alone treats an
+  # official scorecard and a content farm as one source each, so a claim the
+  # record settles outright — "Dhoni scored 91 not out", on the scorecard —
+  # was held back for want of a second site saying the same thing, and a
+  # correct, cited, verified claim still went to a lawyer. Half of every run
+  # was arriving in the counsel queue that way, which is the paranoia engine
+  # this rubric exists to avoid: a reviewer who must read everything has been
+  # saved nothing.
+  #
+  # Deliberately narrow. It substitutes for the domain count only, never for
+  # attribution, never for the conflict rule, and never for the strict record
+  # standard on a negative claim about a living person, which is the shape of
+  # every case in this space and keeps its own harder rule below.
+  recognised_record_substitutes_for_domain: true
 
   # Confidence may not exceed this once corroboration is taken into account.
   # A single tertiary source cannot produce a 0.95 verdict however certain the

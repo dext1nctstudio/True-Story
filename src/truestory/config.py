@@ -78,6 +78,14 @@ class Settings(BaseSettings):
     model_attribution: str = Field(default="gemini-2.5-flash", alias="TRUESTORY_MODEL_ATTRIBUTION")
     # Identity resolution: is this name a real person or an invention.
     model_identity: str = Field(default="gemini-2.5-flash", alias="TRUESTORY_MODEL_IDENTITY")
+    # The grounded fallback, and the one model choice here that is not about
+    # capability. Measured on the same question and the same prompt, 2.5-pro
+    # returned zero grounding chunks and answered from parametric knowledge,
+    # while 2.5-flash searched and returned five to seven. A fallback that does
+    # not retrieve is worse than no fallback: it produces a confident answer
+    # with nothing to cite, which this system must then discard, so the claim
+    # ends UNSUPPORTED having looked like it was researched.
+    model_grounded: str = Field(default="gemini-2.5-flash", alias="TRUESTORY_MODEL_GROUNDED")
 
     agent_engine_resource: str = Field(default="", alias="AGENT_ENGINE_RESOURCE_NAME")
     agent_engine_staging: str = Field(default="", alias="AGENT_ENGINE_STAGING_BUCKET")

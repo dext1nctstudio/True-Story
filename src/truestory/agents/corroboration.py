@@ -98,7 +98,18 @@ class Corroboration:
         """
         if self.citation_count == 0:
             return 0.0
-        independence = min(self.independent_domains, 3) / 3  # 3 domains is full marks
+        domains = self.independent_domains
+        # A recognised record of record counts as more than one voice, because
+        # it is not a voice: it is the register the other sources are quoting.
+        # Counting breadth alone scored an official scorecard at a third of a
+        # mark, capped a correct verified claim at 0.73 against a 0.75 review
+        # threshold, and sent three true, cited, primary sourced claims to a
+        # lawyer for want of a blog repeating them. Deliberately not full
+        # marks: one register is still one point of failure, so it earns the
+        # weight of two ordinary sources and never that of three.
+        if self.classified_primary_count >= 1 and not self.low_trust_only:
+            domains = max(domains, 2)
+        independence = min(domains, 3) / 3  # 3 domains is full marks
         pedigree = self.strongest_trust
         volume = min(self.citation_count, 4) / 8  # tops out at a half weight
         raw = 0.45 * independence + 0.45 * pedigree + 0.10 * volume
