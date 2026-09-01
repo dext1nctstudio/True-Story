@@ -22,6 +22,7 @@ from truestory.providers.base import (
     RateLimited,
     ResearchProvider,
     ResearchRequest,
+    _resolve_api_key,
 )
 
 
@@ -42,7 +43,7 @@ class ParallelSearchProvider(ResearchProvider):
         client: httpx.AsyncClient | None = None,
         mode: str = "advanced",
     ) -> None:
-        self.api_key = api_key or settings.parallel_api_key
+        self.api_key = api_key or _resolve_api_key()
         self.base_url = (base_url or settings.parallel_api_base).rstrip("/")
         # The API takes `mode`, and the only two values it accepts are these.
         # "one_shot" was neither, so every interactive search 422'd.

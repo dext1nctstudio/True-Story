@@ -46,6 +46,15 @@ class ResearchRequest:
     #: Literal queries for the Search API, which requires the field. Left empty
     #: for Task, which derives its own from the objective.
     search_queries: tuple[str, ...] = ()
+    #: The category of thing being enumerated, for the FindAll API which requires
+    #: it. "people" and "companies" route the crawler very differently, and the
+    #: three enumeration side effects in the routing table mean different things:
+    #: a namesake search is not a registered entity search.
+    entity_type: str = ""
+    #: Named criteria a candidate must satisfy, as (name, description) pairs.
+    #: FindAll requires at least one and evaluates each separately, which is what
+    #: makes a match auditable rather than a similarity score.
+    match_conditions: tuple[tuple[str, str], ...] = ()
 
     def cache_key(self) -> str:
         import hashlib
@@ -188,3 +197,34 @@ class EnumerationProvider(ResearchProvider):
             schema_version=request.schema_name,
             cost_cents=sum(r.cost_cents for r in results),
         )
+
+
+def _resolve_api_key() -> str:
+    """The Parallel key. Which source wins depends on where the code is running.
+
+    Deployed, the credential lives in Secret Manager and never in an
+    environment variable, a container image or the repository.
+
+    Locally, `.env` wins, and that ordering is deliberate rather than a
+    convenience. Preferring Secret Manager everywhere meant a developer who
+    rotated the key in `.env` was silently ignored while a stale version in
+    Secret Manager kept being used: every request failed 402 on a drained
+    account while the same key tested by hand from `.env` succeeded, which cost
+    an afternoon to find. The file a developer just edited is the file they
+    mean, so it is also the same rule `current_principal` already uses for
+    identity.
+    """
+    from truestory.config import settings as _settings
+
+    if _settings.env_name == "local":
+        local = _settings.parallel_api_key
+        if local and not local.startswith("PLACEHOLDER"):
+            return local
+
+    from truestory.storage.secrets import get_secret
+
+    try:
+        value = get_secret("parallel_api_key")
+    except Exception:  # pragma: no cover - never fail a run over resolution
+        value = ""
+    return value or _settings.parallel_api_key

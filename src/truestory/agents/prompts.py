@@ -50,6 +50,26 @@ TAG THESE ELEMENT TYPES:
   Assertions
     REAL_EVENT  DEFAMATORY_REF  TRADE_LIBEL
 
+A SPAN MUST BE A NAME, NOT A PREDICATE.
+
+Every span you tag becomes a subject that is looked up in a knowledge base and
+searched for on the open web, so it has to be the kind of thing that has a
+name. REAL_EVENT means the Titanic disaster, the 2011 Cricket World Cup final,
+the Watergate break in: an event a source could be *about*.
+
+It does not mean the words a sentence uses to describe one. From a single
+Titanic scene this stage returned "the sinking", "sank on 15 April 1912" and
+"sank on its third voyage" as REAL_EVENT spans. Those are predicates. The
+identity stage then searched for a real entity named "sank on its third
+voyage", found nothing, and refused to research the claim, so "The Titanic
+struck an iceberg" came back unsupported with no sources. The scene was about
+the most documented shipwreck in history.
+
+Before tagging, ask whether the surface form would make sense as the title of
+an encyclopaedia entry. "Titanic" would. "sank on its third voyage" would not.
+If it fails, tag the named entity in the sentence instead, and leave the
+assertion to the claim stage, which exists to handle exactly that.
+
 REAL OR INVENTED: THE DECISION THAT MUST NOT BE GUESSED.
 
 REAL_PERSON_DEPICTED means you can name the actual living or dead human being

@@ -23,6 +23,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from truestory.agents.stage_cache import StagePromptCache
 from truestory.config import settings
 from truestory.models.enums import ElementType, Modality
 from truestory.models.spans import RawSpan, Scene, ScriptDocument
@@ -71,6 +72,7 @@ class IngestAgent:
     def __init__(self, model: str | None = None, client: Any = None) -> None:
         self.model = model or settings.model_ingest
         self._client = client
+        self._cache = StagePromptCache("ingest", "ingest_v2")
 
     # ── entry point ──────────────────────────────────────────────────────────
     async def run(
@@ -192,16 +194,27 @@ class IngestAgent:
 
         from truestory.agents.prompts import INGEST_SYSTEM, INGEST_USER
 
+        prompt = INGEST_USER.format(
+            scene_no=scene.scene_no,
+            heading=scene.heading,
+            start_page=scene.start_page,
+            end_page=scene.end_page,
+            scene_text=scene.text,
+        )
+
+        # An unchanged scene must break down to the same spans. Ingest names
+        # every subject the rest of the pipeline researches, so drift here
+        # renames claims, misses the research cache, and changes the report on
+        # a script nobody edited.
+        cached = self._cache.get(self.model, prompt)
+        if cached:
+            log.debug("scene %s breakdown replayed from cache", scene.scene_no)
+            return self._spans_from_response(scene, cached)
+
         try:
             response = await self._genai().aio.models.generate_content(
                 model=self.model,
-                contents=INGEST_USER.format(
-                    scene_no=scene.scene_no,
-                    heading=scene.heading,
-                    start_page=scene.start_page,
-                    end_page=scene.end_page,
-                    scene_text=scene.text,
-                ),
+                contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=INGEST_SYSTEM,
                     temperature=0.0,  # a breakdown is not a creative act
@@ -221,7 +234,9 @@ class IngestAgent:
                 s.attributes["needs_manual_breakdown"] = True
             return spans
 
-        return self._spans_from_response(scene, getattr(response, "text", "") or "")
+        raw = getattr(response, "text", "") or ""
+        self._cache.put(self.model, prompt, raw)
+        return self._spans_from_response(scene, raw)
 
     def _genai(self) -> Any:
         if self._client is None:
@@ -251,6 +266,14 @@ class IngestAgent:
                 continue
             surface = item.get("surface_form", "").strip()
             if not surface:
+                continue
+            if _is_predicate(surface, element_type):
+                # Not a name, so nothing can be looked up under it. Dropped
+                # here rather than argued about in the prompt, because the
+                # consequence is silent: identity searches for a real entity
+                # called "sank on its third voyage", finds none, and blocks
+                # research on the claim attached to it.
+                log.debug("dropped predicate span %r as %s", surface[:48], element_type)
                 continue
             spans.append(
                 RawSpan(
@@ -704,3 +727,79 @@ _SPAN_RESPONSE_SCHEMA: dict[str, Any] = {
         }
     },
 }
+
+
+#: Verbs that begin a predicate rather than a name. A span opening with one of
+#: these is describing what happened, not naming the thing it happened to.
+_PREDICATE_OPENERS = frozenset(
+    {
+        "sank",
+        "sunk",
+        "died",
+        "killed",
+        "struck",
+        "hit",
+        "won",
+        "lost",
+        "scored",
+        "founded",
+        "dismissed",
+        "arrested",
+        "convicted",
+        "sentenced",
+        "married",
+        "divorced",
+        "resigned",
+        "retired",
+        "launched",
+        "crashed",
+        "survived",
+        "testified",
+        "was",
+        "were",
+        "had",
+        "has",
+        "became",
+        "led",
+        "captained",
+        "played",
+        "faced",
+        "reached",
+        "hailing",
+        "born",
+    }
+)
+
+#: Types whose spans must be nameable. A person or a place is always a name;
+#: these are the ones the model reaches for when it wants to tag an assertion.
+_MUST_BE_NAMEABLE = frozenset({"REAL_EVENT", "ORGANIZATION", "BUSINESS_NAME", "BRAND_PRODUCT"})
+
+
+def _is_predicate(surface: str, element_type: ElementType) -> bool:
+    """Whether this span is a description of an event rather than its name.
+
+    Every span becomes a subject that is looked up in Wikidata and searched for
+    on the open web, so it has to be the kind of thing that has a name. On a
+    Titanic scene the model returned "the sinking", "sank on 15 April 1912" and
+    "sank on its third voyage" as REAL_EVENT spans; identity then searched for a
+    real entity of that name, found none, and blocked research on the claims
+    filed under them. "The Titanic struck an iceberg" came back unsupported
+    with no sources, never having been researched.
+
+    Deliberately narrow. It only fires on types the model uses for assertions,
+    and only on a leading verb or a bare article, so a genuine event name like
+    "the Watergate break in" survives.
+    """
+    if str(element_type) not in _MUST_BE_NAMEABLE:
+        return False
+
+    words = surface.strip().strip("\"'").split()
+    if not words:
+        return True
+
+    first = words[0].casefold().strip(".,;:")
+    if first in _PREDICATE_OPENERS:
+        return True
+
+    # "the sinking", "a collapse": an article and one common noun names nothing.
+    return first in {"the", "a", "an"} and len(words) == 2 and words[1].islower()
