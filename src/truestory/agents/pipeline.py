@@ -506,6 +506,40 @@ class TrueStoryPipeline:
         )
 
     # ── stage 8 ──────────────────────────────────────────────────────────────
+    def _outage_warnings(self, state: RunState) -> list[str]:
+        """What to say on the front page when a provider stopped answering.
+
+        A research provider that leaves service mid run does not produce a
+        weaker report, it produces a report about nothing, and the difference
+        has to be stated where a reader cannot miss it. Every subject in a run
+        against a drained Parallel account came back "no record found either
+        way", which is the same sentence a genuinely clean subject produces.
+
+        The count is included because the ratio is the whole story: two failed
+        subjects out of two hundred is a footnote, and two hundred out of two
+        hundred means the report is empty and must not be filed.
+        """
+        warnings: list[str] = []
+        outages = getattr(self.registry, "outages", {}) or {}
+        for provider, detail in outages.items():
+            warnings.append(
+                f"RESEARCH PROVIDER OUT OF SERVICE: {provider} stopped answering during "
+                f"this run and every subject it had not yet reached went unchecked. "
+                f"Reported: {detail[:160]}. Findings below are not evidence that the "
+                f"record is silent; the record was not searched. This report is not "
+                f"fileable until the run is repeated against a working provider."
+            )
+
+        failed = sum(1 for c in state.claims if getattr(c, "research_failed", False))
+        if failed:
+            total = len(state.claims) or 1
+            warnings.append(
+                f"{failed} of {total} claims were never checked because research did not "
+                f"run for them. They are shown as unsupported, which here means unchecked "
+                f"rather than searched and not found."
+            )
+        return warnings
+
     async def _stage_report(self, state: RunState, started: float) -> None:
         state.status = RunStatus.REPORTING
         await self._emit({"event": "stage", "stage": "report", "status": "started"})
@@ -526,7 +560,7 @@ class TrueStoryPipeline:
             duration_seconds=duration,
             cache_hit_rate=self.registry.cache_hit_rate,
             fallback_rate=self.registry.fallback_rate,
-            coverage_warnings=self.budget.coverage_warnings(),
+            coverage_warnings=self.budget.coverage_warnings() + self._outage_warnings(state),
         )
 
         state.artifacts["report"] = self.reporter.run(

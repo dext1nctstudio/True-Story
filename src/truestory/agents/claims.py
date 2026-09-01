@@ -29,11 +29,13 @@ import json
 import logging
 from typing import Any
 
+from truestory.agents.nameguard import is_nameable
 from truestory.agents.stage_cache import StagePromptCache
 from truestory.config import settings
 from truestory.models.claims import FactualClaim
 from truestory.models.enums import CLAIM_BEARING, ClaimType, Polarity
 from truestory.models.spans import Occurrence, RawSpan, Scene
+from truestory.providers import model_fallback
 from truestory.providers.model_cost import meter_response
 
 log = logging.getLogger("truestory.claims")
@@ -96,6 +98,26 @@ _OPINION_MARKERS = frozenset(
 )
 
 _QUOTE_MARKERS = ('"', "'", "said", "told", "declared", "wrote")
+
+
+def _subject_name(model_subject: str | None, span: RawSpan) -> str:
+    """The name this claim is about, repaired when the model answered with a pronoun.
+
+    Dialogue names a character once and refers to them by pronoun afterwards,
+    so the model frequently and correctly reports the subject of a sentence as
+    "her". That is the right answer to the question asked and the wrong thing
+    to file a claim under: the subject name is what identity resolution
+    searches for, and searching Wikidata for "her" returns hertz, the SI unit.
+
+    The span already carries the named anchor the claim was extracted from, so
+    a pronoun subject is resolved to it rather than dropped. This is the
+    coreference step that was otherwise not happening until the ledger, one
+    stage too late to keep the subject name usable.
+    """
+    candidate = (model_subject or "").strip()
+    if candidate and is_nameable(candidate)[0]:
+        return candidate
+    return span.surface_form
 
 
 class ClaimExtractor:
@@ -196,7 +218,8 @@ class ClaimExtractor:
             return self._claims_from_scene(distinct, scene, cached)
 
         try:
-            response = await self._genai().aio.models.generate_content(
+            response = await model_fallback.generate(
+                self._genai(),
                 model=self.model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
@@ -229,7 +252,8 @@ class ClaimExtractor:
 
         text = scene.text if scene else span.context
         try:
-            response = await self._genai().aio.models.generate_content(
+            response = await model_fallback.generate(
+                self._genai(),
                 model=self.model,
                 contents=CLAIM_EXTRACTOR_USER.format(
                     subject=span.surface_form,
@@ -354,7 +378,7 @@ class ClaimExtractor:
                 FactualClaim(
                     claim_id=FactualClaim.make_id(span.span_id, claim_text),
                     subject_element_id=span.span_id,
-                    subject_name=item.get("subject") or span.surface_form,
+                    subject_name=_subject_name(item.get("subject"), span),
                     claim_text=claim_text,
                     claim_type=claim_type,
                     polarity=polarity,
@@ -393,7 +417,7 @@ class ClaimExtractor:
                 FactualClaim(
                     claim_id=FactualClaim.make_id(subject_id, claim_text),
                     subject_element_id=subject_id,
-                    subject_name=item.get("subject") or span.surface_form,
+                    subject_name=_subject_name(item.get("subject"), span),
                     claim_text=claim_text,
                     claim_type=claim_type,
                     polarity=polarity,

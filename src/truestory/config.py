@@ -63,21 +63,63 @@ class Settings(BaseSettings):
 
     # ── google cloud ─────────────────────────────────────────────────────────
     gcp_project: str = Field(default="", alias="GOOGLE_CLOUD_PROJECT")
-    gcp_location: str = Field(default="us-central1", alias="GOOGLE_CLOUD_LOCATION")
+    # Vertex AI only. Firestore, Cloud Storage and BigQuery carry their own
+    # locations and are unaffected by this.
+    #
+    # `global` rather than a region, and the difference is not cosmetic. Every
+    # Gemini 3 model returns 404 NOT_FOUND from `us-central1` on this project
+    # while serving normally from `global`:
+    #
+    #     us-central1   gemini-3.7-flash        404 NOT_FOUND
+    #                   gemini-3.1-pro-preview  404 NOT_FOUND
+    #                   gemini-2.5-pro          ok
+    #     global        all four                ok
+    #
+    # Verified 1 September 2026 against project gen-lang-client-0569749083. The
+    # older 2.5 models serve from both, which is why a regional value worked
+    # for months and then silently capped the project at the previous
+    # generation the moment the newer names were configured.
+    gcp_location: str = Field(default="global", alias="GOOGLE_CLOUD_LOCATION")
     google_credentials: str = Field(default="", alias="GOOGLE_APPLICATION_CREDENTIALS")
     use_vertex: bool = Field(default=True, alias="GOOGLE_GENAI_USE_VERTEXAI")
 
-    model_ingest: str = Field(default="gemini-2.5-pro", alias="TRUESTORY_MODEL_INGEST")
-    model_claims: str = Field(default="gemini-2.5-pro", alias="TRUESTORY_MODEL_CLAIMS")
-    model_adjudicator: str = Field(default="gemini-2.5-pro", alias="TRUESTORY_MODEL_ADJUDICATOR")
-    model_remedy: str = Field(default="gemini-2.5-flash", alias="TRUESTORY_MODEL_REMEDY")
+    # ── models, one slot per decision point ──────────────────────────────────
+    #
+    # Four judgement points and three supporting ones, each named separately so
+    # a model can be changed where it matters without moving the others. An
+    # unavailable name degrades through `providers.model_fallback` rather than
+    # ending the run, which is what makes a preview model a safe default.
+    #
+    # **These assignments are reasoned, not measured.** The 2.5 generation is
+    # what this project's prompts were written and debugged against. Confirm a
+    # change against `demo/screenplay/forty_five_minutes.fountain`, whose
+    # expected verdicts are the only ground truth here, before quoting any
+    # accuracy number that depends on it. `truestory doctor` reports which of
+    # these a project can actually serve.
+
+    # Per scene structured extraction under a JSON schema, at the highest
+    # volume of any stage on a feature. Flash is the right shape for it and the
+    # newest one is materially better at schema adherence, which is the
+    # failure mode that costs recall here.
+    model_ingest: str = Field(default="gemini-3.7-flash", alias="TRUESTORY_MODEL_INGEST")
+    # The ceiling on the entire system. Every verdict downstream is a judgement
+    # about a claim this stage either found or missed, so it gets the strongest
+    # reasoning model available.
+    model_claims: str = Field(default="gemini-3.1-pro-preview", alias="TRUESTORY_MODEL_CLAIMS")
+    # The verdict itself, under forced function calling. Highest volume of the
+    # judgement stages and the one whose mistakes reach the deliverable, so it
+    # takes reasoning over latency.
+    model_adjudicator: str = Field(
+        default="gemini-3.1-pro-preview", alias="TRUESTORY_MODEL_ADJUDICATOR"
+    )
+    model_remedy: str = Field(default="gemini-3.7-flash", alias="TRUESTORY_MODEL_REMEDY")
     # The attribution gate runs once per subject over a handful of short texts.
     # It is reading comprehension rather than judgement, and a deterministic
     # quote check catches its mistakes, so it takes the fast model and stays
     # cheap enough to run on every source of every claim.
-    model_attribution: str = Field(default="gemini-2.5-flash", alias="TRUESTORY_MODEL_ATTRIBUTION")
+    model_attribution: str = Field(default="gemini-3.7-flash", alias="TRUESTORY_MODEL_ATTRIBUTION")
     # Identity resolution: is this name a real person or an invention.
-    model_identity: str = Field(default="gemini-2.5-flash", alias="TRUESTORY_MODEL_IDENTITY")
+    model_identity: str = Field(default="gemini-3.7-flash", alias="TRUESTORY_MODEL_IDENTITY")
     # The grounded fallback, and the one model choice here that is not about
     # capability. Measured on the same question and the same prompt, 2.5-pro
     # returned zero grounding chunks and answered from parametric knowledge,
@@ -85,7 +127,23 @@ class Settings(BaseSettings):
     # not retrieve is worse than no fallback: it produces a confident answer
     # with nothing to cite, which this system must then discard, so the claim
     # ends UNSUPPORTED having looked like it was researched.
-    model_grounded: str = Field(default="gemini-2.5-flash", alias="TRUESTORY_MODEL_GROUNDED")
+    #
+    # Stays on a flash model for that measured reason. Moving it to a pro model
+    # needs the grounding chunk count checked first, not assumed.
+    model_grounded: str = Field(default="gemini-3.7-flash", alias="TRUESTORY_MODEL_GROUNDED")
+
+    @property
+    def models_in_use(self) -> dict[str, str]:
+        """Every configured model, by the decision point it serves."""
+        return {
+            "ingest": self.model_ingest,
+            "claims": self.model_claims,
+            "adjudicator": self.model_adjudicator,
+            "remedy": self.model_remedy,
+            "attribution": self.model_attribution,
+            "identity": self.model_identity,
+            "grounded": self.model_grounded,
+        }
 
     agent_engine_resource: str = Field(default="", alias="AGENT_ENGINE_RESOURCE_NAME")
     agent_engine_staging: str = Field(default="", alias="AGENT_ENGINE_STAGING_BUCKET")

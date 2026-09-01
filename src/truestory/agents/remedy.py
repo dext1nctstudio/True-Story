@@ -29,6 +29,7 @@ from truestory.models.elements import ClearableElement, Remedy
 from truestory.models.enums import ClearanceStatus, ElementType, Verdict
 from truestory.models.evidence import Evidence
 from truestory.policy import load_rubric
+from truestory.providers import model_fallback
 from truestory.providers.model_cost import meter_response
 
 log = logging.getLogger("truestory.remedy")
@@ -315,7 +316,8 @@ class RemedyLoop:
         from truestory.agents.prompts import REMEDY_SYSTEM, REMEDY_USER
 
         try:
-            response = await self._genai().aio.models.generate_content(
+            response = await model_fallback.generate(
+                self._genai(),
                 model=self.model,
                 contents=REMEDY_USER.format(
                     original=original,
