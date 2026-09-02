@@ -1,10 +1,16 @@
 """Agent 5, ResearchSwarm. The fan out. ADK ParallelAgent shaped.
 
 Two hundred research subjects dispatched against a bounded pool, metered by the
-budget governor, streamed back to the UI as they land. The concurrency cap is
-ours rather than the vendor's: Parallel's Task API supports roughly two
-thousand requests a minute, so our own budget governance is the binding
-constraint by a wide margin.
+budget governor, streamed back to the UI as they land.
+
+The concurrency cap is not a budget decision, and treating it as one cost a
+whole run. Parallel's Task API accepts roughly two thousand requests a minute,
+which is an arrival rate, and this pool was sized at 32 on the strength of it.
+The constraint that actually binds is how many runs an account may have active
+at once. At 32 not one of thirty five subjects came back inside the deadline; at
+6 all twelve did, in 141 seconds. Over-dispatching does not raise anything, it
+queues, and every subject then ages out into the fallback while Parallel bills
+for runs nobody collected. See `settings.swarm_max_concurrency`.
 
 Depth decides transport. Lite and base are awaited inline, which is what keeps
 the on camera run synchronous and the overlay filling in live. Core and above

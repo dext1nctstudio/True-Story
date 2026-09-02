@@ -187,7 +187,25 @@ class Settings(BaseSettings):
     budget_per_script_usd: float = Field(default=5.00, alias="BUDGET_PER_SCRIPT_USD")
     budget_reserve_critical_usd: float = Field(default=1.50, alias="BUDGET_RESERVE_CRITICAL_USD")
     budget_degrade_on_exceed: bool = Field(default=True, alias="BUDGET_DEGRADE_ON_EXCEED")
-    swarm_max_concurrency: int = Field(default=32, alias="SWARM_MAX_CONCURRENCY")
+    # Concurrent research subjects in flight. **This is a concurrency limit, not
+    # a rate limit, and the two were confused.** The swarm was set to 32 on the
+    # reasoning that Parallel's Task API accepts roughly two thousand requests a
+    # minute, which is true and is about arrival rate. The binding constraint is
+    # how many runs an account may have *active* at once, and it is far lower.
+    #
+    # Measured against this account on 2 September, twelve identical base
+    # subjects:
+    #
+    #     concurrency 32   0 of 35 completed; every run parked at the 420s
+    #                      deadline and the whole run fell through to the
+    #                      grounded fallback
+    #     concurrency  6   12 of 12 completed, 141s wall, slowest 141s
+    #
+    # In isolation the same lookup takes 25 to 98 seconds. Over-dispatching does
+    # not fail loudly; it queues, every subject ages out, and the report is
+    # carried entirely by the fallback while Parallel is billed for runs nobody
+    # collected. Eight leaves margin without re-entering that regime.
+    swarm_max_concurrency: int = Field(default=8, alias="SWARM_MAX_CONCURRENCY")
     # The two model stages that run per scene and per span. Both were serial
     # loops, which is what made a feature length script take tens of minutes
     # before a single subject had been dispatched. Bounded rather than
