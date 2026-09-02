@@ -74,6 +74,36 @@ function resolveRunId(): string | null {
   return new URLSearchParams(window.location.search).get("run");
 }
 
+/** "1 page", not "1 pages". A three page fixture rounds to one. */
+function pageLabel(pageCount: number): string {
+  const pages = Math.max(1, Math.round(pageCount));
+  return `${pages} page${pages === 1 ? "" : "s"}`;
+}
+
+/**
+ * The modifier key this machine actually uses.
+ *
+ * The palette binds both metaKey and ctrlKey, and the button has always
+ * advertised ⌘K regardless. On Windows, where most people will open this,
+ * the hint named a key that is not on the keyboard, which is a small reason
+ * to conclude a control does not work.
+ *
+ * Resolved after mount rather than during render: `navigator` does not exist
+ * on the server, and reading it in the render path is the SSR/client
+ * divergence that produces a hydration mismatch.
+ */
+function useModifierKey(): string {
+  const [key, setKey] = useState("Ctrl");
+  useEffect(() => {
+    const platform =
+      (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ??
+      navigator.platform ??
+      "";
+    if (/mac|iphone|ipad|ipod/i.test(platform)) setKey("⌘");
+  }, []);
+  return key;
+}
+
 export default function Workspace() {
   const [role, setRoleState] = useState<Role>("truestory.counsel");
   const [overlay, setOverlay] = useState<Overlay | null>(null);
@@ -102,6 +132,7 @@ export default function Workspace() {
 
   const view = viewFor(role);
   const caps = view.caps;
+  const modKey = useModifierKey();
 
   // Always null on the first render, on both server and client: the server
   // has no window to read ?run= from, and hydration requires the client's
@@ -460,7 +491,7 @@ export default function Workspace() {
     <div className="shell" data-role={view.value} style={{ ["--role" as string]: view.accent }}>
       <header className="header">
         <div className="header-group">
-          <button className="brand" onClick={() => openRun(null)} title="Back to the docket">
+          <button suppressHydrationWarning className="brand" onClick={() => openRun(null)} title="Back to the docket">
             {/* The mark already sets both the name and the descriptor, so the
                 text versions would duplicate it. alt carries them for anyone
                 the image does not reach. */}
@@ -474,22 +505,37 @@ export default function Workspace() {
             />
           </button>
 
+          {/* The title carries the weight; the draft and length are metadata and
+              are set as metadata. This was previously one comma spliced line of
+              three equal facts — "THE FINISHER — EVIDENCE TEST, v1, 1 pages" —
+              which read as generated text and got "1 pages" wrong on any script
+              short enough to round to one. */}
           {overlay && (
             <span className="script-title">
-              {overlay.script.title}, {overlay.script.draft_version},{" "}
-              {Math.max(1, Math.round(overlay.script.page_count))} pages
+              <span className="script-name">{overlay.script.title}</span>
+              <span className="script-meta">
+                {overlay.script.draft_version} · {pageLabel(overlay.script.page_count)}
+              </span>
             </span>
           )}
 
-          {/* The escalation banner. This production tells its audience the story
+          {/* The escalation signal. This production tells its audience the story
               is true, which raises the risk tier of every person adjacent
-              subject in the script. */}
+              subject in the script, so it has to be visible.
+              It does not have to be a sentence. It sat next to the title as a
+              second block of prose in its own colour and font, and two loud
+              blocks side by side is what made the masthead look automated. The
+              rule it stands for lives in the tooltip and in the report. */}
           {overlay?.script.truth_claim_framing && (
             <span
               className="framing-banner"
-              title={overlay.script.truth_claim_evidence ?? undefined}
+              title={
+                overlay.script.truth_claim_evidence
+                  ? `Truth claim asserted: "${overlay.script.truth_claim_evidence}". Every person adjacent element is escalated one risk tier.`
+                  : "Truth claim asserted. Every person adjacent element is escalated one risk tier."
+              }
             >
-              True story asserted, every person adjacent element escalated one tier
+              True story
             </span>
           )}
         </div>
@@ -523,19 +569,19 @@ export default function Workspace() {
           )}
 
           <div className="header-controls">
-            <button
+            <button suppressHydrationWarning
               className="btn btn-quiet"
               onClick={() => setPaletteOpen(true)}
               title="Search claims, elements and people"
             >
               Search
-              <kbd className="btn-kbd">⌘K</kbd>
+              <kbd className="btn-kbd">{modKey}K</kbd>
             </button>
 
             {caps.upload && (
               <label className="btn btn-primary">
                 New draft
-                <input
+                <input suppressHydrationWarning
                   type="file"
                   accept=".fountain,.fdx,.pdf,.txt"
                   hidden
@@ -592,13 +638,13 @@ export default function Workspace() {
                 which is why it is not a permanent piece of chrome. */}
             {caps.overlay && view.home !== "docket" && (
               <div className="surface-switch">
-                <button
+                <button suppressHydrationWarning
                   className={`surface-tab ${surface === "native" ? "active" : ""}`}
                   onClick={() => setSurface("native")}
                 >
                   {view.home === "risk" ? "Risk" : "Lines to fix"}
                 </button>
-                <button
+                <button suppressHydrationWarning
                   className={`surface-tab ${surface === "script" ? "active" : ""}`}
                   onClick={() => setSurface("script")}
                 >
@@ -673,7 +719,7 @@ export default function Workspace() {
             <aside className="rail">
               <div className="tabs">
                 {view.rail.map((entry) => (
-                  <button
+                  <button suppressHydrationWarning
                     key={entry}
                     className={`tab ${tab === entry ? "active" : ""}`}
                     onClick={() => setTab(entry)}

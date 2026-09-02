@@ -56,7 +56,7 @@ export function RoleSwitcher({
 
   return (
     <div className="role-switch" ref={wrapRef}>
-      <button
+      <button suppressHydrationWarning
         className="role-trigger"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
@@ -76,7 +76,7 @@ export function RoleSwitcher({
             One document, four workspaces. The server enforces this, not the page.
           </p>
           {ROLE_LIST.map((entry) => (
-            <button
+            <button suppressHydrationWarning
               key={entry.value}
               role="option"
               aria-selected={entry.value === role}
