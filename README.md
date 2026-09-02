@@ -840,9 +840,10 @@ What that run establishes, and what it does not:
 - **The attribution gate is visibly working.** Five sources were dropped with
   `unverifiable quote dropped for …`, each naming the URL and the passage it
   could not stand behind.
-- **Zero grey, again.** B9 is confirmed live and is not a model problem: the
-  strongest available reasoning model still filtered no opinions, because the
-  claims never reach the classifier. The scoping bug is the cause.
+- **Zero grey, again.** This run is what sent the search for B9 in the right
+  direction: the strongest available reasoning model still filtered no
+  opinions, which ruled out the word list and the offline scoping path and
+  left the prompt. Fixed since, see B9.
 - **29 amber against 18 green** is a heavy amber band and is not yet evidence of
   anything. Whether those are correct amber calls is what the seed table exists
   to answer, and that comparison has not been run.
@@ -1014,7 +1015,6 @@ first. The three marked fixed were repaired during this audit.
 | **B7** | **The system fabricated legal findings about real people.** An invented character, "Jonah Reed", was matched to an unrelated real person's obituary and issued: *"his estate controls his publicity rights until 2033. A license is required"*, at 0.9 confidence. Its own rationale noted the provider had concluded wrongly, and it issued the finding anyway | The worst output this system can produce. It names a real stranger's estate in a legal deliverable on the strength of a shared name, and it would send counsel chasing an estate that has nothing to do with the production | **Fixed**, see below. Verified by rerunning the same script: the character is now typed `PERSON_NAME_FICTIONAL` and no claim about any real person is made |
 | **B8** | **Licence requirements were asserted for works that were never identified.** A photograph came back `work_identified: false`, no creator, no rights holder, `copyright_status: unknown`, and was issued `NEEDS_LICENSE` at 0.9. Others were cited to general law review articles about the de minimis doctrine, which describe how copyright works and say nothing about the work in hand | A licence requirement names an owner. Naming one for a work nobody located is an invented obligation, and citing background law as though the subject had been researched dresses a presumption as a finding | **Fixed.** Rerun shows zero unidentified works asserting `NEEDS_LICENSE` |
 
-| **B9** | **The opinion filter has never fired on either script.** Both demo runs report `0 opinions filtered` and `0 grey` | Section 2 calls opinion filtering *"the most legally motivated rule in the system"* and *"its largest budget control"*. The feature carrying the best legal argument in the product renders as a zero in the first command a reader runs | **Open.** Root cause found, see below |
 | **B10** | **The contradicted claims panel prints dialogue fragments.** `the_long_shadow` returns *"Arthur Penn: One question."* and *"Margaret Holloway: Because the second seat is weight."* as contradicted claims. On the new fixture a claim also bleeds across the dialogue boundary and swallows the next character cue: `…we understood one another." OWENS I` | This is the money shot of the entire product. The list of red lines is what a reviewer looks at first and what the video is built around, and neither of those strings is a factual claim | **Open.** Same root cause as B9 |
 
 | **B11** | **A pronoun became a research subject, and resolved.** Ingest tagged "her" as a person span. Identity searched Wikidata for `her` and got back **hertz, the SI unit of frequency**, carried by 97 Wikipedia editions. 97 clears `PROMINENCE_SITELINKS`, so the subject was marked `identified`, described as `living`, and *"The Air Ministry refused her a licence in 1931"* was filed as a defamation grade factual claim against a unit of frequency. `She` resolved to **Sheffield**, the city | The B7 failure through a different door, and worse: B7 needed a shared name to go wrong, this needs only a pronoun, and a screenplay is written in pronouns. Every English pronoun resolves to a prominent entity — `him` to Himachal Pradesh, `his` to historian, `it` to Italy | **Fixed.** Three independent guards, see below |
@@ -1051,6 +1051,35 @@ cost panel rather than only in a log line.
 > use of the partner service, so this is the first thing to fix on the day.
 > `truestory doctor` reports the key as present because it is; presence is not
 > balance.
+
+| **B9** | **The opinion filter had never fired.** Both demo scripts reported `0 opinions filtered` and `0 grey`, offline and live, on the strongest available reasoning model | Section 2 calls opinion filtering *"the most legally motivated rule in the system"* and *"its largest budget control"*. The feature carrying the best legal argument in the product rendered as a zero in the first command anyone runs | **Fixed.** The cause was the prompt, not the model or the scoping. See below |
+
+**How B9 was fixed, and why it took three wrong guesses to find.** The first
+theory was the eighteen adjective `_OPINION_MARKERS` word list. The second was
+claim scoping at [claims.py:431](src/truestory/agents/claims.py), which does
+have a real defect — a sentence is scoped to a subject only if the subject's
+name appears literally in it, and dialogue uses pronouns. Both were plausible
+and neither was the cause, because the live path uses neither.
+
+Running the extractor directly on the one scene that contains three plain
+characterisations returned **thirteen well formed claims and none of them**. The
+model was not misclassifying opinions. It was silently dropping them.
+
+The instruction it was reading said an opinion *"must not be researched, must
+not be coloured in the overlay, and must not consume budget"*. That is an
+accurate description of what happens downstream and it reads, to something
+deciding what to return, as *not wanted*. The prompt now says the opposite in
+as many words: extract every opinion, type it `CHARACTERIZATION`, and let the
+later stages do the filtering, because it is the classification that protects
+the line and not the omission.
+
+The same scene now returns 15 claims, 3 of them opinions, and splits *"he was
+the worst of them, and a coward about it"* into two atomic characterisations.
+The extraction cache version was bumped to `claims_v2`, because every stored
+response predates the change and would replay a run with no opinions in it.
+
+The scoping defect at `claims.py:431` is still real and still open. It affects
+the offline path only, where it produces the dialogue fragments in **B10**.
 
 | **B17** | **Research was a race, and losing it was reported as a finding.** `_await_result` long polled Parallel's result endpoint **exactly once**. `408 Run still active` is not an error on that endpoint — it is the long poll saying its window elapsed and the run is still going, which is the normal first answer for anything deeper than a lite lookup — and it was being returned to the pipeline as failed evidence | This is the defect behind the screenshots. Two adjacent claims about the same fact took opposite verdicts in one run: *"MS Dhoni is from Ranchi"* VERIFIED, *"The BCCI described MS Dhoni as hailing from Ranchi"* UNSUPPORTED, not because the record differs but because one run finished inside the first window and the other did not. The bias is the worst available: deeper processors take longer, depth is assigned by risk, so **the subjects most likely to be dropped were the CRITICAL ones** | **Fixed.** Polls to a deadline (`PARALLEL_RESULT_DEADLINE_SECONDS`, default 420) and treats both 408 and a `status: running` body as "ask again" |
 | **B18** | **The grounded fallback could not cite anything, ever.** It asked for the Search tool and a JSON object in the same call. That does not error, it silently stops searching: the same question asked plainly returns 2–6 grounding chunks, and asked with "return JSON conforming to this schema" appended returns **zero** | Measured, and worse than it looks. It kept answering — and answering *correctly*, calling Owens' four records contradicted and Dhoni's 97 contradicted — entirely from parametric memory with nothing behind it. That is the exact assertion this system exists to prevent, arriving through the fallback path. The envelope was then discarded for having no citations, so a true claim came back UNSUPPORTED having looked like it was researched | **Fixed.** Split into two calls, `RETRIEVE` then `STRUCTURE`. See below |
@@ -1246,12 +1275,10 @@ directions are covered, and both pass. See
 
 Everything above is real work. These three are the ones that change the outcome.
 
-1. **Fix claim scoping** (B9 and B10). One four line block closes both defects a
-   reader sees in the first command they run: the opinion filter that has never
-   fired, and a contradicted claims panel printing dialogue fragments. It also
-   gates everything downstream, because a claim that is never extracted cannot
-   be routed, researched or adjudicated. Half a day, and the highest return
-   available.
+1. **Hosted URL and the three minute video** (item 18). Both are hard
+   submission requirements and neither is started. Everything the demo needs now
+   works: research returns citations, the fallback covers what Parallel does not
+   reach, opinions render grey, and the fabrication traps hold.
 2. **Make Eval B a real blind run** (item 10). It is the differentiator nobody
    else can replicate, and today it measures a YAML file. It is also the only
    mechanism that would have caught B7 and B8 before a human noticed them,
