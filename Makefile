@@ -79,6 +79,13 @@ eval:  ## Eval A, recall and precision against the labelled demo script
 eval-litigation:  ## Eval B, blind runs against the Litigation Set
 	TRUESTORY_MODE=cached $(PY) eval/run_eval.py --suite litigation_set --blind
 
+smoke:  ## Adversarial smoke test of the research path. Live, costs a little.
+	TRUESTORY_MODE=live $(PY) eval/smoke_research.py --provider grounded
+
+smoke-traps:  ## Fabrication and defamation traps only. The two that must never fail.
+	TRUESTORY_MODE=live $(PY) eval/smoke_research.py --provider grounded --only trap
+	TRUESTORY_MODE=live $(PY) eval/smoke_research.py --provider grounded --only defamation
+
 # ── cache ────────────────────────────────────────────────────────────────────
 seed-cache:  ## One paid live run that warms the cache, every later run is free
 	TRUESTORY_MODE=live $(PY) -m truestory.cli warm-cache $(DEMO_SCRIPT)

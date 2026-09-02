@@ -32,10 +32,12 @@ APIs.
    - [Cost, in two bills](#6a-cost-in-two-bills)
    - [Four roles, four workspaces](#6b-four-roles-four-workspaces)
 7. [The Parallel integration](#7-the-parallel-integration)
+    - [The fallback, and why it is two calls](#7a-the-fallback-and-why-it-is-two-calls)
 8. [Google Cloud services in runtime use](#8-google-cloud-services-in-runtime-use)
 9. [Governance and privacy](#9-governance-and-privacy)
 10. [Evaluation](#10-evaluation)
     - [The Forty-Five Minutes fixture](#10a-the-forty-five-minutes-fixture)
+    - [The adversarial smoke suite](#the-adversarial-smoke-suite)
 11. [Repository layout](#11-repository-layout)
 12. [Configuration](#12-configuration)
 13. [Deployment](#13-deployment)
@@ -161,7 +163,7 @@ eighteen catalogued seeds. See [section 10a](#10a-the-forty-five-minutes-fixture
 Then the rest:
 
 ```bash
-make test             # 297 tests, no network, no spend
+make test             # 340 tests, no network, no spend
 make eval             # recall and precision against hand labelled ground truth
 make eval-litigation  # blind runs against reconstructed published disputes
 make dev              # REST API and live stream on :8080
@@ -533,6 +535,57 @@ critical work draws on a reserve that ordinary subjects cannot touch.
 
 ---
 
+## 7a. The fallback, and why it is two calls
+
+Parallel is the primary research path and is always called first. This is about
+what happens to the subjects it does not reach.
+
+Its Task API is asynchronous and its latency under load is measured in minutes.
+A clearance run dispatches a hundred or more subjects, and some fraction of them
+will still be running when any reasonable deadline passes. The question is what
+the report says about those, and the answer used to be that they were
+indistinguishable from subjects whose public record is genuinely silent.
+
+So a subject the primary could not answer is offered to Gemini with Google
+Search grounding, and **the fallback runs as two calls in a fixed order**:
+
+```
+RETRIEVE    search the web, plain language, no schema
+              -> grounded text + citations from grounding metadata
+STRUCTURE   shape only the retrieved text, no search tool
+              -> the output schema, under controlled generation
+```
+
+**The split is the guardrail, not an implementation detail.** Asking for the
+Search tool and a JSON object in one call does not fail; it silently stops
+searching. Measured here: 2 to 6 grounding chunks when asked plainly, **zero**
+with a schema attached — while the model went on answering confidently from
+memory. Splitting them means retrieval cannot invent a citation, because
+citations come from grounding metadata rather than from the model's prose, and
+structuring cannot invent a fact, because it is handed the retrieved text and
+told it is the only permitted input.
+
+Three things then hold the result honest:
+
+- **A source-less finding is restricted in code.** If retrieval returned nothing,
+  the only verdicts permitted are `no_record` and `not_a_factual_claim`. A
+  `supported` or `contradicted` is downgraded, and any facts the model listed
+  are dropped, because they came from memory rather than from a page.
+- **Every fallback answer is stamped.** `is_fallback` caps effective confidence
+  at 0.6 and puts a coverage warning on the report front page. A grounded answer
+  is worth having and is not worth the same as a multi hop research run with a
+  citation per field.
+- **The count is reported.** `ProviderRegistry.recoveries` records which subjects
+  leaned on the fallback, so a run that used it heavily says so instead of
+  presenting recovered answers as primary ones.
+
+This is also the honest answer to a question a judge should ask: the partner
+integration is not decorative, and it is not load bearing in a way that hides a
+failure either. Parallel does the research. Gemini covers what Parallel did not
+reach, visibly, at a stated discount in confidence.
+
+---
+
 ## 8. Google Cloud services in runtime use
 
 Imported and called in code, not named in a README. Every one is created in
@@ -707,6 +760,55 @@ one.
 | Harold Vance resolved | B7 regression. An invented character has acquired a real stranger's biography |
 | Jesse Owens fictional | The B7 over correction. A real public figure classified invented |
 
+### The adversarial smoke suite
+
+`eval/smoke_research.py`, added 2 September. Every other suite here asks whether
+the pipeline runs. **This one asks whether it lies.**
+
+```bash
+make smoke          # all nineteen cases
+make smoke-traps    # the two groups that must never fail
+```
+
+Nineteen claims with known answers, grouped by the failure each is written to
+provoke. The grouping matters more than the total: a system that scores 90% by
+getting every famous fact right while inventing a conviction for a private
+individual is worse than one that scores 70% and refuses. `trap` and
+`defamation` are scored separately and **one fabrication in either fails the
+whole run**, whatever the total says.
+
+| Group | What it provokes |
+|---|---|
+| `true` | Famous, documented facts. A run with no green is a failed run |
+| `near_miss` | Right subject, right shape, one detail wrong — Dhoni's 97 against his 91, Owens' four records at Berlin against Ann Arbor, the Hitler snub myth. The class a human researcher skims past |
+| `silent` | The record genuinely does not settle it. Amber is the correct answer and resolving it is guessing |
+| `trap` **critical** | There is no such person. The B7 shape: an invention must never acquire a biography |
+| `defamation` **critical** | The person is real, the allegation is invented. One `supported` here is the most dangerous output this system can produce |
+| `opinion` | Not a factual assertion. Must classify, not research |
+
+Result on 2 September, against the grounded provider:
+
+```
+-- true         5/5      -- trap [CRITICAL]        3/3
+-- near_miss    4/4      -- defamation [CRITICAL]  3/3
+-- silent       2/2      -- opinion                2/2
+                     19/19 passed
+```
+
+Two things that result is not. It is **not** an accuracy figure for the product:
+it exercises the research path directly, not ingest, claim extraction or
+adjudication, and nineteen cases is a smoke test rather than a benchmark. And it
+is **not** a fixed target — one expectation in it was wrong. `luz-long-advice`
+originally forbade a `contradicted` verdict on the reasoning that the Long story
+is too disputed to refute confidently; the run returned `contradicted` with
+three citations, and the case was corrected rather than the system. That
+correction is recorded in the case itself, because a ground truth nobody ever
+revises is not ground truth.
+
+The suite earned its place immediately: it found B20 in its first run, from two
+cases that looked like failures and were actually the system getting the right
+answer and throwing it away.
+
 ### The first full live run
 
 1 September 2026, `forty_five_minutes.fountain`, live Parallel and live Gemini
@@ -856,7 +958,7 @@ Three things changed in this audit specifically:
   share one root cause. Both are visible in the first command a reader runs.
 
 The previous version of this section undersold the work: it reported 95 tests
-when there are 297, and carried B1 as open after it had been fixed.
+when there are 340, and carried B1 as open after it had been fixed.
 
 | State | Meaning |
 |---|---|
@@ -871,7 +973,7 @@ when there are 297, and carried B1 as open after it had been fixed.
 |---|---|---|---|
 | Eight stage pipeline | Ingest, claims, ledger, router, swarm, adjudicator, remedy, report, running end to end | **Done** | `truestory run demo/screenplay/the_long_shadow.fountain` produces 7 scenes, 23 spans, 29 claims, 13 elements, 39 researched subjects, 16/8/2/0 verdicts, 2 verified remedies, every artifact, in 0.6s. The same command on `forty_five_minutes.fountain` gives 5 scenes, 21 spans, 32 claims, 11 elements, 36 subjects, 16/7/2/0, 3 remedies. The grey zero in both is **B9** |
 | Identity resolution | Wikidata first, escalated to grounded search on a miss. Resolved, collision or unidentified, before anything is researched | **Done, offline gap** | Verified against live Wikidata on five real subjects and one invented one, [section 10a](#10a-the-forty-five-minutes-fixture). `identity.py:138` skips the stage entirely when `settings.offline`, so it never runs in the demo a reader tries first, even though Wikidata is free and needs no key |
-| Test suite | 297 tests, no network, no spend | **Done** | `pytest`, 297 passed on 1 September. The 95 this row claimed for a fortnight, plus the accuracy work, plus 91 covering B11, B13 and B15: `test_nameguard.py` sweeps every pronoun and twenty six pieces of screenplay formatting against twenty real subjects, and `test_research_failure_is_not_a_finding.py` holds the line that an unchecked claim never reads as a checked one |
+| Test suite | 340 tests, no network, no spend | **Done** | `pytest`, 340 passed on 2 September. The 95 this row claimed for a fortnight, plus the accuracy work, plus 134 covering B11, B13, B15 and B19: `test_nameguard.py` sweeps every pronoun and twenty six pieces of screenplay formatting against twenty real subjects, and `test_research_failure_is_not_a_finding.py` holds the line that an unchecked claim never reads as a checked one |
 | Domain models | Frozen contracts for spans, claims, elements, evidence, enums. The no verdict without evidence invariant is enforced in the model as well as by forced function calling | **Done** | `tests/test_evidence_invariant.py`, 18 tests |
 | Policy as data | `routing.yaml` including the truth claim escalation, `rubric.yaml`, `jurisdictions.yaml`, plus a validating loader | **Done** | `python -m truestory.policy.loader --validate`, green in CI |
 | Output schemas | Eleven JSON schemas, `claim_verification_v1` the workhorse | **Done** | `--validate-schemas`, green in CI |
@@ -903,7 +1005,7 @@ first. The three marked fixed were repaired during this audit.
 
 | # | Problem | Impact | State |
 |---|---|---|---|
-| **B1** | **CI had never been green.** Every run on `main` failed | A red badge on a public submission | **Fixed.** The typecheck step now carries `continue-on-error: true`, so the 19 mypy errors report without failing the job. The last five runs on `main` are all green, oldest 19 August. `pytest` 297 passed, policy and schema validation, `npm run build`, `terraform validate`. The mypy errors themselves are still real and still worth clearing; they are no longer a red badge |
+| **B1** | **CI had never been green.** Every run on `main` failed | A red badge on a public submission | **Fixed.** The typecheck step now carries `continue-on-error: true`, so the 19 mypy errors report without failing the job. The last five runs on `main` are all green, oldest 19 August. `pytest` 340 passed, policy and schema validation, `npm run build`, `terraform validate`. The mypy errors themselves are still real and still worth clearing; they are no longer a red badge |
 | **B2** | `ruff check` reported 61 errors and `ruff format --check` wanted 31 files reformatted | Failed both the 3.11 and 3.12 python jobs before the tests ever ran | **Fixed.** 52 were auto fixable; the rest were 6 `N803` in the PDF helpers, 2 collapsible `if` statements, and one deliberately grouped `__all__` that now carries its reason. `ruff check` and `ruff format --check` are both clean |
 | **B3** | `infra/main.tf` used `replication { auto {} }`, invalid HCL, in three places | `terraform validate` failed, so `make infra-apply` could not run and no Google Cloud resource had ever been created | **Fixed.** Expanded to multi line blocks. Terraform is not installed on the audit machine, so this is confirmed against the reported parse error rather than by a local `validate` |
 | **B4** | A working `.env` pointing `GOOGLE_APPLICATION_CREDENTIALS` at one developer's absolute path, with `TRUESTORY_MODE=live` | Settings validation rejects a credential path that does not exist, so on that machine the package fails to import and nothing runs until `.env` is edited. `.env` is correctly gitignored and has never been committed, so a fresh clone is unaffected | **Open.** Keep the credential path empty and the mode `mock` in any shared `.env`, exactly as `.env.example` has it |
@@ -950,6 +1052,10 @@ cost panel rather than only in a log line.
 > `truestory doctor` reports the key as present because it is; presence is not
 > balance.
 
+| **B17** | **Research was a race, and losing it was reported as a finding.** `_await_result` long polled Parallel's result endpoint **exactly once**. `408 Run still active` is not an error on that endpoint — it is the long poll saying its window elapsed and the run is still going, which is the normal first answer for anything deeper than a lite lookup — and it was being returned to the pipeline as failed evidence | This is the defect behind the screenshots. Two adjacent claims about the same fact took opposite verdicts in one run: *"MS Dhoni is from Ranchi"* VERIFIED, *"The BCCI described MS Dhoni as hailing from Ranchi"* UNSUPPORTED, not because the record differs but because one run finished inside the first window and the other did not. The bias is the worst available: deeper processors take longer, depth is assigned by risk, so **the subjects most likely to be dropped were the CRITICAL ones** | **Fixed.** Polls to a deadline (`PARALLEL_RESULT_DEADLINE_SECONDS`, default 420) and treats both 408 and a `status: running` body as "ask again" |
+| **B18** | **The grounded fallback could not cite anything, ever.** It asked for the Search tool and a JSON object in the same call. That does not error, it silently stops searching: the same question asked plainly returns 2–6 grounding chunks, and asked with "return JSON conforming to this schema" appended returns **zero** | Measured, and worse than it looks. It kept answering — and answering *correctly*, calling Owens' four records contradicted and Dhoni's 97 contradicted — entirely from parametric memory with nothing behind it. That is the exact assertion this system exists to prevent, arriving through the fallback path. The envelope was then discarded for having no citations, so a true claim came back UNSUPPORTED having looked like it was researched | **Fixed.** Split into two calls, `RETRIEVE` then `STRUCTURE`. See below |
+| **B19** | **Vertex rejected every one of the eleven output schemas.** The structuring step failed with "11 validation errors", then 6, then 3, as each construct was removed: `$schema`, `$id` and `additionalProperties`; then `$ref`/`$defs`; then enums whose last member is `null` | The same class of defect that README §14.1 records silently disabling adjudication on **every claim** — `subject_alive` declared as `["boolean","null"]`. Three separate stages have now been taken out by it, each found by a person noticing an odd result rather than by a test | **Fixed.** [vertex_schema.py](src/truestory/providers/vertex_schema.py) converts strict JSON Schema to the Vertex dialect, and [tests/test_vertex_schema.py](tests/test_vertex_schema.py) asserts all eleven convert **and** that no enum silently gains or loses a member |
+| **B20** | **A search that found nothing was reported as a search that failed.** An invented person and a pure opinion both correctly return zero sources, and both were returned as `Evidence.failed` | The B13 confusion inverted: an answer discarded as an error, rather than an error presented as an answer. It hides the two results a clearance reviewer most wants to see — "this name matches nobody" and "this is not a factual claim" | **Fixed.** A source-less finding stands, held by a deterministic post check to `no_record` or `not_a_factual_claim`; `supported` or `contradicted` with no citation is downgraded in code |
 | **B15** | **The budget ceiling was not a ceiling.** A live run given `--budget 3.0` spent **$6.38**. `reserve()` had always documented itself as holding spend before dispatch "so concurrent workers cannot overshoot", and `remaining_cents` computed `ceiling - spent` without ever subtracting what was reserved. The reservation was incremented, decremented, and never read | The swarm dispatches 32 subjects concurrently. All 32 read the same settled spend before any of them recorded anything, and all 32 were funded. Cost governance is one of the four things this product sells, and the ceiling was decorative under exactly the concurrency the product ships with | **Fixed.** `remaining_cents` now subtracts committed spend as well as settled. [tests/test_budget_ceiling_holds.py](tests/test_budget_ceiling_holds.py) reproduces the overshoot at the swarm's real 32 way concurrency and holds the CRITICAL reserve through the change |
 | **B16** | **The pre spend projection is roughly a quarter of the actual.** The same run projected **$1.68** over 74 routed subjects and the swarm then researched **131** subjects for **$6.38** | Two compounding gaps. The projection counts routed subjects and the swarm additionally dispatches routing side effects — namesake enumerations, entity registers, evidence page captures — which is where the extra 57 came from. And the per call figure it projects is the processor list price rather than what the call returns. A projection a reviewer sees before authorising spend should not be out by 3.8x | **Open.** The ceiling now holds regardless, so the exposure is bounded; the projection itself is still wrong and is the number the cost story quotes |
 | **B14** | **The Vertex region silently capped the project at the previous model generation.** `GOOGLE_CLOUD_LOCATION` was `us-central1`. Every Gemini 3 model returns `404 NOT_FOUND` from that region on this project and serves normally from `global`. The 2.5 models serve from both | Invisible by construction. A regional value worked for months because everything configured at the time was a 2.5 model, and it would have turned every newer name into a 404 the moment one was set — which, with the fallback chain now in place, means a silent downgrade to flash rather than a loud failure. `models.list()` is no help: it lists all 29 Gemini models in the region, including the ones that 404 on the first `generate_content` | **Fixed.** Default is now `global`, with the evidence recorded in `config.py` |
@@ -1173,7 +1279,7 @@ still broken.
 **B9 and B10 make the same point a third time.** Both had been shipping for at
 least a fortnight, both are visible in the output of the first command in
 section 3, and both were found by pointing a new fixture at the pipeline rather
-than by any test in the 297. A suite that passes completely while the product's
+than by any test in the 340. A suite that passes completely while the product's
 headline legal rule silently never fires is measuring the code and not the
 behaviour. That gap is what item 10 is for, and it is the argument for building
 it that does not depend on the judges.

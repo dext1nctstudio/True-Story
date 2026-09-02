@@ -20,6 +20,8 @@ Two implementation notes that matter for the demo:
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -37,10 +39,33 @@ from truestory.providers.base import (
     _resolve_api_key,
 )
 
+log = logging.getLogger("truestory.parallel")
+
 #: Status codes that mean the account, not the request, is the problem. These
 #: answer identically for every remaining subject, so they end the provider's
 #: participation in the run instead of being recorded as a research result.
 _OUT_OF_SERVICE = frozenset({401, 402, 403})
+
+#: How long each individual long poll asks the server to hold the connection.
+#: Kept well under the overall deadline so a run that finishes early is
+#: collected promptly and a stalled socket is retried rather than waited out.
+_RESULT_POLL_WINDOW_SECONDS = 45
+
+
+def _still_running(resp: httpx.Response) -> bool:
+    """Whether a 2xx body is a status envelope rather than a finished result.
+
+    Parallel signals "not done" two ways depending on the path: a 408 with
+    "Run still active", and a 200 carrying `status: running`. Both mean poll
+    again, and only the first was being handled.
+    """
+    if resp.status_code != 200:
+        return False
+    try:
+        body = resp.json()
+    except Exception:
+        return False
+    return isinstance(body, dict) and body.get("status") in {"queued", "running"}
 
 
 class ParallelTaskProvider(ResearchProvider):
@@ -169,13 +194,67 @@ class ParallelTaskProvider(ResearchProvider):
     async def _await_result(
         self, request: ResearchRequest, run_id: str, dispatch_ms: int
     ) -> Evidence:
-        """Block on Parallel's result endpoint, which long polls server side."""
-        try:
-            resp = await self._http().get(
-                f"/v1/tasks/runs/{run_id}/result",
-                params={"timeout": int(settings.parallel_timeout_seconds)},
-                timeout=settings.parallel_timeout_seconds + 15,
-            )
+        """Long poll Parallel's result endpoint until the run completes.
+
+        **This used to poll exactly once**, and a single `408 Run still active`
+        was returned to the pipeline as `Evidence.failed`. 408 on this endpoint
+        is not an error. It is the long poll saying the window elapsed and the
+        run is still going, which is the normal answer for anything deeper than
+        a lite lookup, and the correct response to it is to ask again.
+
+        Polling once made research a race. Two adjacent claims about the same
+        fact came back with opposite verdicts in the same run — "MS Dhoni is
+        from Ranchi" VERIFIED, "The BCCI described MS Dhoni as hailing from
+        Ranchi" UNSUPPORTED — not because the record differs between them but
+        because one run happened to finish inside the first window and the
+        other did not. Every subject that lost that race was reported as an
+        amber finding about a silent record.
+
+        The bias is the worst possible one: deeper processors take longer, and
+        depth is assigned by risk, so the subjects most likely to be dropped
+        were the CRITICAL ones.
+        """
+        deadline = asyncio.get_event_loop().time() + settings.parallel_result_deadline_seconds
+        attempts = 0
+
+        while True:
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                # Genuinely out of time. Hand back the handle so the webhook
+                # path can complete it if one is ever configured, rather than
+                # inventing a finding about a run that is still going.
+                log.warning(
+                    "parallel run %s still active after %ss and %s polls; parking it",
+                    run_id,
+                    settings.parallel_result_deadline_seconds,
+                    attempts,
+                )
+                return self._pending(request, run_id, dispatch_ms)
+
+            window = int(min(remaining, _RESULT_POLL_WINDOW_SECONDS))
+            attempts += 1
+            try:
+                resp = await self._http().get(
+                    f"/v1/tasks/runs/{run_id}/result",
+                    params={"timeout": max(1, window)},
+                    timeout=window + 15,
+                )
+            except httpx.TimeoutException:
+                continue  # the socket gave up before the server did; ask again
+            except Exception as exc:
+                return Evidence.failed(
+                    request.subject_id,
+                    request.question,
+                    self._qualified_name(request.processor),
+                    f"result fetch failed: {type(exc).__name__}: {exc}",
+                )
+
+            if resp.status_code == 408 or _still_running(resp):
+                continue
+
+            if resp.status_code in _OUT_OF_SERVICE:
+                raise ProviderOutOfService(self.name, f"HTTP {resp.status_code}: {resp.text[:300]}")
+
             if resp.status_code >= 400:
                 return Evidence.failed(
                     request.subject_id,
@@ -183,18 +262,8 @@ class ParallelTaskProvider(ResearchProvider):
                     self._qualified_name(request.processor),
                     f"result HTTP {resp.status_code}: {resp.text[:200]}",
                 )
+
             return self.to_evidence(request, resp.json(), dispatch_ms)
-        except httpx.TimeoutException:
-            # Still running at the deadline: hand back the handle so the webhook
-            # path can finish it if one is ever configured.
-            return self._pending(request, run_id, dispatch_ms)
-        except Exception as exc:
-            return Evidence.failed(
-                request.subject_id,
-                request.question,
-                self._qualified_name(request.processor),
-                f"result fetch failed: {type(exc).__name__}: {exc}",
-            )
 
     # ── payload ──────────────────────────────────────────────────────────────
     def _build_payload(self, request: ResearchRequest, processor: str) -> dict[str, Any]:
