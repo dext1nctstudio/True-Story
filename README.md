@@ -809,7 +809,57 @@ The suite earned its place immediately: it found B20 in its first run, from two
 cases that looked like failures and were actually the system getting the right
 answer and throwing it away.
 
-### The first full live run
+### The 2 September live run
+
+`forty_five_minutes.fountain`, live Parallel and live Gemini, after B9 and B17
+through B21 were fixed.
+
+```
+  ingest    5 scenes, 43 spans TRUE STORY ASSERTED
+  claims    51 extracted
+  ledger    23 elements (1.87x reduction)
+  identity  21 subjects, 16 resolved, 1 collision, 5 unidentified,
+            7 claims settled without research
+  routing   71 subjects, projected $1.60
+  swarm     83 subjects, 0 failures, $4.00 in 466.7s
+  verdicts  23 green · 22 amber · 3 red · 3 grey · 60 counsel
+  remedies  4 verified of 4 proposed
+  cost      $0.27 research + model, 1037.5s
+```
+
+**The first run with a complete verdict spread.** Green, amber, red and — for
+the first time in this project's history — **grey**. Zero research failures.
+Identity resolved 16 of 21 subjects and settled 7 claims without dispatching
+research at all, which is the path that stops a claim being filed against a
+subject nobody bears.
+
+**And it is not yet accurate.** The three red verdicts are these:
+
+```
+  p 1 2/8  Hitler left the stadium before Jesse won any events.
+  p 1 2/8  Jesse set four world records at the Big Ten meet in Ann Arbor.
+  p     5  Luz Long showed Jesse Owens where to jump.
+```
+
+Those are **the corrections, not the falsehoods.** In the script those lines are
+spoken by Snyder to rebut the myths, and the seeded falsehoods they rebut —
+S-01, the Hitler snub, and S-02, the four records relocated to Berlin — are not
+among the red. The system is marking the true statement contradicted and letting
+the false one stand.
+
+Part of it is arguable: sources differ on whether Owens *set* four world records
+at Ann Arbor or set three and tied one, so a contradiction there is defensible
+on a technicality and useless in practice. The Hitler line is not arguable and
+is simply wrong.
+
+This is precisely what the seed table in
+[section 10a](#10a-the-forty-five-minutes-fixture) exists to measure, and it is
+the outstanding work: **adjudication needs a tuning pass against the expected
+verdicts before any accuracy claim is made, and before the demo is recorded.**
+The pipeline now runs clean end to end; what it concludes is a separate
+question, and this section is not evidence about it.
+
+### The 1 September live run
 
 1 September 2026, `forty_five_minutes.fountain`, live Parallel and live Gemini
 on the Gemini 3 generation. This is the run that produced B13 through B16.
@@ -1080,6 +1130,19 @@ response predates the change and would replay a run with no opinions in it.
 
 The scoping defect at `claims.py:431` is still real and still open. It affects
 the offline path only, where it produces the dialogue fragments in **B10**.
+
+| **B21** | **The swarm over-dispatched Parallel and starved it.** `SWARM_MAX_CONCURRENCY` was 32, chosen on the reasoning quoted in `swarm.py` that Parallel's Task API accepts roughly two thousand requests a minute. That is an arrival **rate**. The binding constraint is how many runs an account may have **active** at once, and it is far lower | This is why B17 looked worse than it was. Over-dispatching does not fail loudly, it queues: every subject ages out at the deadline, the report is carried entirely by the grounded fallback, and Parallel is billed for runs nobody collected. It also reads, from the outside, exactly like a partner integration that does not work | **Fixed.** Default is 8 |
+
+Measured against this account on 2 September, and it is not a marginal effect:
+
+| Concurrency | Completed | Wall |
+|---|---|---|
+| 32 | **0 of 35** — every run parked at the 420s deadline | — |
+| 6 | **12 of 12** | 141s, slowest 141s |
+
+The same lookup in isolation takes 25 to 98 seconds. Eight is the shipped
+default: enough margin to stay out of the queueing regime, and low enough that
+Parallel actually returns the research it is being paid for.
 
 | **B17** | **Research was a race, and losing it was reported as a finding.** `_await_result` long polled Parallel's result endpoint **exactly once**. `408 Run still active` is not an error on that endpoint — it is the long poll saying its window elapsed and the run is still going, which is the normal first answer for anything deeper than a lite lookup — and it was being returned to the pipeline as failed evidence | This is the defect behind the screenshots. Two adjacent claims about the same fact took opposite verdicts in one run: *"MS Dhoni is from Ranchi"* VERIFIED, *"The BCCI described MS Dhoni as hailing from Ranchi"* UNSUPPORTED, not because the record differs but because one run finished inside the first window and the other did not. The bias is the worst available: deeper processors take longer, depth is assigned by risk, so **the subjects most likely to be dropped were the CRITICAL ones** | **Fixed.** Polls to a deadline (`PARALLEL_RESULT_DEADLINE_SECONDS`, default 420) and treats both 408 and a `status: running` body as "ask again" |
 | **B18** | **The grounded fallback could not cite anything, ever.** It asked for the Search tool and a JSON object in the same call. That does not error, it silently stops searching: the same question asked plainly returns 2–6 grounding chunks, and asked with "return JSON conforming to this schema" appended returns **zero** | Measured, and worse than it looks. It kept answering — and answering *correctly*, calling Owens' four records contradicted and Dhoni's 97 contradicted — entirely from parametric memory with nothing behind it. That is the exact assertion this system exists to prevent, arriving through the fallback path. The envelope was then discarded for having no citations, so a true claim came back UNSUPPORTED having looked like it was researched | **Fixed.** Split into two calls, `RETRIEVE` then `STRUCTURE`. See below |
