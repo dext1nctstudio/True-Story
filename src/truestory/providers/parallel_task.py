@@ -101,6 +101,30 @@ class ParallelTaskProvider(ResearchProvider):
             )
         return self._client
 
+    def _rotate_key(self) -> bool:
+        """Move to the next configured key after this one came back drained.
+
+        Returns whether a different key is now in use. The live client carries
+        the key in a header set at construction, so the header is updated in
+        place rather than rebuilding the connection pool mid run.
+
+        `KeyPool.retire` is idempotent under concurrency, which matters: the
+        swarm has eight subjects in flight and all eight will see the 402 within
+        milliseconds of each other. Without that, the first failure would
+        advance the pool and the other seven would advance it seven more times,
+        burning through keys that still had credit.
+        """
+        from truestory.providers.base import KEY_POOL
+
+        nxt = KEY_POOL.retire(self.api_key)
+        if not nxt or nxt == self.api_key:
+            return False
+
+        self.api_key = nxt
+        if self._client is not None:
+            self._client.headers["x-api-key"] = nxt
+        return True
+
     async def close(self) -> None:
         if self._client is not None:
             await self._client.aclose()
@@ -128,11 +152,14 @@ class ParallelTaskProvider(ResearchProvider):
                 if resp.status_code in _OUT_OF_SERVICE:
                     # 402 drained, 401 rejected key, 403 revoked permission.
                     # None of these will answer differently for the next
-                    # subject, so the provider leaves service now rather than
-                    # failing every remaining subject the same way.
-                    raise ProviderOutOfService(
-                        self.name, f"HTTP {resp.status_code}: {resp.text[:300]}"
-                    )
+                    # subject on the same key, so try the next key first and
+                    # only leave service when the pool is spent.
+                    if self._rotate_key():
+                        resp = await self._http().post("/v1/tasks/runs", json=payload)
+                    if resp.status_code in _OUT_OF_SERVICE:
+                        raise ProviderOutOfService(
+                            self.name, f"HTTP {resp.status_code}: {resp.text[:300]}"
+                        )
                 if resp.status_code >= 400:
                     raise ProviderError(
                         self.name,
