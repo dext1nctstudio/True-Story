@@ -152,6 +152,15 @@ class Settings(BaseSettings):
     parallel_api_key: str = Field(default="", alias="PARALLEL_API_KEY")
     parallel_api_base: str = Field(default="https://api.parallel.ai", alias="PARALLEL_API_BASE")
     parallel_timeout_seconds: int = Field(default=120, alias="PARALLEL_TIMEOUT_SECONDS")
+    # How long to keep long polling one Task run before parking it. The result
+    # endpoint answers 408 "Run still active" whenever its window elapses, which
+    # for anything deeper than a lite lookup is the normal first answer, so this
+    # is the number that decides whether deep research completes at all rather
+    # than a safety valve. Generous on purpose: a parked subject becomes an
+    # amber finding about a record nobody read.
+    parallel_result_deadline_seconds: int = Field(
+        default=420, alias="PARALLEL_RESULT_DEADLINE_SECONDS"
+    )
     parallel_use_fast: bool = Field(default=True, alias="PARALLEL_USE_FAST_VARIANTS")
     parallel_webhook_secret: str = Field(default="", alias="PARALLEL_WEBHOOK_SECRET")
     parallel_webhook_url: str = Field(default="", alias="PARALLEL_WEBHOOK_URL")

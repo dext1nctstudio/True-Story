@@ -75,6 +75,9 @@ crash.log
 # ── runtime artifacts ─────────────────────────────────────
 .cache/
 .truestory_cache/
+# Local stand-in for the Cloud Storage evidence bucket, used when
+# google-cloud-storage is not installed. Run artefacts, never source.
+.truestory_blobs/
 .truestory_cache.*/
 runs/
 artifacts/
