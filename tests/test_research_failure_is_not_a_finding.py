@@ -203,13 +203,22 @@ def test_an_outage_produces_a_blocking_coverage_warning():
     state.claims[1].research_failed = True
 
     warnings = pipeline._outage_warnings(state)
-    joined = " ".join(warnings).lower()
+    joined = " ".join(warnings)
+    lowered = joined.lower()
 
     assert warnings, "an outage must reach the front page"
-    assert "out of service" in joined
-    assert "402" in joined
-    assert "not fileable" in joined, "the report must state it cannot be filed"
-    assert "2 of 2" in joined, "the ratio is the whole story"
+
+    # It has to say what happened, in words, without the vendor's error format.
+    assert "run out of credit" in lowered
+    assert "2 of 2 subjects" in lowered, "the ratio is the whole story"
+    assert "top up" in lowered, "a warning with no action is half a warning"
+
+    # And it must not read like a stack trace. The audience is a production's
+    # counsel deciding whether to file the document this appears on.
+    assert "402" not in joined
+    assert "ref_id" not in joined
+    assert "{" not in joined and "}" not in joined, "raw JSON reached a deliverable"
+    assert "parallel_task" not in joined, "an internal provider name is not operator copy"
 
 
 def test_no_outage_produces_no_warning():
