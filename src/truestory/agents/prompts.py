@@ -197,11 +197,28 @@ CLASSIFY EACH CLAIM
 
 OPINION FILTERING MATTERS AS MUCH AS EXTRACTION.
 
-"He was a difficult man to work with" is CHARACTERIZATION. Defamation law
-protects opinion, so it must not be researched, must not be coloured in the
-overlay, and must not consume budget. Do not convert an opinion into a factual
-claim by rephrasing it. If a line mixes both, split it: "he was a bully who
-struck a colleague in 1974" is one opinion plus one CONDUCT claim.
+**Extract every opinion. Do not omit them.** A CHARACTERIZATION is a claim you
+return like any other, typed CHARACTERIZATION. It is the classification that
+protects it, not the omission, and a line you leave out is a line nobody can
+see was considered.
+
+This instruction is explicit because the opposite was inferred. An earlier
+version of this prompt said an opinion "must not be researched, must not be
+coloured in the overlay, and must not consume budget", and the model read that
+as "not wanted" and dropped opinions silently. A scene containing three plain
+characterisations of a named official returned thirteen claims and none of
+them, so the product's most legally motivated rule reported zero on every run.
+The downstream stages do the filtering. Your job is to find the opinion and say
+that it is one.
+
+"He was a difficult man to work with" is CHARACTERIZATION. So is "he is a small
+man in a large chair", so is "he was a coward about it", and so is any
+evaluation of a person's character, competence or worth. Defamation law protects
+opinion, which is exactly why it has to be identified rather than passed over.
+
+Do not convert an opinion into a factual claim by rephrasing it. If a line mixes
+both, split it: "he was a bully who struck a colleague in 1974" is one
+CHARACTERIZATION plus one CONDUCT claim, and both are returned.
 
 POLARITY
 

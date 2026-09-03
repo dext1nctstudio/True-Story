@@ -12,6 +12,8 @@ registry rather than left to a reviewer to notice.
 
 from __future__ import annotations
 
+import logging
+import threading
 import time
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
@@ -20,6 +22,8 @@ from typing import Any
 
 from truestory.models.enums import Processor, RiskTier
 from truestory.models.evidence import Evidence
+
+log = logging.getLogger("truestory.providers")
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,7 +227,9 @@ class EnumerationProvider(ResearchProvider):
 
 
 def _resolve_api_key() -> str:
-    """The Parallel key. Which source wins depends on where the code is running.
+    """The Parallel key currently in use. See `KeyPool` for the rotation.
+
+    Which source wins depends on where the code is running.
 
     Deployed, the credential lives in Secret Manager and never in an
     environment variable, a container image or the repository.
@@ -237,17 +243,106 @@ def _resolve_api_key() -> str:
     mean, so it is also the same rule `current_principal` already uses for
     identity.
     """
+    return KEY_POOL.current()
+
+
+def _configured_keys() -> list[str]:
+    """Every key available, in preference order, from whichever source applies."""
     from truestory.config import settings as _settings
 
+    raw = ""
     if _settings.env_name == "local":
         local = _settings.parallel_api_key
         if local and not local.startswith("PLACEHOLDER"):
-            return local
+            raw = local
 
-    from truestory.storage.secrets import get_secret
+    if not raw:
+        from truestory.storage.secrets import get_secret
 
-    try:
-        value = get_secret("parallel_api_key")
-    except Exception:  # pragma: no cover - never fail a run over resolution
-        value = ""
-    return value or _settings.parallel_api_key
+        try:
+            raw = get_secret("parallel_api_key")
+        except Exception:  # pragma: no cover - never fail a run over resolution
+            raw = ""
+        raw = raw or _settings.parallel_api_key
+
+    keys = [k.strip() for k in (raw or "").split(",")]
+    return [k for k in keys if k and not k.startswith("PLACEHOLDER")]
+
+
+class KeyPool:
+    """The configured Parallel keys, and which one is still funded.
+
+    `PARALLEL_API_KEY` accepts a comma separated list, tried in order.
+
+    This exists because of what a drained account actually costs here. A
+    clearance run dispatches a hundred or more subjects over several minutes,
+    and a key that runs out halfway through does not degrade — every remaining
+    subject fails, and before the fix recorded as B13 each of those failures was
+    rendered as a finding that the public record was silent. A key drained
+    during a recording takes the whole take with it.
+
+    Rotation is not a substitute for having credit. It buys the run enough room
+    to finish and says clearly in the log which key it finished on.
+    """
+
+    def __init__(self) -> None:
+        self._keys: list[str] | None = None
+        self._index = 0
+        self._lock = threading.Lock()
+
+    def _load(self) -> list[str]:
+        if self._keys is None:
+            self._keys = _configured_keys()
+        return self._keys
+
+    def current(self) -> str:
+        with self._lock:
+            keys = self._load()
+            if not keys:
+                return ""
+            return keys[min(self._index, len(keys) - 1)]
+
+    def retire(self, spent: str) -> str | None:
+        """Retire the key that just came back drained; return the next, if any.
+
+        Idempotent under concurrency. The swarm runs eight subjects at once and
+        they will all hit the 402 within a few milliseconds of each other, so
+        the first caller advances the index and the rest simply read the key it
+        moved to rather than advancing seven more times and exhausting a pool
+        that still had credit in it.
+        """
+        with self._lock:
+            keys = self._load()
+            if not keys:
+                return None
+            if keys[min(self._index, len(keys) - 1)] == spent and self._index < len(keys) - 1:
+                self._index += 1
+                log.warning(
+                    "parallel key %d of %d is drained; continuing on key %d",
+                    self._index,
+                    len(keys),
+                    self._index + 1,
+                )
+            if self._index >= len(keys):
+                return None
+            nxt = keys[self._index]
+            return nxt if nxt != spent else None
+
+    def exhausted(self) -> bool:
+        with self._lock:
+            keys = self._load()
+            return not keys or self._index >= len(keys) - 1
+
+    def status(self) -> dict[str, Any]:
+        """What to say on the report when spend is the reason a run stopped."""
+        with self._lock:
+            keys = self._load()
+            return {
+                "configured": len(keys),
+                "in_use": self._index + 1 if keys else 0,
+                "exhausted": not keys or self._index >= len(keys) - 1,
+            }
+
+
+#: Process wide, because every Parallel provider shares one account.
+KEY_POOL = KeyPool()

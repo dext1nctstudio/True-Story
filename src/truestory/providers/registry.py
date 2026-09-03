@@ -78,6 +78,10 @@ class ProviderRegistry:
         #: an infrastructure failure is stated as one on the front page rather
         #: than distributed silently across every subject as "no record".
         self.outages: dict[str, str] = {}
+        #: Subjects the primary could not answer and the fallback rescued, plus
+        #: any fallback errors. Reported so a run that leaned on the fallback
+        #: says so rather than presenting recovered answers as primary ones.
+        self.recoveries: dict[str, list[str]] = {}
         self._health_lock = asyncio.Lock()
         self.cache = CachedProvider(backend=LocalCacheBackend())
         self.selections: list[Selection] = []
@@ -252,6 +256,27 @@ class ProviderRegistry:
         if selection.is_fallback and not evidence.is_fallback:
             evidence = _mark_fallback(evidence)
 
+        # The primary answered, and answered with nothing usable. Health based
+        # fallback never fires here, because the provider is up: it accepted the
+        # run, it simply did not return a citable result before the deadline.
+        #
+        # That is the common case rather than the exotic one. Parallel's Task
+        # API is asynchronous and its latency is measured in minutes under load;
+        # a run that is still active when the deadline passes comes back parked,
+        # with no citations, and every subject in that state was being reported
+        # as an amber finding about a silent public record. On the run that
+        # exposed this, two adjacent claims about the same fact took opposite
+        # verdicts purely on which one finished first.
+        #
+        # Parallel is still called first, always, and its result is preferred
+        # whenever it arrives. This only decides what happens to the subjects it
+        # did not reach, and the alternative to a stamped fallback answer is not
+        # a better answer, it is a fabricated silence.
+        if not evidence.is_usable:
+            recovered = await self._recover_with_fallback(decision, effective_request, evidence)
+            if recovered is not None:
+                evidence = recovered
+
         self.budget.record(
             evidence.cost_cents,
             decision.tier,
@@ -268,6 +293,47 @@ class ProviderRegistry:
             self.cache.backend.put(effective_request.cache_key(), evidence.to_dict())
 
         return evidence
+
+    async def _recover_with_fallback(
+        self,
+        decision: RoutingDecision,
+        request: ResearchRequest,
+        primary: Evidence,
+    ) -> Evidence | None:
+        """Ask the fallback for a subject the primary could not answer.
+
+        Returns None when there is nothing better to offer, in which case the
+        primary's empty envelope stands and the claim is correctly reported as
+        unchecked rather than as checked and silent.
+
+        The recovered envelope is stamped `is_fallback`, which caps effective
+        confidence at 0.6 and puts a coverage warning on the report front page.
+        A grounded answer is worth having and is not worth the same as a multi
+        hop research run with a citation per field, and the difference stays
+        visible in the deliverable.
+        """
+        for name in self.FALLBACK_CHAIN:
+            if name == primary.provider.split(":")[0]:
+                continue
+            provider = self._providers.get(name)
+            if provider is None or not provider.can_serve(decision.tier):
+                continue
+            if not await self._is_up(name):
+                continue
+
+            try:
+                recovered = await provider.investigate(request)
+            except Exception as exc:  # a failing fallback must not fail the run
+                self.recoveries.setdefault("errors", []).append(f"{name}: {exc}")
+                continue
+
+            if not recovered.is_usable:
+                continue
+
+            self.recoveries.setdefault("recovered", []).append(request.subject_id)
+            return _mark_fallback(recovered)
+
+        return None
 
     # ── health ───────────────────────────────────────────────────────────────
     async def _is_up(self, name: str) -> bool:
@@ -307,6 +373,7 @@ class ProviderRegistry:
             "cache_hit_rate": round(self.cache_hit_rate, 4),
             "degradations": sum(1 for s in self.selections if s.degraded),
             "outages": dict(self.outages),
+            "recovered_by_fallback": len(self.recoveries.get("recovered", [])),
             "budget": self.budget.snapshot(),
         }
 

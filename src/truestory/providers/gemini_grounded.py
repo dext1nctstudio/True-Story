@@ -25,6 +25,7 @@ from truestory.config import settings
 from truestory.models.evidence import Citation, Evidence
 from truestory.providers import model_fallback
 from truestory.providers.base import ResearchProvider, ResearchRequest
+from truestory.providers.vertex_schema import to_vertex_schema
 
 
 class GeminiGroundedProvider(ResearchProvider):
@@ -49,46 +50,58 @@ class GeminiGroundedProvider(ResearchProvider):
         return self._client
 
     async def investigate(self, request: ResearchRequest) -> Evidence:
-        from google.genai import types
+        """Two steps, in a fixed order, and the order is the guardrail.
 
-        prompt = (
-            "You are a clearance researcher. Answer the question strictly from "
-            "sources you can find and cite. If the record does not settle the "
-            "question, say so explicitly rather than inferring. Never state a "
-            "fact about a real person that you cannot point to a source for.\n\n"
-            f"Question: {request.question}\n\n"
-            f"Jurisdictions in scope: {', '.join(request.jurisdictions) or 'US'}\n\n"
-            "Return JSON conforming to this schema:\n"
-            f"{json.dumps(request.output_schema)}"
-        )
+            RETRIEVE   search the web, in plain language, no schema
+            STRUCTURE  shape only what was retrieved, no search tool
 
+        **Why it is two calls and not one.** Asking for the search tool and a
+        JSON object in the same request does not error, it quietly stops
+        searching. Measured on this project: the same question asked plainly
+        returns two to six grounding chunks, and asked with "return JSON
+        conforming to this schema" appended returns **zero** while still
+        answering confidently. The verdicts it produced that way were often
+        right — it correctly called Owens' four world records contradicted, and
+        Dhoni's 97 contradicted — and every one of them was drawn from the
+        model's memory with nothing behind it.
+
+        That is the exact failure this system exists to prevent, arriving
+        through the fallback path: an assertion about a real person with no
+        source under it. The envelope was then discarded for having no
+        citations, so the cost was silent — a true claim reported UNSUPPORTED,
+        having looked like it was researched.
+
+        Splitting the call fixes both halves. Retrieval cannot invent a
+        citation because the citations come from grounding metadata rather than
+        from the model's prose. Structuring cannot invent a fact because it is
+        given the retrieved text and told it is the only permitted input, and
+        it runs with controlled generation, which is available precisely
+        because the search tool is absent from that second call.
+        """
         with self._timed() as timing:
             try:
-                response = await model_fallback.generate(
-                    self._genai(),
-                    model=self.model,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        tools=[types.Tool(google_search=types.GoogleSearch())],
-                        temperature=0.0,  # research is not a creative task
-                        # No response_mime_type here, deliberately. Vertex
-                        # refuses controlled generation together with the
-                        # Search tool -- "controlled generation is not
-                        # supported with Search tool", HTTP 400 -- so asking
-                        # for both made this provider fail every single call.
-                        # It is the fallback, so the failure only surfaced when
-                        # the primary provider missed, and it turned true
-                        # claims into UNSUPPORTED with no evidence at all.
-                        # Grounding requires free text, so the schema is asked
-                        # for in the prompt and enforced by parsing instead.
-                        safety_settings=_permissive_analysis_safety(types),
-                    ),
-                )
+                retrieved, citations = await self._retrieve(request)
             except Exception as exc:
                 return Evidence.failed(request.subject_id, request.question, self.name, str(exc))
 
-        finding = _parse_json(getattr(response, "text", "") or "")
-        citations = _citations_from_grounding(response)
+            try:
+                finding = await self._structure(request, retrieved)
+            except Exception as exc:
+                return Evidence.failed(request.subject_id, request.question, self.name, str(exc))
+
+        # A search that ran and found nothing is a finding. A search that could
+        # not run is a failure. They were the same thing here, and the smoke
+        # suite caught it: "Margaret Holloway was convicted of falsifying her
+        # flight logs" and "Brundage was a small man in a large chair" both
+        # returned zero sources, which is the *correct* outcome for an invented
+        # person and for an opinion, and both were reported as research
+        # failures. That is the B13 confusion inverted — an answer discarded as
+        # an error rather than an error presented as an answer — and it hides
+        # the two results a clearance reviewer most wants to see.
+        #
+        # So the finding stands, with one deterministic restriction below.
+        if not citations:
+            finding = _restrict_to_negative(finding)
 
         return Evidence(
             evidence_id=Evidence.make_id(request.subject_id, request.question, self.name),
@@ -96,15 +109,84 @@ class GeminiGroundedProvider(ResearchProvider):
             question=request.question,
             finding=finding,
             citations=citations,
-            reasoning="Grounded completion produced as a fallback while the primary research provider was unavailable.",
+            reasoning=(
+                "Grounded web retrieval, then structured from the retrieved text alone. "
+                "Produced as a fallback while the primary research provider was "
+                "unavailable or did not return in time."
+            ),
             confidence=0.55 if citations else 0.0,
             provider=self.name,
             schema_version=request.schema_name,
             is_fallback=True,  # caps effective confidence and warns the report
             cost_cents=self.unit_cost_cents,
             latency_ms=timing["latency_ms"],
-            error=None if citations else "grounding returned no citable sources",
+            error=None,
         )
+
+    async def _retrieve(self, request: ResearchRequest) -> tuple[str, list[Citation]]:
+        """Step one. Search, in plain language, and keep what the search found.
+
+        No schema and no JSON anywhere in this prompt. The moment either
+        appears the model stops calling the search tool.
+        """
+        from google.genai import types
+
+        prompt = (
+            "You are a clearance researcher. Search the web and report only what "
+            "the sources say.\n\n"
+            f"Question: {request.question}\n\n"
+            f"Jurisdictions in scope: {', '.join(request.jurisdictions) or 'US'}\n\n"
+            "State what the record shows, and state plainly where it is silent. "
+            "Quote the specific wording that settles the question. Never assert a "
+            "fact about a real person that you cannot point at a source for. If the "
+            "sources do not settle it, say that they do not."
+        )
+
+        response = await model_fallback.generate(
+            self._genai(),
+            model=self.model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                temperature=0.0,  # research is not a creative task
+                safety_settings=_permissive_analysis_safety(types),
+            ),
+        )
+        return (getattr(response, "text", "") or ""), _citations_from_grounding(response)
+
+    async def _structure(self, request: ResearchRequest, retrieved: str) -> dict[str, Any]:
+        """Step two. Shape the retrieved text, and nothing else, into the schema.
+
+        No search tool here, which is what makes controlled generation
+        available: Vertex refuses `response_schema` alongside the Search tool
+        with "controlled generation is not supported with Search tool". Asking
+        for the schema in a separate call gets the guarantee back instead of
+        parsing a fenced block and hoping.
+        """
+        from google.genai import types
+
+        prompt = (
+            "Convert the research below into the required structure.\n\n"
+            "The research text is your ONLY permitted source. Do not add facts "
+            "from your own knowledge, do not resolve a question the text leaves "
+            "open, and where the text does not settle something, record that it "
+            "is unsettled rather than filling it in.\n\n"
+            f"Question that was researched:\n{request.question}\n\n"
+            f"Research text:\n{retrieved}"
+        )
+
+        response = await model_fallback.generate(
+            self._genai(),
+            model=self.model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.0,
+                response_mime_type="application/json",
+                response_schema=to_vertex_schema(request.output_schema),
+                safety_settings=_permissive_analysis_safety(types),
+            ),
+        )
+        return _parse_json(getattr(response, "text", "") or "")
 
     async def health(self) -> bool:
         return bool(settings.gcp_project)
@@ -227,3 +309,40 @@ def _supports_by_chunk(response: Any) -> dict[int, list[str]]:
             for index in getattr(support, "grounding_chunk_indices", None) or []:
                 out.setdefault(int(index), []).append(text.strip())
     return out
+
+
+#: The only verdicts a source-less answer is permitted to carry.
+_NEGATIVE_VERDICTS = frozenset({"no_record", "not_a_factual_claim"})
+
+
+def _restrict_to_negative(finding: dict[str, Any]) -> dict[str, Any]:
+    """Hold a source-less finding to what a source-less finding can support.
+
+    Retrieval searched and came back with nothing. That legitimately settles two
+    things — the record is silent, or the sentence was never a factual claim —
+    and it cannot settle anything else. `supported` or `contradicted` with no
+    citation under it is precisely the assertion about a real person that this
+    system exists to prevent, and the model will produce one if asked, because
+    the retrieved text says "no sources found" and it reads that as evidence of
+    absence.
+
+    Deterministic and in code rather than in the prompt, per the design
+    principle that everything consequential happens after the model.
+    """
+    verdict = (finding or {}).get("verdict")
+    if verdict in _NEGATIVE_VERDICTS:
+        return finding
+
+    corrected = dict(finding or {})
+    corrected["verdict"] = "no_record"
+    corrected["record_quality"] = "no sources retrieved"
+    note = (
+        f"Downgraded from {verdict!r}: retrieval returned no citable source, and a "
+        "verdict of that kind requires one."
+    )
+    corrected["downgrade_reason"] = note
+    # Any facts the model listed came from its own memory rather than from a
+    # retrieved page, so they are not evidence and do not travel.
+    corrected["supporting_facts"] = []
+    corrected["contradicting_facts"] = []
+    return corrected

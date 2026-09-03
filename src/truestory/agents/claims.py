@@ -128,7 +128,10 @@ class ClaimExtractor:
     def __init__(self, model: str | None = None, client: Any = None) -> None:
         self.model = model or settings.model_claims
         self._client = client
-        self._cache = StagePromptCache("extraction", "claims_v1")
+        # v2: the opinion instruction was rewritten after the model was found to
+        # be dropping characterisations rather than typing them. Every stored
+        # response predates that and would replay a run with no opinions in it.
+        self._cache = StagePromptCache("extraction", "claims_v2")
 
     # ── entry point ──────────────────────────────────────────────────────────
     async def run(self, spans: list[RawSpan], scenes: list[Scene]) -> list[FactualClaim]:

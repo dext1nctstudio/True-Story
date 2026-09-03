@@ -519,23 +519,34 @@ class TrueStoryPipeline:
         subjects out of two hundred is a footnote, and two hundred out of two
         hundred means the report is empty and must not be filed.
         """
+        from truestory.api.messages import describe
+
+        failed = sum(1 for c in state.claims if getattr(c, "research_failed", False))
+        total = len(state.claims)
+
         warnings: list[str] = []
         outages = getattr(self.registry, "outages", {}) or {}
         for provider, detail in outages.items():
+            # The raw fault goes to `detail` and never into the prose. What the
+            # reader used to get here was an HTTP status and a support ref_id
+            # inside a JSON blob, on a document they were deciding whether to
+            # file.
             warnings.append(
-                f"RESEARCH PROVIDER OUT OF SERVICE: {provider} stopped answering during "
-                f"this run and every subject it had not yet reached went unchecked. "
-                f"Reported: {detail[:160]}. Findings below are not evidence that the "
-                f"record is silent; the record was not searched. This report is not "
-                f"fileable until the run is repeated against a working provider."
+                describe(
+                    detail,
+                    provider=provider,
+                    subjects_affected=failed,
+                    subjects_total=total,
+                ).as_sentence()
             )
 
-        failed = sum(1 for c in state.claims if getattr(c, "research_failed", False))
-        if failed:
-            total = len(state.claims) or 1
+        if failed and not outages:
+            # Research failed without the provider leaving service: individual
+            # timeouts, a parked run, a transient error. Same distinction to
+            # make, smaller cause.
             warnings.append(
-                f"{failed} of {total} claims were never checked because research did not "
-                f"run for them. They are shown as unsupported, which here means unchecked "
+                f"{failed} of {total} claims were never checked because their research did "
+                f"not complete. They appear as unsupported, which here means unchecked "
                 f"rather than searched and not found."
             )
         return warnings
