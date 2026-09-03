@@ -82,7 +82,7 @@ export const ROLE_VIEWS: Record<Role, RoleView> = {
     withheld: "Nothing is withheld from this role.",
     home: "docket",
     rail: ["evidence", "people", "queue", "cost", "monitors", "report"],
-    accent: "#5d9ad4",
+    accent: "#2ec5b6",
     caps: {
       overlay: true,
       evidence: true,

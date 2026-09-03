@@ -1,0 +1,1085 @@
+/* ============================================================================
+   TRUE STORY · the marketing one-pager
+   ============================================================================
+   The public face. Home, About, The Engine, Contact, on one cinematic scroll.
+   Shares the design tokens from globals.css — the same forensic teal, the same
+   near-black ground, the same display serif — so the site and the workspace
+   read as one product. Everything here is prefixed .mk- so it cannot reach
+   into the instrument.
+
+   The look is editorial, not templated: a high-contrast serif for the
+   headlines, hairline rules, letter-spaced eyebrows, one accent used sparingly,
+   and a real volumetric light-ray rather than a flat gradient. Colour stays
+   reserved — the verdict hues appear only where a verdict is being shown.
+   ========================================================================= */
+
+.mk {
+  --mk-max: 1180px;
+  --mk-gutter: clamp(20px, 5vw, 64px);
+  color: var(--text);
+  background: var(--bg);
+  font-family: var(--font-ui);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.mk ::selection {
+  background: var(--accent-line);
+  color: var(--text);
+}
+
+.mk a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ── shared section furniture ───────────────────────────────────────────── */
+
+.mk-section {
+  position: relative;
+  max-width: var(--mk-max);
+  margin: 0 auto;
+  padding: clamp(72px, 11vw, 148px) var(--mk-gutter);
+}
+
+.mk-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0 0 var(--space-4);
+}
+
+.mk-eyebrow::before {
+  content: "";
+  width: 26px;
+  height: 1px;
+  background: var(--accent);
+  opacity: 0.7;
+}
+
+.mk-h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(34px, 5vw, 60px);
+  line-height: 1.04;
+  letter-spacing: 0.005em;
+  margin: 0 0 var(--space-4);
+}
+
+.mk-lede {
+  max-width: 60ch;
+  font-size: clamp(15px, 1.4vw, 18px);
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.mk-em {
+  color: var(--text);
+  font-style: italic;
+  font-family: var(--font-display);
+  font-size: 1.08em;
+}
+
+/* ── nav ────────────────────────────────────────────────────────────────── */
+
+.mk-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  height: 68px;
+  padding: 0 var(--mk-gutter);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--ease), background var(--ease);
+}
+
+.mk-nav.scrolled {
+  border-bottom-color: var(--line);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+}
+
+.mk-brand {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.mk-brand img {
+  height: 52px;
+  width: auto;
+  display: block;
+}
+
+.mk-nav-links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  margin-left: var(--space-6);
+}
+
+.mk-nav-link {
+  position: relative;
+  font-size: var(--fs-small);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  padding: 6px 0;
+  transition: color var(--ease);
+}
+
+.mk-nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 100%;
+  bottom: 0;
+  height: 1px;
+  background: var(--accent);
+  transition: right var(--ease-in);
+}
+
+.mk-nav-link:hover {
+  color: var(--text);
+}
+
+.mk-nav-link:hover::after {
+  right: 0;
+}
+
+.mk-nav-spacer {
+  flex: 1;
+}
+
+/* The CTA that lives inside the collapsible menu is for the mobile layout only;
+   on desktop the standalone .desktop CTA on the right is the one that shows. */
+.mk-nav-links .mobile-only-cta {
+  display: none;
+}
+
+.mk-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--ease), box-shadow var(--ease), transform var(--ease);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.mk-cta:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.mk-cta.ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--line-strong);
+  box-shadow: none;
+}
+
+.mk-cta.ghost:hover {
+  border-color: var(--accent-line);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text);
+}
+
+.mk-cta .mk-arrow {
+  transition: transform var(--ease);
+}
+
+.mk-cta:hover .mk-arrow {
+  transform: translateX(3px);
+}
+
+.mk-burger {
+  display: none;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mk-burger span {
+  width: 16px;
+  height: 1.5px;
+  background: currentColor;
+  border-radius: 2px;
+}
+
+/* ── hero ───────────────────────────────────────────────────────────────── */
+
+.mk-hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  padding: 120px var(--mk-gutter) 72px;
+  overflow: hidden;
+}
+
+/* The cinematic light-ray. The image already carries its own teal, so the only
+   thing layered on top is a faint lift where the beam lands, kept low so the
+   ground stays near-black rather than washing to an even green. */
+.mk-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(46% 50% at 78% 22%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%),
+    url("/cinematic-bg.svg") center / cover no-repeat;
+  z-index: 0;
+}
+
+/* Ground fade so the beam melts into the page rather than ending on a seam,
+   and the near-black returns before the guarantee strip. */
+.mk-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 42%, color-mix(in srgb, var(--bg) 72%, transparent) 78%, var(--bg));
+  z-index: 0;
+  pointer-events: none;
+}
+
+.mk-hero-inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: var(--mk-max);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: clamp(32px, 5vw, 72px);
+  align-items: center;
+}
+
+.mk-hero-copy {
+  max-width: 100%;
+}
+
+.mk-hero h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(42px, 5.6vw, 66px);
+  line-height: 1.0;
+  letter-spacing: 0.004em;
+  margin: var(--space-4) 0 var(--space-5);
+}
+
+.mk-hero h1 .mk-hero-accent {
+  color: var(--accent);
+  font-style: italic;
+}
+
+.mk-hero-sub {
+  font-size: clamp(15px, 1.5vw, 19px);
+  line-height: 1.65;
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-6);
+  max-width: 46ch;
+}
+
+.mk-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.mk-hero-note {
+  margin: var(--space-6) 0 0;
+  font-size: var(--fs-tiny);
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mk-hero-note::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* The hero visual is the product itself: a script line, marked, with the
+   evidence that marked it. More honest than stock, and it is the pitch. */
+.mk-proof {
+  position: relative;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line-strong);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--lift-3);
+  overflow: hidden;
+  transform: rotate(-1.2deg);
+}
+
+.mk-proof-bar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px var(--space-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-sunken);
+}
+
+.mk-proof-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--line-focus);
+}
+
+.mk-proof-title {
+  margin-left: 6px;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.mk-proof-paper {
+  background: var(--paper);
+  color: var(--paper-ink);
+  padding: var(--space-5) var(--space-5) var(--space-6);
+  font-family: var(--script-font);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.mk-proof-scene {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: 11px;
+  color: var(--paper-ink-soft);
+  margin-bottom: var(--space-4);
+}
+
+.mk-proof-line {
+  margin: 0 0 var(--space-3);
+}
+
+.mk-proof-cue {
+  font-weight: 700;
+  padding-left: 42px;
+}
+
+.mk-proof-dialogue {
+  padding-left: 22px;
+}
+
+.mk-mark-red {
+  background: var(--paper-red-wash);
+  color: var(--paper-red);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--paper-red);
+  text-decoration-thickness: 3px;
+  text-underline-offset: 3px;
+}
+
+.mk-mark-green {
+  text-decoration: underline;
+  text-decoration-color: var(--paper-green);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.mk-proof-evidence {
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  padding: var(--space-4) var(--space-5);
+}
+
+.mk-proof-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--red);
+  padding: 3px 8px;
+  border: 1px solid var(--red-line);
+  background: var(--red-tint);
+  border-radius: var(--radius-xs);
+}
+
+.mk-proof-claim {
+  margin: var(--space-3) 0;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.mk-proof-cite {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: var(--fs-tiny);
+  color: var(--text-tertiary);
+}
+
+.mk-proof-cite b {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── marquee of guarantees under the hero ───────────────────────────────── */
+
+.mk-strip {
+  position: relative;
+  z-index: 1;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-sunken);
+}
+
+.mk-strip-inner {
+  max-width: var(--mk-max);
+  margin: 0 auto;
+  padding: var(--space-4) var(--mk-gutter);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-6);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mk-strip-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+}
+
+.mk-strip-item b {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+/* ── about ──────────────────────────────────────────────────────────────── */
+
+.mk-about-grid {
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: clamp(28px, 5vw, 72px);
+  align-items: start;
+}
+
+.mk-about-body p {
+  font-size: clamp(15px, 1.35vw, 17px);
+  line-height: 1.75;
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-4);
+}
+
+.mk-about-body p strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.mk-pullbar {
+  margin: var(--space-5) 0 0;
+  padding: var(--space-4) var(--space-5);
+  border-left: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.mk-pullbar p {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: clamp(18px, 1.9vw, 24px);
+  line-height: 1.4;
+  color: var(--text);
+}
+
+/* the numbered facts about the manual status quo vs this */
+.mk-facts {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.mk-fact {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  transition: border-color var(--ease), transform var(--ease);
+}
+
+.mk-fact:hover {
+  border-color: var(--accent-line);
+  transform: translateY(-2px);
+}
+
+.mk-fact-num {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  min-width: 2ch;
+}
+
+.mk-fact-label {
+  display: block;
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.mk-fact-text {
+  display: block;
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* ── the engine ─────────────────────────────────────────────────────────── */
+
+.mk-engine {
+  border-top: 1px solid var(--line);
+}
+
+.mk-engine-head {
+  max-width: 62ch;
+  margin-bottom: clamp(40px, 6vw, 72px);
+}
+
+.mk-stages {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--line);
+}
+
+.mk-stage {
+  position: relative;
+  padding: var(--space-5);
+  background: var(--surface);
+  min-height: 172px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: background var(--ease);
+}
+
+.mk-stage:hover {
+  background: var(--surface-raised);
+}
+
+.mk-stage-index {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.1em;
+  color: var(--text-quiet);
+}
+
+.mk-stage-name {
+  font-size: var(--fs-lead);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.mk-stage-kind {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--line-strong);
+  color: var(--text-tertiary);
+}
+
+.mk-stage-kind.llm {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-quiet);
+}
+
+.mk-stage-desc {
+  font-size: var(--fs-tiny);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  margin-top: auto;
+}
+
+/* gates + parallel: two-column feature blocks */
+.mk-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(24px, 4vw, 56px);
+  margin-top: clamp(48px, 7vw, 88px);
+}
+
+.mk-col-title {
+  font-family: var(--font-display);
+  font-size: clamp(24px, 2.6vw, 34px);
+  font-weight: 600;
+  margin: 0 0 var(--space-4);
+}
+
+.mk-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.mk-list-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.mk-list-item:last-child {
+  border-bottom: 0;
+}
+
+.mk-list-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-quiet);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.mk-list-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mk-list-h {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  margin: 0 0 2px;
+}
+
+.mk-list-p {
+  font-size: var(--fs-tiny);
+  line-height: 1.55;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+/* the verdict legend, restated on the marketing page */
+.mk-verdicts {
+  margin-top: clamp(48px, 7vw, 88px);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+}
+
+.mk-verdict {
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-top-width: 2px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.mk-verdict.green { border-top-color: var(--green); }
+.mk-verdict.amber { border-top-color: var(--amber); }
+.mk-verdict.red { border-top-color: var(--red); }
+.mk-verdict.grey { border-top-color: var(--neutral); }
+
+.mk-verdict-name {
+  font-size: var(--fs-small);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
+.mk-verdict.green .mk-verdict-name { color: var(--green); }
+.mk-verdict.amber .mk-verdict-name { color: var(--amber); }
+.mk-verdict.red .mk-verdict-name { color: var(--red); }
+.mk-verdict.grey .mk-verdict-name { color: var(--text-secondary); }
+
+.mk-verdict-desc {
+  font-size: var(--fs-tiny);
+  line-height: 1.55;
+  color: var(--text-tertiary);
+}
+
+/* parallel APIs pills */
+.mk-apis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.mk-api {
+  font-size: var(--fs-tiny);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-sunken);
+  color: var(--text-secondary);
+}
+
+/* ── contact ────────────────────────────────────────────────────────────── */
+
+.mk-contact {
+  border-top: 1px solid var(--line);
+  position: relative;
+}
+
+.mk-contact::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(70% 90% at 20% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 60%);
+  pointer-events: none;
+}
+
+.mk-contact-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  gap: clamp(32px, 5vw, 72px);
+  align-items: start;
+}
+
+.mk-contact-detail {
+  margin-top: var(--space-5);
+  display: grid;
+  gap: var(--space-4);
+}
+
+.mk-contact-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.mk-contact-row .mk-list-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.mk-contact-k {
+  display: block;
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+  margin-bottom: 3px;
+}
+
+.mk-contact-v {
+  display: block;
+  font-size: var(--fs-body);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.mk-contact-v:hover {
+  color: var(--accent);
+}
+
+/* the form */
+.mk-form {
+  display: grid;
+  gap: var(--space-4);
+  padding: clamp(24px, 3vw, 36px);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--lift-2);
+}
+
+.mk-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+.mk-field {
+  display: grid;
+  gap: 6px;
+}
+
+.mk-field label {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.mk-field input,
+.mk-field textarea {
+  width: 100%;
+  padding: 11px var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-body);
+  transition: border-color var(--ease), background var(--ease);
+}
+
+.mk-field textarea {
+  min-height: 128px;
+  resize: vertical;
+}
+
+.mk-field input::placeholder,
+.mk-field textarea::placeholder {
+  color: var(--text-quiet);
+}
+
+.mk-field input:focus,
+.mk-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface-raised);
+}
+
+.mk-form-submit {
+  justify-self: start;
+  height: 46px;
+  padding: 0 var(--space-6);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background var(--ease), transform var(--ease), box-shadow var(--ease);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.mk-form-submit:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.mk-form-hint {
+  font-size: var(--fs-tiny);
+  color: var(--text-quiet);
+  margin: 0;
+}
+
+/* ── footer ─────────────────────────────────────────────────────────────── */
+
+.mk-footer {
+  border-top: 1px solid var(--line);
+  background: var(--surface-sunken);
+}
+
+.mk-footer-inner {
+  max-width: var(--mk-max);
+  margin: 0 auto;
+  padding: clamp(48px, 7vw, 80px) var(--mk-gutter) var(--space-6);
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: clamp(28px, 5vw, 64px);
+}
+
+.mk-footer-brand img {
+  height: 30px;
+  width: auto;
+  margin-bottom: var(--space-4);
+}
+
+.mk-footer-tag {
+  font-size: var(--fs-small);
+  line-height: 1.65;
+  color: var(--text-tertiary);
+  max-width: 40ch;
+  margin: 0 0 var(--space-4);
+}
+
+.mk-footer-col h4 {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-tertiary);
+  margin: 0 0 var(--space-4);
+  font-weight: 600;
+}
+
+.mk-footer-col a,
+.mk-footer-col span {
+  display: block;
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-3);
+  transition: color var(--ease);
+}
+
+.mk-footer-col a:hover {
+  color: var(--accent);
+}
+
+.mk-footer-bar {
+  max-width: var(--mk-max);
+  margin: 0 auto;
+  padding: var(--space-4) var(--mk-gutter);
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--fs-tiny);
+  color: var(--text-quiet);
+}
+
+.mk-disclaimer {
+  margin: 0;
+  max-width: 70ch;
+}
+
+/* ── responsive ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .mk-hero-inner,
+  .mk-about-grid,
+  .mk-contact-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mk-proof {
+    max-width: 440px;
+    transform: none;
+  }
+
+  .mk-stages {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .mk-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .mk-verdicts {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .mk-footer-inner {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mk-nav-links {
+    display: none;
+  }
+
+  .mk-nav-links.open {
+    display: flex;
+    position: absolute;
+    top: 68px;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-4);
+    margin: 0;
+    padding: var(--space-5) var(--mk-gutter);
+    background: var(--surface);
+    border-bottom: 1px solid var(--line-strong);
+  }
+
+  .mk-burger {
+    display: inline-flex;
+    order: 3;
+  }
+
+  .mk-nav .mk-cta.desktop {
+    display: none;
+  }
+
+  .mk-nav-links.open .mobile-only-cta {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 560px) {
+  .mk-form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .mk-stages,
+  .mk-verdicts {
+    grid-template-columns: 1fr;
+  }
+
+  .mk-footer-inner {
+    grid-template-columns: 1fr;
+  }
+}
