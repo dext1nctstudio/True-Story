@@ -154,7 +154,7 @@ export function CommandPalette({
         aria-label="Command palette"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <input
+        <input suppressHydrationWarning
           ref={inputRef}
           className="palette-input"
           value={query}
@@ -173,7 +173,7 @@ export function CommandPalette({
             return (
               <div key={entry.id}>
                 {showGroup && <div className="palette-group">{entry.group}</div>}
-                <button
+                <button suppressHydrationWarning
                   className={`palette-row ${index === cursor ? "active" : ""}`}
                   onMouseEnter={() => setCursor(index)}
                   onClick={() => choose(entry)}

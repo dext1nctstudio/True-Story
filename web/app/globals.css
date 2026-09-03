@@ -278,25 +278,38 @@ body {
   /* Slightly translucent over a blur, so a script scrolling underneath is
      felt rather than seen. Falls back to the flat surface where backdrop
      filters are unavailable. */
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--role) 7%, transparent) 0%,
+      transparent 46%
+    ),
+    color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
 }
 
-/* The role's colour, as a hairline the width of the instrument. Two pixels of
-   chrome is enough to tell somebody the workspace changed. */
+/* The role's colour, along the whole instrument.
+
+   This was a 1px hairline fading out at 55%, on the theory that two pixels of
+   chrome is enough to say the workspace changed. It is not: switching between
+   counsel and producer changed the panels underneath and almost nothing a
+   reviewer would notice, and the governance model this product argues for is
+   invisible unless a role looks different at a glance. Three pixels, carried
+   the full width, and the header tinted toward the role. */
 .header::after {
   content: "";
   position: absolute;
   left: 0;
   right: 0;
   bottom: -1px;
-  height: 1px;
+  height: 3px;
   background: linear-gradient(
     90deg,
     var(--role) 0%,
-    color-mix(in srgb, var(--role) 30%, transparent) 22%,
-    transparent 55%
+    var(--role) 34%,
+    color-mix(in srgb, var(--role) 45%, transparent) 68%,
+    color-mix(in srgb, var(--role) 18%, transparent) 100%
   );
   opacity: 0.75;
   pointer-events: none;
@@ -369,7 +382,11 @@ body {
 }
 
 .brand-logo {
-  height: 26px;
+  /* The mark carries the product name and its descriptor, so it is the one
+     thing in the chrome allowed to be large. It was set at 26px, smaller than
+     the buttons beside it, which left the header looking like a toolbar with
+     an icon rather than a product. */
+  height: 36px;
   width: auto;
   display: block;
   transition: opacity var(--ease);
@@ -379,14 +396,33 @@ body {
   opacity: 0.72;
 }
 
+/* Title and metadata, not three comma spliced facts in one weight. The name is
+   the only thing here anyone reads twice, so it is the only thing set in the
+   primary colour; the draft and the length sit under it as data. */
 .script-title {
-  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--line);
+}
+
+.script-name {
+  color: var(--text);
   font-size: var(--fs-small);
+  font-weight: 500;
+  letter-spacing: -0.005em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding-left: var(--space-4);
-  border-left: 1px solid var(--line);
+}
+
+.script-meta {
+  color: var(--text-tertiary);
+  font-size: var(--fs-tiny);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .spacer {

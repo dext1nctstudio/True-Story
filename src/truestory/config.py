@@ -152,6 +152,15 @@ class Settings(BaseSettings):
     parallel_api_key: str = Field(default="", alias="PARALLEL_API_KEY")
     parallel_api_base: str = Field(default="https://api.parallel.ai", alias="PARALLEL_API_BASE")
     parallel_timeout_seconds: int = Field(default=120, alias="PARALLEL_TIMEOUT_SECONDS")
+    # How long to keep long polling one Task run before parking it. The result
+    # endpoint answers 408 "Run still active" whenever its window elapses, which
+    # for anything deeper than a lite lookup is the normal first answer, so this
+    # is the number that decides whether deep research completes at all rather
+    # than a safety valve. Generous on purpose: a parked subject becomes an
+    # amber finding about a record nobody read.
+    parallel_result_deadline_seconds: int = Field(
+        default=420, alias="PARALLEL_RESULT_DEADLINE_SECONDS"
+    )
     parallel_use_fast: bool = Field(default=True, alias="PARALLEL_USE_FAST_VARIANTS")
     parallel_webhook_secret: str = Field(default="", alias="PARALLEL_WEBHOOK_SECRET")
     parallel_webhook_url: str = Field(default="", alias="PARALLEL_WEBHOOK_URL")
@@ -178,7 +187,25 @@ class Settings(BaseSettings):
     budget_per_script_usd: float = Field(default=5.00, alias="BUDGET_PER_SCRIPT_USD")
     budget_reserve_critical_usd: float = Field(default=1.50, alias="BUDGET_RESERVE_CRITICAL_USD")
     budget_degrade_on_exceed: bool = Field(default=True, alias="BUDGET_DEGRADE_ON_EXCEED")
-    swarm_max_concurrency: int = Field(default=32, alias="SWARM_MAX_CONCURRENCY")
+    # Concurrent research subjects in flight. **This is a concurrency limit, not
+    # a rate limit, and the two were confused.** The swarm was set to 32 on the
+    # reasoning that Parallel's Task API accepts roughly two thousand requests a
+    # minute, which is true and is about arrival rate. The binding constraint is
+    # how many runs an account may have *active* at once, and it is far lower.
+    #
+    # Measured against this account on 2 September, twelve identical base
+    # subjects:
+    #
+    #     concurrency 32   0 of 35 completed; every run parked at the 420s
+    #                      deadline and the whole run fell through to the
+    #                      grounded fallback
+    #     concurrency  6   12 of 12 completed, 141s wall, slowest 141s
+    #
+    # In isolation the same lookup takes 25 to 98 seconds. Over-dispatching does
+    # not fail loudly; it queues, every subject ages out, and the report is
+    # carried entirely by the fallback while Parallel is billed for runs nobody
+    # collected. Eight leaves margin without re-entering that regime.
+    swarm_max_concurrency: int = Field(default=8, alias="SWARM_MAX_CONCURRENCY")
     # The two model stages that run per scene and per span. Both were serial
     # loops, which is what made a feature length script take tens of minutes
     # before a single subject had been dispatched. Bounded rather than
