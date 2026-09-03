@@ -20,7 +20,7 @@
    close enough that the swap does not shift the layout when it lands.
    @import has to precede every style rule, which is why it sits here rather
    than beside the font tokens it feeds. */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&display=swap");
 
 /* The role workspaces, kept in their own file. This one is the instrument;
    that one is the four surfaces the instrument is driven from, and mixing
@@ -54,12 +54,17 @@
   --text-quiet: #4a5563;
 
   /* ── accent ─────────────────────────────────────────────────────────────
-     One value, taken from the logo navy and lifted until it carries on the
-     dark ground. There is no gradient pair, deliberately. */
-  --accent: #5d9ad4;
-  --accent-hover: #7db3e4;
-  --accent-quiet: #1a2a3b;
-  --accent-line: #2f4a66;
+     Forensic teal. Cold, investigative, and deliberately clear of every
+     verdict hue — green, amber and red all have to keep meaning what they
+     mean, so the brand colour is the one part of the spectrum they do not use.
+     One value, lifted until it carries on the dark ground. No gradient pair. */
+  --accent: #2ec5b6;
+  --accent-hover: #57dccd;
+  --accent-quiet: #0f2a28;
+  --accent-line: #235f58;
+  /* Ink that sits on a filled accent surface (a primary button). Dark enough
+     to read as type rather than as a second glow. */
+  --accent-ink: #04140f;
 
   /* ── verdicts, on the dark chrome ───────────────────────────────────────
      Saturated enough to read as a signal system. Backgrounds are thin tints
@@ -119,6 +124,12 @@
     Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
+  /* The one display face. A high-contrast garalde serif, used only for
+     headlines and never for instrument text: it is what makes a surface read
+     as edited rather than generated. Falls through to a didone and then to the
+     system serif so a build with no network still renders headlines correctly. */
+  --font-display: "Cormorant Garamond", "Playfair Display", Georgia,
+    "Times New Roman", serif;
 
   /* ── scale ──────────────────────────────────────────────────────────────
      Integers only. Half pixel sizes are a sign nobody chose a scale. */
@@ -370,6 +381,28 @@ body {
   display: inline-block;
 }
 
+/* Back to the marketing site. The brand returns to the docket within the
+   workspace; this leaves the workspace entirely, so it is a separate control. */
+.home-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  flex: 0 0 auto;
+  transition: color var(--ease), border-color var(--ease), background var(--ease);
+}
+
+.home-back:hover {
+  color: var(--text);
+  border-color: var(--line-focus);
+  background: var(--surface-input);
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -386,7 +419,7 @@ body {
      thing in the chrome allowed to be large. It was set at 26px, smaller than
      the buttons beside it, which left the header looking like a toolbar with
      an icon rather than a product. */
-  height: 36px;
+  height: 44px;
   width: auto;
   display: block;
   transition: opacity var(--ease);
@@ -493,7 +526,7 @@ body {
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #08121c;
+  color: var(--accent-ink);
   font-weight: 600;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset,
     0 6px 18px color-mix(in srgb, var(--accent) 28%, transparent);
@@ -502,7 +535,7 @@ body {
 .btn-primary:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
-  color: #08121c;
+  color: var(--accent-ink);
 }
 
 /* The quiet one. Reads as a control rather than as an action, which is what
@@ -749,7 +782,7 @@ button.counter {
 }
 
 .annotated:hover {
-  background: rgba(93, 154, 212, 0.14);
+  background: rgba(46, 197, 182, 0.14);
 }
 
 .annotated.selected {
