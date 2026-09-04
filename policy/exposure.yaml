@@ -329,6 +329,21 @@ cure:
 #     * every output carries its decomposition
 #     * the ranking is the product; the absolute figure is the by product
 #
+# EXTERNAL REFERENCE, NOT CALIBRATION
+#   eval/precedent_corpus/dataset.json holds 210 real federal dockets fetched
+#   live from CourtListener's public search API -- genuine public record,
+#   including the actual Baby Reindeer suit (Harvey v. Netflix). It confirms
+#   claims of this shape are filed in real volume in the expected venues and
+#   that a filed claim takes a median of 400 days to resolve.
+#
+#   It does not calibrate anything below. Disposition detail (dismissed on
+#   anti-SLAPP, settled, tried) and dollar amounts both sit behind deeper,
+#   often sealed, docket access that a keyless search cannot reach, which is
+#   the same wall this file's numbers were already written around. See
+#   eval/precedent_corpus/README.md for exactly what the dataset does and does
+#   not support, and do not treat 210 filed dockets as though it moved
+#   `calibrated` to true.
+#
 # CALIBRATION STATUS: UNCALIBRATED
 #   Every number below is a reasoned prior, not a fitted parameter. None has
 #   been validated against a book of actual claims, because no such book is
