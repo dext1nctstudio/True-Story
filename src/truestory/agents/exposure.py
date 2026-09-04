@@ -72,6 +72,8 @@ class Exposure:
     cure: dict[str, Any] | None = None
     #: Whether the forum shifts fees on a meritless claim.
     venue: dict[str, Any] = field(default_factory=dict)
+    #: Frequency times severity, decomposed. None when the model is disabled.
+    modelled: ModelledExposure | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -84,6 +86,7 @@ class Exposure:
             "statutory_anchors": self.anchors,
             "cost_to_cure": self.cure,
             "venue": self.venue,
+            "modelled_exposure": self.modelled.to_dict() if self.modelled else None,
             "disclaimer": (
                 "Severity is ordinal, not monetary. Statutory figures are quoted "
                 "from the provisions named and are not a prediction of what any "
@@ -103,10 +106,15 @@ class ExposureModel:
         policy: ExposurePolicy | None = None,
         *,
         stage: str = "development",
+        truth_claim_framing: bool = False,
     ) -> None:
         self.policy = policy or load_exposure()
         self.jurisdictions = load_jurisdictions()
         self.stage = stage if stage in PRODUCTION_STAGES else "development"
+        # Project level, and it multiplies the claim frequency of every person
+        # adjacent finding in the script rather than any one of them.
+        self.truth_claim_framing = truth_claim_framing
+        self.quantitative = QuantitativeModel(self.policy)
 
     # ── one finding ──────────────────────────────────────────────────────────
     def for_element(self, element: ClearableElement) -> Exposure:
@@ -124,6 +132,11 @@ class ExposureModel:
                 else None
             ),
             "verdict": None,
+            # Signals the band rules ignore and the quantitative model needs.
+            "kind": "element",
+            "public_figure_status": str(element.public_figure_status),
+            "occurrence_count": element.occurrence_count,
+            "truth_claim_framing": self.truth_claim_framing,
         }
         element_type = str(element.element_type)
         return self._assess(element.element_id, facts, element_type, element.jurisdictions)
@@ -136,6 +149,10 @@ class ExposureModel:
             "tier": str(claim.risk_tier),
             "polarity": str(claim.polarity),
             "verdict": str(claim.verdict) if claim.verdict else None,
+            "kind": "claim",
+            "public_figure_status": str(claim.subject_public_figure_status),
+            "occurrence_count": len(claim.asserted_in),
+            "truth_claim_framing": self.truth_claim_framing,
         }
         # A claim is an assertion about a person, so it draws the publicity
         # rights anchors rather than the copyright ones.
@@ -162,6 +179,13 @@ class ExposureModel:
             cure["source"] = "policy_table"
             cure["researched"] = False
 
+        venue = self._venue(jurisdictions)
+        modelled = self.quantitative.price(
+            element_type,
+            facts,
+            anti_slapp=bool(venue.get("anti_slapp_available")),
+        )
+
         return Exposure(
             subject_id=subject_id,
             band=band,
@@ -171,7 +195,8 @@ class ExposureModel:
             because=because,
             anchors=[_anchor_view(a) for a in anchors],
             cure=cure,
-            venue=self._venue(jurisdictions),
+            venue=venue,
+            modelled=modelled,
         )
 
     def _venue(self, jurisdictions: list[str]) -> dict[str, Any]:
@@ -214,14 +239,27 @@ class ExposureModel:
         alternatives a claimant may elect, not a bill.
         """
         assessments = [self.for_element(e) for e in elements] + [self.for_claim(c) for c in claims]
-        assessments.sort(key=lambda a: (-a.band_rank, a.subject_id))
+        # Band first, because a blocking finding outranks an expensive one
+        # whatever the arithmetic says. Within a band the modelled figure does
+        # the work the band cannot: on a real script eighteen findings shared
+        # one band, and ordering those eighteen is the entire reason the
+        # quantitative model exists.
+        assessments.sort(
+            key=lambda a: (
+                -a.band_rank,
+                -(a.modelled.expected_high if a.modelled else 0.0),
+                a.subject_id,
+            )
+        )
 
         by_band: dict[str, int] = {}
         for a in assessments:
             by_band[a.band] = by_band.get(a.band, 0) + 1
 
         priced = [a.cure for a in assessments if a.cure]
+        modelled = [a.modelled for a in assessments if a.modelled]
         return {
+            "modelled_exposure_usd": _portfolio(modelled),
             "stage": self.stage,
             "by_band": by_band,
             "blocking": by_band.get("blocking", 0),
@@ -267,6 +305,241 @@ def _anchor_view(anchor: dict[str, Any]) -> dict[str, Any]:
             "worth. Confirm before it appears in a deliverable."
         ),
     }
+
+
+# =============================================================================
+# quantitative exposure
+# =============================================================================
+# Frequency times severity, the decomposition a media liability underwriter
+# uses, with every parameter in policy/exposure.yaml where it can be argued
+# with. See the `quantitative` block there for the reasoning and for the
+# calibration status, which is: uncalibrated.
+#
+# The ranking is the product. The absolute figure is a by product, and on
+# uncalibrated priors it is worth an order of magnitude at best. That is why
+# every record carries its decomposition and its rank alongside the number: a
+# reader who distrusts the magnitude can still trust "this one is eleven times
+# the next one" and act on it.
+
+
+@dataclass(frozen=True, slots=True)
+class ModelledExposure:
+    """One finding priced. A range, its arithmetic, and its inputs."""
+
+    #: Annual probability that this finding draws a claim, after modifiers.
+    frequency: float
+    #: Expected cost given a claim is made, low and high.
+    severity_low: float
+    severity_high: float
+    #: frequency x severity. What the model actually asserts.
+    expected_low: float
+    expected_high: float
+
+    #: Which modifiers fired, what each was worth, and why. The audit trail.
+    drivers: list[dict[str, Any]] = field(default_factory=list)
+    base_rate: float = 0.0
+    base_rate_key: str = ""
+    outcome_weights: dict[str, float] = field(default_factory=dict)
+    calibrated: bool = False
+
+    @property
+    def negligible(self) -> bool:
+        return self.expected_high < _NEGLIGIBLE_BELOW_USD
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "expected_usd": {
+                "low": round(self.expected_low),
+                "high": round(self.expected_high),
+            },
+            "claim_probability": round(self.frequency, 5),
+            "severity_given_claim_usd": {
+                "low": round(self.severity_low),
+                "high": round(self.severity_high),
+            },
+            "base_rate": self.base_rate,
+            "base_rate_key": self.base_rate_key,
+            "drivers": self.drivers,
+            "outcome_weights": self.outcome_weights,
+            "calibrated": self.calibrated,
+            "negligible": self.negligible,
+            "caveat": (
+                "Modelled, not predicted. Frequency times severity over "
+                "uncalibrated priors, reported as a range because the spread is "
+                "the honest statement of what is not known. Use it to rank "
+                "findings against each other; do not use the absolute figure as "
+                "a reserve. Every input is in policy/exposure.yaml."
+            ),
+        }
+
+
+#: Read once from policy so the dataclass property stays cheap.
+_NEGLIGIBLE_BELOW_USD = 500.0
+
+
+class QuantitativeModel:
+    """Price a finding by frequency times severity, showing the arithmetic."""
+
+    def __init__(self, policy: ExposurePolicy | None = None) -> None:
+        self.policy = policy or load_exposure()
+        self.config: dict[str, Any] = self.policy.raw.get("quantitative", {}) or {}
+        self.enabled = bool(self.config.get("enabled", False))
+
+        global _NEGLIGIBLE_BELOW_USD
+        reporting = self.config.get("reporting", {}) or {}
+        _NEGLIGIBLE_BELOW_USD = float(reporting.get("negligible_below_usd", 500))
+
+    # ── frequency ────────────────────────────────────────────────────────────
+    def _base_rate(self, element_type: str, facts: dict[str, Any]) -> tuple[float, str]:
+        """The prior before any modifier, and which key supplied it.
+
+        A negative claim about a living person has its own base rate rather
+        than inheriting the generic claim rate, because it is not a variation
+        on an ordinary claim: it is the shape every marquee case in the
+        litigation set takes.
+        """
+        rates = self.config.get("base_frequency", {}) or {}
+        # One rate for every claim, deliberately generic. `polarity_negative`
+        # and `subject_living` are what differentiate a claim's frequency, in
+        # the modifier pass below; folding them into the base rate selection
+        # here as well double counted the same two facts, which is what
+        # produced an annual claim probability above one on a single finding.
+        if facts.get("kind") == "claim":
+            return float(rates.get("claim", rates.get("default", 0.001))), "claim"
+
+        if element_type in rates:
+            return float(rates[element_type]), element_type
+        return float(rates.get("default", 0.001)), "default"
+
+    def _modifiers(self, facts: dict[str, Any]) -> list[dict[str, Any]]:
+        """Every modifier that fired, with the reason it exists.
+
+        Absence is never a modifier. A fact the pipeline could not establish
+        does not multiply the frequency in either direction, because not
+        knowing whether someone is alive is not evidence that they are dead.
+        """
+        table = self.config.get("frequency_modifiers", {}) or {}
+        fired: list[dict[str, Any]] = []
+
+        def add(key: str, note: str = "") -> None:
+            entry = table.get(key)
+            if not entry:
+                return
+            fired.append(
+                {
+                    "id": key,
+                    "value": float(entry.get("value", 1.0)),
+                    "because": " ".join(str(entry.get("because", "")).split()),
+                    **({"detail": note} if note else {}),
+                }
+            )
+
+        verdict = str(facts.get("verdict") or "").upper()
+        if verdict == "CONTRADICTED":
+            add("verdict_contradicted")
+        elif verdict == "UNSUPPORTED":
+            add("verdict_unsupported")
+        elif verdict == "VERIFIED":
+            add("verdict_verified")
+
+        if str(facts.get("polarity", "")).lower() == "negative":
+            add("polarity_negative")
+
+        if facts.get("subject_alive") is True:
+            add("subject_living")
+
+        status = str(facts.get("public_figure_status") or "").lower()
+        if status in {"public", "limited_purpose"}:
+            add("public_figure")
+        elif status == "private":
+            add("private_figure")
+
+        if facts.get("truth_claim_framing"):
+            add("truth_claim_framing")
+
+        threshold = int((table.get("high_prominence", {}) or {}).get("threshold_occurrences", 5))
+        occurrences = int(facts.get("occurrence_count") or 0)
+        if occurrences >= threshold:
+            add("high_prominence", f"{occurrences} occurrences")
+
+        if str(facts.get("status") or "").upper() == "RESEARCH_FAILED":
+            add("research_failed")
+
+        return fired
+
+    # ── severity ─────────────────────────────────────────────────────────────
+    def _weights(self, element_type: str, anti_slapp: bool) -> dict[str, float]:
+        """How a claim resolves, given one was filed.
+
+        A copyright or publicity matter is a licence dispute, not a speech
+        case. Anti SLAPP does not reach it, so it gets its own weights rather
+        than borrowing the defamation ones and inheriting a dismissal
+        probability it does not have.
+        """
+        severity = self.config.get("severity", {}) or {}
+        if element_type in set(severity.get("rights_dispute_types", []) or []):
+            return dict(severity.get("rights_dispute_weights", {}) or {})
+        weights = severity.get("outcome_weights", {}) or {}
+        key = "with_anti_slapp" if anti_slapp else "without_anti_slapp"
+        return dict(weights.get(key, {}) or {})
+
+    def _severity(self, weights: dict[str, float]) -> tuple[float, float]:
+        """Probability weighted cost of a claim, low and high.
+
+        Defence cost is included in every outcome including the one the
+        production wins. Winning a motion is not free, and a model that
+        counted only indemnity would say a dismissed claim costs nothing,
+        which is the opposite of why anti SLAPP fee shifting matters.
+        """
+        outcomes = (self.config.get("severity", {}) or {}).get("outcomes", {}) or {}
+        low = high = 0.0
+        for outcome, weight in weights.items():
+            entry = outcomes.get(outcome) or {}
+            defence = entry.get("defence_usd", {}) or {}
+            indemnity = entry.get("indemnity_usd", {}) or {}
+            low += float(weight) * (float(defence.get("low", 0)) + float(indemnity.get("low", 0)))
+            high += float(weight) * (
+                float(defence.get("high", 0)) + float(indemnity.get("high", 0))
+            )
+        return low, high
+
+    # ── the estimate ─────────────────────────────────────────────────────────
+    def price(
+        self,
+        element_type: str,
+        facts: dict[str, Any],
+        *,
+        anti_slapp: bool = False,
+    ) -> ModelledExposure | None:
+        """Frequency times severity for one finding, with its arithmetic kept."""
+        if not self.enabled:
+            return None
+
+        base, base_key = self._base_rate(element_type, facts)
+        drivers = self._modifiers(facts)
+
+        frequency = base
+        for driver in drivers:
+            frequency *= driver["value"]
+        # A probability is a probability. Enough stacked multipliers will walk
+        # past one, and an annual claim probability of 1.4 is not a number.
+        frequency = min(frequency, 1.0)
+
+        weights = self._weights(element_type, anti_slapp)
+        severity_low, severity_high = self._severity(weights)
+
+        return ModelledExposure(
+            frequency=frequency,
+            severity_low=severity_low,
+            severity_high=severity_high,
+            expected_low=frequency * severity_low,
+            expected_high=frequency * severity_high,
+            drivers=drivers,
+            base_rate=base,
+            base_rate_key=base_key,
+            outcome_weights=weights,
+            calibrated=bool(self.config.get("calibrated", False)),
+        )
 
 
 # =============================================================================
@@ -346,3 +619,34 @@ def merge_researched_rate(cure: dict[str, Any], finding: dict[str, Any]) -> dict
         ][:5],
     }
     return cure
+
+
+def _portfolio(modelled: list[ModelledExposure]) -> dict[str, Any]:
+    """Sum the modelled expectations across a run.
+
+    Expected values add even when the underlying events are dependent, which
+    is what makes this summable where the statutory floors were not: those are
+    alternatives a single claimant may elect, whereas these are the expected
+    cost of separate findings.
+
+    What it deliberately does not report is a worst case. Adding every high
+    end together describes a world in which every finding is sued on at once,
+    which has never happened to any production and would be the single most
+    misleading number this system could print.
+    """
+    if not modelled:
+        return {"low": 0, "high": 0, "findings": 0, "calibrated": False}
+
+    return {
+        "low": round(sum(m.expected_low for m in modelled)),
+        "high": round(sum(m.expected_high for m in modelled)),
+        "findings": len(modelled),
+        "calibrated": all(m.calibrated for m in modelled),
+        "basis": (
+            "Sum of expected values, frequency times severity, over "
+            f"{len(modelled)} findings. Not a worst case: it does not describe "
+            "every finding being sued on at once. Uncalibrated priors, so treat "
+            "the ranking as the output and the magnitude as an order of "
+            "magnitude."
+        ),
+    }

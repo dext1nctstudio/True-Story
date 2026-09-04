@@ -586,7 +586,10 @@ class TrueStoryPipeline:
         from truestory.agents.exposure import ExposureModel
 
         try:
-            model = ExposureModel(stage=self.project.production_stage)
+            model = ExposureModel(
+                stage=self.project.production_stage,
+                truth_claim_framing=state.document.truth_claim_framing,
+            )
             state.exposure = model.schedule(state.elements, state.claims)
         except Exception as exc:  # never fail a run over a schedule
             log.warning("exposure model unavailable: %s", exc)

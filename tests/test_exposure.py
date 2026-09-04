@@ -237,19 +237,26 @@ def test_the_schedule_sorts_the_worst_finding_first(model: ExposureModel) -> Non
     assert schedule["assessments"][0]["band"] == "blocking"
 
 
-def test_the_schedule_reports_no_exposure_total(model: ExposureModel) -> None:
-    """The guardrail this module exists for.
+def test_statutory_floors_are_never_summed_into_the_exposure_total(
+    model: ExposureModel,
+) -> None:
+    """The guardrail that survived the model's addition.
 
-    Summing statutory floors across findings would produce exactly the
-    fabricated aggregate the model refuses to compute: those floors are
-    alternatives a claimant may elect, not a bill.
+    A quantitative exposure total is now produced deliberately -- see
+    test_exposure_quantitative.py -- but it must never be built by summing
+    statutory floors. Those are alternatives a claimant may elect, not a bill,
+    and the modelled total is frequency times severity, not a floor sum.
     """
     schedule = model.schedule([_element(ElementType.ARTWORK_VISUAL)], [_claim()])
-    serialised = str(schedule).lower()
 
-    for forbidden in ("expected_damages", "estimated_exposure", "exposure_usd", "likely_award"):
-        assert forbidden not in serialised
+    anchors = schedule["assessments"][0]["statutory_anchors"]
+    floor_sum = sum(a["floor_usd"] for a in anchors if a.get("floor_usd"))
+    modelled_low = schedule["modelled_exposure_usd"]["low"]
+
+    assert floor_sum > 0  # the anchor exists and would be a temptation
+    assert modelled_low != floor_sum
     assert "cost_to_cure_usd" in schedule
+    assert "modelled_exposure_usd" in schedule
 
 
 def test_the_rollup_says_what_its_number_is_and_is_not(model: ExposureModel) -> None:

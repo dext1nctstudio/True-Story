@@ -3,43 +3,45 @@
 # =============================================================================
 # What a finding could cost, stated only in terms that are actually knowable.
 #
-# WHAT THIS FILE REFUSES TO DO
-#   It does not predict damages. The obvious product here is a dollar figure
-#   per finding, and it cannot be built honestly:
-#
-#     * Settlements in this industry are overwhelmingly confidential. The only
-#       amounts in the public record are the outliers that made the trade
-#       press, so any model fitted to them over predicts on every ordinary
-#       matter. That is the paranoia engine cases.yaml opens by warning about,
-#       arrived at through arithmetic instead of through flagging.
-#
-#     * A number anchors. Green, amber and red are decision support; "$2.4M
-#       expected exposure" is a reserve figure, and a producer will treat it as
-#       one. It is also flatly inconsistent with the standing disclaimer that
-#       this system automates the research and the document, not the judgement.
-#
-#     * No carrier underwrites off a vendor's estimate. An E&O underwriter
-#       wants the schedule of items and the evidence behind it.
-#
-# WHAT IT DOES INSTEAD
-#   Three things, each of which is a fact rather than a forecast.
+# WHAT IT PRODUCES
+#   Four things about every finding, in increasing order of how much modelling
+#   stands behind them.
 #
 #     1. STATUTORY ANCHORS. Published figures, quoted with the provision they
 #        come from. Not a prediction of what a claim is worth: a statement of
 #        the floor and ceiling a statute sets, which is the number counsel
-#        actually reasons from.
+#        actually reasons from. A quotation, not a model.
 #
 #     2. VENUE ASYMMETRY. Whether the forum offers anti SLAPP relief with fee
-#        shifting. This decides whether a weak claim is cheap or expensive to
-#        defend, and it is already recorded per state in jurisdictions.yaml.
+#        shifting, which decides whether a weak claim is cheap or expensive to
+#        defend. Recorded per state in jurisdictions.yaml. Also a fact.
 #
-#     3. COST TO CURE. What fixing it costs, which is the number a producer
-#        will actually act on. A name change in development is free. The same
-#        change after picture lock is a reshoot. This is estimable because it
-#        is a quote, not a forecast about someone else's behaviour.
+#     3. COST TO CURE. What fixing it costs. Estimable because it is a quote
+#        rather than a forecast about somebody else's behaviour, and for the
+#        elements a production actually buys it is researched rather than
+#        declared. The number a producer will act on first.
 #
-#   Plus an ordinal severity band, so a review queue can be sorted by
-#   consequence without anyone inventing a currency for it.
+#     4. MODELLED EXPOSURE. Frequency times severity, decomposed, reported as a
+#        range. See the `quantitative` block for the whole argument.
+#
+#   Plus an ordinal severity band, which sorts findings into four buckets.
+#
+# WHAT IT STILL REFUSES TO DO
+#   Emit a confident point estimate with no decomposition. "$2.4M expected
+#   exposure" is a reserve figure a producer will treat as one, and it is a
+#   guess wearing authority. Every modelled figure here is a range, carries its
+#   arithmetic, and names the inputs that produced it, so a reader can
+#   disagree with a specific multiplier rather than with a verdict.
+#
+#   An earlier version of this file refused to quantify at all, on the grounds
+#   that settlements are confidential and any fitted model would inherit the
+#   bias of the handful that reached the trade press. That objection is real
+#   and it is the reason nothing here is fitted to reported outcomes. But it
+#   proved too much: underwriters price this risk daily without refusing, by
+#   decomposing it and stating their assumptions. And the bands alone failed at
+#   their own job, returning counsel_required for eighteen of twenty two
+#   findings on a real script, which ranks nothing. Ranking the queue is the
+#   job, so the model exists and shows its work.
 #
 # VERIFY BEFORE CITING
 #   Every figure below carries a `verify` flag, on the same convention as the
@@ -292,6 +294,171 @@ cure:
     TRADE_LIBEL:              rewrite
     REAL_EVENT:               rewrite
     ORGANIZATION:             substitution
+
+# -----------------------------------------------------------------------------
+# quantitative exposure
+# -----------------------------------------------------------------------------
+# The bands above sort findings into four buckets, and that is not enough. On a
+# real script eighteen of twenty two findings came back counsel_required, which
+# tells a producer nothing about which of the eighteen to deal with first. An
+# ordinal scale with four values cannot rank a queue of that size, and ranking
+# the queue is the job.
+#
+# So this is a frequency and severity model, the same decomposition a media
+# liability underwriter uses, with every parameter written down where it can be
+# argued with.
+#
+#     expected_usd = P(claim) x E[cost | claim]
+#
+#     P(claim)       base rate for the finding type, multiplied by modifiers
+#                    for the facts that actually drive whether someone sues
+#     E[cost|claim]  probability weighted over three outcomes: early dismissal,
+#                    negotiated settlement, and adverse judgment
+#
+# HOW THIS DIFFERS FROM THE THING THIS FILE REFUSES TO DO
+#   The refusal stands where it was aimed: at a confident point estimate
+#   presented as a prediction. What is produced here is a modelled range with
+#   its inputs visible and its arithmetic shown, which is a different object.
+#   A reader can see that a number moved because the subject is living and the
+#   claim is disparaging, disagree with that multiplier, edit it here, and get a
+#   different answer. That is a model. "$2.4M expected exposure" with no
+#   decomposition is a guess wearing authority, and it is still refused.
+#
+#   Three properties keep it honest, and all three are enforced in code:
+#     * every output is a range, never a point
+#     * every output carries its decomposition
+#     * the ranking is the product; the absolute figure is the by product
+#
+# CALIBRATION STATUS: UNCALIBRATED
+#   Every number below is a reasoned prior, not a fitted parameter. None has
+#   been validated against a book of actual claims, because no such book is
+#   public. They are stated to an order of magnitude and are meant to be
+#   replaced by a carrier's or a studio's own loss experience. Until that
+#   happens the ranking is far more trustworthy than the magnitude, and every
+#   surface that renders a figure has to say so.
+quantitative:
+  enabled: true
+  calibrated: false
+
+  # Probability that a finding of this shape draws a claim at all, per finding,
+  # before modifiers. Anchored on the observation that the overwhelming
+  # majority of cleared productions are never sued over any single element, so
+  # these are deliberately small.
+  base_frequency:
+    # One rate for every claim. Splitting out a "negative, living" base rate
+    # was tried first and was a double count: that rate already encodes both
+    # facts, and the polarity_negative and subject_living modifiers below then
+    # multiplied them in again, stacking a single claim past probability 1 on
+    # its own. The modifiers are what differentiate a claim now; the base rate
+    # is deliberately generic.
+    claim:                     0.0025
+    REAL_PERSON_DEPICTED:     0.004
+    REAL_PERSON_IDENTIFIABLE: 0.010   # identifiable without being named is worse
+    DEFAMATORY_REF:           0.020
+    TRADE_LIBEL:              0.010
+    ARTWORK_VISUAL:           0.006   # rights holders do enforce on set dressing
+    TATTOO:                   0.010
+    FILM_CLIP:                0.006
+    MUSIC_CUE:                0.004
+    PRINT_QUOTE:              0.003
+    SOURCE_MATERIAL:          0.005
+    TRADEMARK_LOGO:           0.002
+    BRAND_PRODUCT:            0.002
+    BUSINESS_NAME:            0.002
+    PERSON_NAME_FICTIONAL:    0.001
+    REAL_EVENT:               0.001
+    ORGANIZATION:             0.001
+    default:                  0.001
+
+  # Multipliers on frequency. Each is a fact the pipeline already establishes,
+  # and each carries the reason for its direction.
+  frequency_modifiers:
+    verdict_contradicted:
+      value: 4.0
+      because: "The record demonstrably says otherwise. Truth is the defence and it is unavailable."
+    verdict_unsupported:
+      value: 1.8
+      because: "Neither provable nor disprovable. The category that settles rather than tries."
+    verdict_verified:
+      value: 0.15
+      because: "Substantially true. A claim can still be filed and it starts from a losing position."
+    polarity_negative:
+      value: 2.5
+      because: "Reputational harm is the injury. Nobody sues over a flattering portrayal."
+    subject_living:
+      value: 3.0
+      because: "Defamation claims do not survive the subject in most US jurisdictions."
+    public_figure:
+      value: 0.4
+      because: "Actual malice is a materially higher bar than negligence."
+    private_figure:
+      value: 1.6
+      because: "Negligence standard, and no assumption of public scrutiny."
+    truth_claim_framing:
+      value: 1.5
+      because: "Two federal courts treated the framing itself as bearing on reckless disregard."
+    high_prominence:
+      value: 1.4
+      because: "A subject appearing throughout is likelier to notice and likelier to be harmed."
+      threshold_occurrences: 5
+    research_failed:
+      value: 2.0
+      because: "The record was never checked. Unchecked is not clean and must not be modelled as clean."
+
+  # What a claim costs once it is made. Three outcomes, probability weighted.
+  # Defence cost is the most knowable quantity in this entire file: it is
+  # billed by the hour against published rates and does not depend on anybody's
+  # confidential settlement.
+  severity:
+    outcomes:
+      dismissed_early:
+        # Requires anti SLAPP or an equivalent early exit. Cost is the motion.
+        defence_usd: { low: 25000, high: 150000 }
+        indemnity_usd: { low: 0, high: 0 }
+      settled:
+        defence_usd: { low: 50000, high: 400000 }
+        # Anchored on defence cost avoidance rather than on reported verdicts.
+        # A rational defendant settles below the cost of continuing, which is
+        # why most settlements are small, and why the reported ones are not
+        # representative of anything.
+        indemnity_usd: { low: 25000, high: 750000 }
+      adverse_judgment:
+        defence_usd: { low: 250000, high: 2000000 }
+        indemnity_usd: { low: 100000, high: 5000000 }
+
+    # How a claim resolves, given one was filed. Anti SLAPP availability moves
+    # weight out of settlement and into early dismissal, which is the entire
+    # commercial point of the doctrine.
+    outcome_weights:
+      with_anti_slapp:
+        dismissed_early: 0.55
+        settled: 0.40
+        adverse_judgment: 0.05
+      without_anti_slapp:
+        dismissed_early: 0.20
+        settled: 0.70
+        adverse_judgment: 0.10
+
+    # Copyright and publicity findings resolve as licence disputes rather than
+    # as speech cases. Anti SLAPP does not apply to them and the numbers are
+    # smaller and far more predictable.
+    rights_dispute_types:
+      [ARTWORK_VISUAL, TATTOO, FILM_CLIP, MUSIC_CUE, PRINT_QUOTE, SOURCE_MATERIAL]
+    rights_dispute_weights:
+      dismissed_early: 0.15
+      settled: 0.80
+      adverse_judgment: 0.05
+
+  # Reported as a range, never a point. The low end runs every input at its low
+  # value and the high end runs every input at its high value. The spread
+  # between them is the honest statement of how little is known, and a spread of
+  # two orders of magnitude is a normal and correct result here rather than a
+  # sign the model is broken.
+  reporting:
+    round_to_usd: 100
+    # Below this a figure is noise, and renders as "negligible" rather than as
+    # a false precision like "$41".
+    negligible_below_usd: 500
 
 # -----------------------------------------------------------------------------
 # venue
