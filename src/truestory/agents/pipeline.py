@@ -212,7 +212,7 @@ class TrueStoryPipeline:
             await self._stage_research(state)
             await self._stage_adjudicate(state)
             self._stage_precedent(state)
-            self._stage_exposure(state)
+            await self._stage_exposure(state)
             await self._stage_remedy(state)
             await self._stage_report(state, started)
         except Exception as exc:
@@ -564,7 +564,7 @@ class TrueStoryPipeline:
         )
 
     # ── stage 6c ─────────────────────────────────────────────────────────────
-    def _stage_exposure(self, state: RunState) -> None:
+    async def _stage_exposure(self, state: RunState) -> None:
         """Band every finding, quote the statutes, price the fix.
 
         Runs after adjudication because it needs the verdict, and before remedy
@@ -576,6 +576,12 @@ class TrueStoryPipeline:
         that bear on each finding, whether the forum shifts fees, and an order
         of magnitude cost of curing it. See agents/exposure.py for why the
         obvious dollar figure is the one thing it refuses to compute.
+
+        The one research call in this stage is the market rate for the elements
+        a production actually buys. Those figures were a hand written table and
+        a table is a guess; a synchronisation fee is a real number with a
+        market behind it, so it is asked rather than declared. The table
+        remains underneath and the record says which of the two it used.
         """
         from truestory.agents.exposure import ExposureModel
 
@@ -586,6 +592,8 @@ class TrueStoryPipeline:
             log.warning("exposure model unavailable: %s", exc)
             return
 
+        await self._research_cure_rates(state)
+
         cure = state.exposure.get("cost_to_cure_usd", {})
         log.info(
             "exposure: %d blocking, %d counsel required, cure $%s-$%s at %s stage",
@@ -595,6 +603,90 @@ class TrueStoryPipeline:
             f"{cure.get('high', 0):,}",
             self.project.production_stage,
         )
+
+    #: How many market rate lookups one run may make. A feature with forty
+    #: cues does not need forty separate answers to "what does a cue cost",
+    #: and the schedule is a budgeting aid rather than a deliverable.
+    _MAX_CURE_LOOKUPS = 8
+
+    async def _research_cure_rates(self, state: RunState) -> None:
+        """Replace hand written licence ranges with researched ones.
+
+        Only for the element types a production actually buys, only once per
+        element type rather than once per element, and only up to a cap. The
+        answer to "what does a synchronisation licence cost for this kind of
+        show" does not differ between the fourth cue and the fortieth, so
+        asking per element would spend forty lookups to learn one thing.
+
+        Best effort throughout. A failure here leaves the policy table in
+        place, correctly labelled as a hand written estimate, which is the
+        product exactly as it behaved before this call existed.
+        """
+        from truestory.agents.exposure import RESEARCHABLE_CURES, merge_researched_rate
+
+        assessments = state.exposure.get("assessments", [])
+        by_type: dict[str, list[dict[str, Any]]] = {}
+        for element in state.elements:
+            element_type = str(element.element_type)
+            if element_type not in RESEARCHABLE_CURES:
+                continue
+            for assessment in assessments:
+                if assessment.get("subject_id") != element.element_id:
+                    continue
+                if assessment.get("cost_to_cure"):
+                    by_type.setdefault(element_type, []).append(assessment)
+
+        if not by_type:
+            return
+
+        researched = 0
+        for element_type, entries in list(by_type.items())[: self._MAX_CURE_LOOKUPS]:
+            try:
+                payload = await self.tools.research_cure_cost(
+                    subject_id=f"cure_{element_type.lower()}",
+                    element=element_type.replace("_", " ").lower(),
+                    description=_cure_description(element_type),
+                    segment="streaming_series",
+                )
+            except Exception as exc:
+                log.warning("cure rate lookup failed for %s: %s", element_type, exc)
+                continue
+
+            finding = payload.get("finding") or {}
+            if not isinstance(finding, dict):
+                continue
+
+            # One answer, applied to every element of that type. They are all
+            # asking the same market question.
+            for assessment in entries:
+                assessment["cost_to_cure"] = merge_researched_rate(
+                    assessment["cost_to_cure"], finding
+                )
+            if finding.get("rate_found"):
+                researched += 1
+
+        if researched:
+            self._recount_cure_total(state)
+        log.info(
+            "cure rates: %d of %d element types priced from the record",
+            researched,
+            len(by_type),
+        )
+
+    @staticmethod
+    def _recount_cure_total(state: RunState) -> None:
+        """Re add the rollup after researched rates displaced table figures."""
+        priced = [
+            a["cost_to_cure"]
+            for a in state.exposure.get("assessments", [])
+            if a.get("cost_to_cure")
+        ]
+        total = state.exposure.get("cost_to_cure_usd")
+        if not isinstance(total, dict):
+            return
+        total["low"] = sum(int(c.get("low_usd", 0)) for c in priced)
+        total["high"] = sum(int(c.get("high_usd", 0)) for c in priced)
+        total["researched_findings"] = sum(1 for c in priced if c.get("researched"))
 
     # ── stage 7 ──────────────────────────────────────────────────────────────
     async def _stage_remedy(self, state: RunState) -> None:
@@ -994,3 +1086,15 @@ def _share_claim_evidence_with_subjects(
 
     if shared:
         log.info("evidence sharing: %s elements answered by their own claims", shared)
+
+
+def _cure_description(element_type: str) -> str:
+    """What to tell the researcher this element is, in trade terms."""
+    return {
+        "MUSIC_CUE": "a commercially released recording used as a cue, requiring both a synchronisation licence for the composition and a master use licence for the recording",
+        "ARTWORK_VISUAL": "a copyrighted still artwork visible on screen as set dressing",
+        "TATTOO": "a copyrighted tattoo design replicated on a performer",
+        "FILM_CLIP": "archive or third party film footage cut into the programme",
+        "PRINT_QUOTE": "a quoted passage from a copyrighted published text",
+        "SOURCE_MATERIAL": "underlying literary rights optioned as the basis for the adaptation",
+    }.get(element_type, element_type.replace("_", " ").lower())

@@ -168,6 +168,29 @@ _Q_ENTITY = (
     "of complaint from a current occupant."
 )
 
+_Q_CURE_COST = (
+    "Establish the market cost of clearing or replacing one element of a "
+    "production.\n\n"
+    "ELEMENT: {element}\n"
+    "WHAT IT IS: {description}\n"
+    "RIGHTS SCOPE NEEDED: {scope}\n"
+    "PRODUCTION TYPE: {segment}\n\n"
+    "Find what this actually costs at market, not what it might cost in "
+    "principle. Published rate cards, guild and society schedules, trade "
+    "reporting on comparable deals, and licensing agent guidance are all "
+    "usable; a range from any of those is worth more than a point estimate "
+    "from none. State plainly what the figure rests on.\n\n"
+    "Most licensing is negotiated and most deals are confidential, so a "
+    "wide range is frequently the honest answer, and a narrow one usually "
+    "means the record is thin rather than that the price is certain. If "
+    "the public record supports no rate at all, say so rather than "
+    "estimating: a missing rate is a real finding and a fabricated one is "
+    "worse than nothing. Separately, note whether the right is obtainable "
+    "at any price, because an estate or a mark holder that refuses "
+    "productions is a different problem from an expensive one."
+)
+
+
 _Q_INTERROGATE = (
     "Find sources bearing on a specific question a clearance reviewer has asked "
     "while reading one line of a screenplay.\n\n"
@@ -621,6 +644,49 @@ class ClearanceTools:
         evidence = await provider.investigate(request)
         return evidence.to_dict()
 
+    async def research_cure_cost(
+        self,
+        subject_id: str,
+        element: str,
+        description: str = "",
+        *,
+        scope: str = "US streaming series, five year term",
+        segment: str = "streaming_series",
+    ) -> dict[str, Any]:
+        """What clearing or replacing this element costs at market.
+
+        The exposure model ships a table of licence ranges, and every figure in
+        it was written from general knowledge rather than measured. That is a
+        guess with a currency symbol on it, and it sits exactly where a
+        research call belongs: a synchronisation fee is a real, quotable number
+        with a market behind it, in the same way that a trademark registration
+        is a fact with a custodian.
+
+        So this asks. The table remains the fallback for when research is
+        unavailable or comes back empty, and the exposure record states which
+        of the two produced the number, because a cited range and a hand
+        written one must never be presented as the same kind of figure.
+
+        Deliberately LITE. This is a commercial estimate for a producer's
+        budget, not a clearance finding, and it must never draw on the reserve
+        that CRITICAL subjects depend on.
+        """
+        return await self._run(
+            subject_id=subject_id,
+            question=_Q_CURE_COST.format(
+                element=element,
+                description=description or element,
+                scope=scope,
+                segment=segment,
+            ),
+            schema_name="cure_cost_v1",
+            # Routed as an ordinary lookup rather than through the element
+            # rules. The question is about a market, not about whether this
+            # production may use the thing, so it must not inherit a CRITICAL
+            # tier from the element it happens to be about.
+            subject={"type": "REAL_LOCATION"},
+        )
+
     async def watch_subject(
         self,
         subject_id: str,
@@ -664,5 +730,6 @@ TOOL_MANIFEST: dict[str, str] = {
     "check_public_domain": "Establish copyright status of underlying source material and every derivative layer.",
     "enumerate_matching_entities": "Set valued enumeration returning one evidence record per matched entity.",
     "capture_evidence_page": "Capture a registry or docket page verbatim into the evidence pack.",
+    "research_cure_cost": "Market cost of clearing or replacing one element, with sources.",
     "watch_subject": "Open a recurring Living Clearance watch on a subject.",
 }

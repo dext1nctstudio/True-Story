@@ -155,6 +155,12 @@ class ExposureModel:
         # fix for a finding that is already clear is noise in a schedule a
         # producer is reading to decide what to spend money on.
         cure = self.policy.cure_estimate(element_type, self.stage) if band != "routine" else None
+        if cure is not None:
+            # Provenance, always. A hand written range and a researched one are
+            # not the same kind of number and must never render as though they
+            # were. `researched` upgrades this in place when a rate comes back.
+            cure["source"] = "policy_table"
+            cure["researched"] = False
 
         return Exposure(
             subject_id=subject_id,
@@ -261,3 +267,82 @@ def _anchor_view(anchor: dict[str, Any]) -> dict[str, Any]:
             "worth. Confirm before it appears in a deliverable."
         ),
     }
+
+
+# =============================================================================
+# researched rates
+# =============================================================================
+#: Element types whose cure is a real market purchase rather than a script
+#: edit. Only these are worth a research call: nobody needs the going rate for
+#: changing a character's name, and asking would spend a lookup to be told so.
+RESEARCHABLE_CURES: frozenset[str] = frozenset(
+    {
+        "MUSIC_CUE",
+        "ARTWORK_VISUAL",
+        "TATTOO",
+        "FILM_CLIP",
+        "PRINT_QUOTE",
+        "SOURCE_MATERIAL",
+    }
+)
+
+
+def merge_researched_rate(cure: dict[str, Any], finding: dict[str, Any]) -> dict[str, Any]:
+    """Fold a researched market rate into a table derived cure estimate.
+
+    The table stays underneath as the fallback, and the merged record says
+    which number a reader is looking at. Three things can come back and only
+    one of them replaces the table:
+
+      a rate with sources        the table's fee is superseded and labelled
+      rate_found false           the record was asked and is silent, which is
+                                 a finding in itself and is kept as one
+      nothing usable             the table stands, unchanged and still labelled
+                                 as a hand written estimate
+
+    The change component is never overwritten. What a reshoot costs is a fact
+    about this production's schedule, not about a licensing market, and no
+    amount of research into synchronisation fees says anything about it.
+    """
+    if not isinstance(finding, dict):
+        return cure
+
+    if not finding.get("rate_found"):
+        # Asked and answered in the negative. Worth recording: an element with
+        # no public rate is one a producer cannot budget for from a desk.
+        cure["rate_research"] = {
+            "rate_found": False,
+            "basis": str(finding.get("basis", ""))[:600],
+            "obtainable": finding.get("obtainable"),
+        }
+        return cure
+
+    low = finding.get("low_usd")
+    high = finding.get("high_usd")
+    if not isinstance(low, int | float) or not isinstance(high, int | float):
+        return cure
+    if low < 0 or high < low:
+        # A malformed range is not a better number than the table's.
+        return cure
+
+    change = cure.get("change_usd", {})
+    cure["fee_usd"] = {"low": round(float(low)), "high": round(float(high))}
+    cure["low_usd"] = round(float(low) + float(change.get("low", 0)))
+    cure["high_usd"] = round(float(high) + float(change.get("high", 0)))
+    cure["source"] = "researched"
+    cure["researched"] = True
+    cure["rate_research"] = {
+        "rate_found": True,
+        "typical_usd": finding.get("typical_usd"),
+        "rate_unit": finding.get("rate_unit"),
+        "scope": finding.get("scope"),
+        "basis": str(finding.get("basis", ""))[:600],
+        "confidence_note": str(finding.get("confidence_note", ""))[:600],
+        "obtainable": finding.get("obtainable"),
+        "sources": [
+            src.get("url")
+            for src in (finding.get("sources") or [])
+            if isinstance(src, dict) and src.get("url")
+        ][:5],
+    }
+    return cure
