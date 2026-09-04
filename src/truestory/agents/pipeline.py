@@ -81,6 +81,10 @@ class RunState:
     #: the reviewer, attached after adjudication and read by nothing that
     #: decides anything. See agents/precedent.py.
     precedents: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: Severity bands, statutory anchors and cost to cure per finding, plus the
+    #: rollup. Ordinal and quoted, never a predicted damages figure. See
+    #: agents/exposure.py.
+    exposure: dict[str, Any] = field(default_factory=dict)
 
     summary: RunSummary | None = None
     artifacts: dict[str, Any] = field(default_factory=dict)
@@ -102,6 +106,7 @@ class RunState:
                 "monitors": len(self.monitors),
                 "review_queue": len(self.review_queue),
                 "precedents": sum(len(v) for v in self.precedents.values()),
+                "exposure_assessed": len(self.exposure.get("assessments", [])),
             },
             "summary": self.summary.to_dict() if self.summary else None,
             "error": self.error,
@@ -117,6 +122,11 @@ class ProjectConfig:
     shoot_territories: list[str] = field(default_factory=lambda: ["US"])
     distribution_territories: list[str] = field(default_factory=lambda: ["US"])
     budget_usd: float | None = None
+
+    #: Where the production is. It decides almost nothing about risk and
+    #: almost everything about what a fix costs: a rename is free in
+    #: development and a reshoot after picture lock. See policy/exposure.yaml.
+    production_stage: str = "development"
 
     # Normally detected by ingest. Set explicitly when the production has
     # already decided how it will present itself.
@@ -202,6 +212,7 @@ class TrueStoryPipeline:
             await self._stage_research(state)
             await self._stage_adjudicate(state)
             self._stage_precedent(state)
+            self._stage_exposure(state)
             await self._stage_remedy(state)
             await self._stage_report(state, started)
         except Exception as exc:
@@ -550,6 +561,39 @@ class TrueStoryPipeline:
             "precedent: %d findings matched against %d published disputes",
             len(state.precedents),
             len(index.shapes),
+        )
+
+    # ── stage 6c ─────────────────────────────────────────────────────────────
+    def _stage_exposure(self, state: RunState) -> None:
+        """Band every finding, quote the statutes, price the fix.
+
+        Runs after adjudication because it needs the verdict, and before remedy
+        because the cost of a fix is part of choosing one. Synchronous, no
+        model call and no spend.
+
+        It produces no damages estimate and no exposure total. What it produces
+        is an ordinal band a queue can be sorted by, the published provisions
+        that bear on each finding, whether the forum shifts fees, and an order
+        of magnitude cost of curing it. See agents/exposure.py for why the
+        obvious dollar figure is the one thing it refuses to compute.
+        """
+        from truestory.agents.exposure import ExposureModel
+
+        try:
+            model = ExposureModel(stage=self.project.production_stage)
+            state.exposure = model.schedule(state.elements, state.claims)
+        except Exception as exc:  # never fail a run over a schedule
+            log.warning("exposure model unavailable: %s", exc)
+            return
+
+        cure = state.exposure.get("cost_to_cure_usd", {})
+        log.info(
+            "exposure: %d blocking, %d counsel required, cure $%s-$%s at %s stage",
+            state.exposure.get("blocking", 0),
+            state.exposure.get("counsel_required", 0),
+            f"{cure.get('low', 0):,}",
+            f"{cure.get('high', 0):,}",
+            self.project.production_stage,
         )
 
     # ── stage 7 ──────────────────────────────────────────────────────────────
