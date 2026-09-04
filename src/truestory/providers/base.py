@@ -185,6 +185,22 @@ class ResearchProvider(ABC):
             return self.supports_citations
         return True
 
+    def price_cents(self, processor: Processor) -> float:
+        """What one call to this provider will cost, for the pre flight hold.
+
+        The default is Parallel's processor list price, because the Task API is
+        what the routing table's depths were written against and what nearly
+        every subject goes to.
+
+        A provider that does not price by depth overrides this. The registry
+        lookups are the case that matters: they are free, and holding a base
+        processor's price against the ceiling for every mark in flight would
+        refuse research the run can plainly afford. The hold is released on
+        `record` either way, so this changes what a run may do concurrently
+        rather than what it is finally charged.
+        """
+        return processor.usd_per_run * 100
+
     def __repr__(self) -> str:
         return f"<{type(self).__name__} name={self.name!r} citations={self.supports_citations}>"
 

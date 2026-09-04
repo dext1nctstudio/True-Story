@@ -165,6 +165,26 @@ class Settings(BaseSettings):
     parallel_webhook_secret: str = Field(default="", alias="PARALLEL_WEBHOOK_SECRET")
     parallel_webhook_url: str = Field(default="", alias="PARALLEL_WEBHOOK_URL")
 
+    # ── registers ────────────────────────────────────────────────────────────
+    # Optional, and the run is unchanged without it. USPTO's structured search
+    # sits behind the Open Data Portal and wants a free key; with no key the
+    # registry_lookup provider reports unhealthy and marks route to Parallel
+    # Task exactly as they do today. Register at developer.uspto.gov.
+    uspto_api_key: str = Field(default="", alias="USPTO_API_KEY")
+    uspto_api_base: str = Field(default="https://api.uspto.gov", alias="USPTO_API_BASE")
+    uspto_search_path: str = Field(
+        default="/api/v1/trademarks/search", alias="USPTO_SEARCH_PATH"
+    )
+    uspto_timeout_seconds: int = Field(default=30, alias="USPTO_TIMEOUT_SECONDS")
+    # Public, keyless, and human openable. These are what a citation points at,
+    # so a reviewer or an underwriter can repeat the search rather than take
+    # the pipeline's word for the register's contents.
+    uspto_tsdr_url: str = Field(default="https://tsdr.uspto.gov", alias="USPTO_TSDR_URL")
+    uspto_search_url: str = Field(
+        default="https://tmsearch.uspto.gov/search/search-information",
+        alias="USPTO_SEARCH_URL",
+    )
+
     # ── storage ──────────────────────────────────────────────────────────────
     firestore_database: str = Field(default="(default)", alias="FIRESTORE_DATABASE")
     firestore_emulator: str = Field(default="", alias="FIRESTORE_EMULATOR_HOST")

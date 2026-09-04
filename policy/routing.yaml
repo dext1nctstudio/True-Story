@@ -90,9 +90,21 @@ rules:
     also: [monitor]
     note: "WKRP. Licences expire quietly, years after the report is filed."
 
+  # Whether a mark is on the register is a fact with a custodian, so it is
+  # asked of the custodian. Before this rule the answer came from whatever the
+  # crawler surfaced, which on a live run was uspto.report, a scraper of the
+  # register rather than the register: a registry claim resting on a source
+  # that source_quality correctly scores as an ordinary web page.
+  #
+  # registry_lookup answers only the registration half of trademark_v1 and
+  # leaves the expressive use assessment to adjudication. It costs nothing, and
+  # if it has no key or the territory is outside the USPTO register it reports
+  # unhealthy and the existing fallback chain returns this rule to Parallel
+  # Task. The processor below is what that fallback then runs at.
   - id: marks
     match: { type: [BUSINESS_NAME, TRADEMARK_LOGO, BRAND_PRODUCT] }
     tier: HIGH
+    provider: registry_lookup
     processor: base
     schema: trademark_v1
     also: [findall_registered_entities, monitor]
@@ -247,6 +259,10 @@ monitors:
     REAL_PERSON_DEPICTED: monthly  # deaths change publicity rights by state
     TRADEMARK_LOGO: quarterly
     BUSINESS_NAME: quarterly
+    # Routed by the same `marks` rule as the two above, and it was the only one
+    # of the three falling through to the monthly default: three times the
+    # checks for the same class of subject, for no stated reason.
+    BRAND_PRODUCT: quarterly
   expiry_window_days: 180          # inside this window, escalate to weekly
   watch_for:
     - new_litigation_naming_subject

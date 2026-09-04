@@ -98,6 +98,7 @@ class ProviderRegistry:
                 "parallel_extract": mock,
                 "parallel_monitor": mock,
                 "gemini_grounded": mock,
+                "registry_lookup": mock,
                 "mock": mock,
             }
 
@@ -107,9 +108,11 @@ class ProviderRegistry:
         from truestory.providers.parallel_monitor import ParallelMonitorProvider
         from truestory.providers.parallel_search import ParallelSearchProvider
         from truestory.providers.parallel_task import ParallelTaskProvider
+        from truestory.providers.registry_lookup import RegistryLookupProvider
 
         return {
             "parallel_task": ParallelTaskProvider(),
+            "registry_lookup": RegistryLookupProvider(),
             "parallel_search": ParallelSearchProvider(),
             "parallel_findall": ParallelFindAllProvider(),
             "parallel_extract": ParallelExtractProvider(),
@@ -219,7 +222,7 @@ class ProviderRegistry:
             idempotency_key=request.idempotency_key or request.cache_key(),
         )
 
-        cost = selection.processor.usd_per_run * 100
+        cost = selection.provider.price_cents(selection.processor)
         try:
             self.budget.reserve(cost, decision.tier)
         except BudgetExhausted as exc:
