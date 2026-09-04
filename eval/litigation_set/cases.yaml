@@ -44,6 +44,59 @@ scoring:
   partial_credit: false
 
 # =============================================================================
+# retrieval
+# =============================================================================
+# The same corpus, read forwards instead of backwards.
+#
+# Scored retrospectively, these cases ask "did the pipeline catch this". Read
+# at adjudication time they answer a different and more useful question: this
+# finding has the same shape as a dispute that has already been litigated, and
+# here is what happened.
+#
+# Shape, not subject matter. A chess prodigy and a prosecutor have nothing in
+# common as topics; as failure shapes they are the same object, a negative
+# assertion about a named living person, and that is what a court responds to.
+# The dimensions below are the vocabulary the pipeline already routes on, so a
+# match is auditable in the terms the rest of the system uses rather than being
+# a similarity score nobody can argue with.
+#
+# Weights are a product decision, which is why they are here rather than in
+# Python. Raise element_type and the corpus becomes literal; raise polarity and
+# subject_alive and it generalises across element types toward the shape that
+# is actually litigated.
+matching:
+  weights:
+    element_type: 4        # the strongest single signal
+    claim_type: 2
+    polarity: 2            # negative is the shape that gets filed on
+    subject_alive: 2       # ...and living is the other half of that cocktail
+    named: 2               # identifiability, the Baby Reindeer dimension
+    kind: 1                # claim, element, or person rollup
+    truth_claim_framing: 1
+
+  # Below this, the resemblance is too thin to put in front of a lawyer. In
+  # practice the floor is an exact element type match on its own, or any two of
+  # the middleweight dimensions together.
+  #
+  # It was set at 5 first, which read as the more careful choice and was not.
+  # At 5 a living person carrying several unsupported negative claims retrieved
+  # the density case that went against the production and nothing from the
+  # other side, because the defence side case on the same element type scored 4.
+  # A reviewer would have been shown a loss, alone, on the finding type where
+  # balance matters most. Being shown one true case and no counterweight is not
+  # a more conservative answer, it is a biased one.
+  min_score: 4
+
+  # A reviewer reads these. Three is a citation list; ten is homework.
+  max_matches_per_finding: 3
+
+  # Defence side cases are retrieved and shown alongside plaintiff side ones,
+  # never instead of them, and neither may move a status. A precedent is
+  # context for a person deciding, and a system that let a studio win become a
+  # reason to clear would be reasoning from the wrong direction entirely.
+  both_sides_always: true
+
+# =============================================================================
 # plaintiff side, the failures
 # =============================================================================
 

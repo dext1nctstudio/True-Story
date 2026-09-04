@@ -47,7 +47,7 @@ from truestory.config import settings
 from truestory.mcp.tools import ClearanceTools
 from truestory.models.claims import FactualClaim
 from truestory.models.elements import ClearableElement, Remedy, RunSummary
-from truestory.models.enums import RunStatus
+from truestory.models.enums import ClearanceStatus, RunStatus, Verdict
 from truestory.models.evidence import Evidence, MonitorHandle
 from truestory.models.spans import ScriptDocument
 from truestory.policy import load_jurisdictions
@@ -77,6 +77,10 @@ class RunState:
     remedies: list[Remedy] = field(default_factory=list)
     monitors: list[MonitorHandle] = field(default_factory=list)
     review_queue: list[dict[str, Any]] = field(default_factory=list)
+    #: Subject id -> published disputes of the same failure shape. Context for
+    #: the reviewer, attached after adjudication and read by nothing that
+    #: decides anything. See agents/precedent.py.
+    precedents: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
     summary: RunSummary | None = None
     artifacts: dict[str, Any] = field(default_factory=dict)
@@ -97,6 +101,7 @@ class RunState:
                 "remedies": len(self.remedies),
                 "monitors": len(self.monitors),
                 "review_queue": len(self.review_queue),
+                "precedents": sum(len(v) for v in self.precedents.values()),
             },
             "summary": self.summary.to_dict() if self.summary else None,
             "error": self.error,
@@ -196,6 +201,7 @@ class TrueStoryPipeline:
             await self._stage_route(state)
             await self._stage_research(state)
             await self._stage_adjudicate(state)
+            self._stage_precedent(state)
             await self._stage_remedy(state)
             await self._stage_report(state, started)
         except Exception as exc:
@@ -483,6 +489,67 @@ class TrueStoryPipeline:
                 "grey": sum(1 for c in state.claims if c.verdict is Verdict.OPINION),
                 "counsel": len(state.review_queue),
             }
+        )
+
+    # ── stage 6b ─────────────────────────────────────────────────────────────
+    #: Findings that need no precedent. A cited dispute beside a green line is
+    #: noise, and OPINION is protected speech that was never researched at all.
+    #:
+    #: CLEAR_WITH_CONDITIONS is deliberately absent. It is the answer the
+    #: defence side cases earned, so it is exactly where a reviewer benefits
+    #: from seeing the matter that established the conditions.
+    _SETTLED_CLEAR = frozenset({ClearanceStatus.CLEAR})
+    _SETTLED_VERDICTS = frozenset({Verdict.VERIFIED, Verdict.OPINION, None})
+
+    def _stage_precedent(self, state: RunState) -> None:
+        """Attach published disputes of the same failure shape to each finding.
+
+        Placed after adjudication and before remedy because it needs the
+        verdict and it informs how a fix is argued for, and nowhere else. It is
+        synchronous, spends nothing, and calls no model: retrieval is a table
+        lookup over a corpus of ten that ships with the repository.
+
+        Only findings that are not clear are enriched. A precedent attached to
+        a green line is noise, and the reviewer's attention is the scarcest
+        thing this product manages.
+
+        Nothing downstream reads `state.precedents` as a signal. A retrieved
+        case is context for the person deciding, and letting resemblance to a
+        past matter move a status would be the same error the attribution gate
+        exists to prevent for sources.
+        """
+        from truestory.agents.precedent import load_precedents
+
+        assert state.document is not None
+        framing = state.document.truth_claim_framing
+
+        try:
+            index = load_precedents()
+        except Exception as exc:  # never fail a run over an enrichment
+            log.warning("precedent retrieval unavailable: %s", exc)
+            return
+
+        if not index.shapes:
+            return
+
+        for element in state.elements:
+            if element.status in self._SETTLED_CLEAR:
+                continue
+            matches = index.for_element(element, truth_claim_framing=framing)
+            if matches:
+                state.precedents[element.element_id] = [m.to_dict() for m in matches]
+
+        for claim in state.claims:
+            if claim.verdict in self._SETTLED_VERDICTS:
+                continue
+            matches = index.for_claim(claim, truth_claim_framing=framing)
+            if matches:
+                state.precedents[claim.claim_id] = [m.to_dict() for m in matches]
+
+        log.info(
+            "precedent: %d findings matched against %d published disputes",
+            len(state.precedents),
+            len(index.shapes),
         )
 
     # ── stage 7 ──────────────────────────────────────────────────────────────
