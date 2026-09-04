@@ -89,7 +89,11 @@ class IngestAgent:
         # nothing, and the whole run looked hung with no way to tell.
         spans = await _gather_bounded(
             [
-                self.tag_scene(scene, truth_claim_framing=document.truth_claim_framing)
+                self.tag_scene(
+                    scene,
+                    truth_claim_framing=document.truth_claim_framing,
+                    speakers=frozenset(c.upper() for c in document.characters),
+                )
                 for scene in document.scenes
             ],
             limit=settings.ingest_max_concurrency,
@@ -187,10 +191,25 @@ class IngestAgent:
         return False, None
 
     # ── the model pass ───────────────────────────────────────────────────────
-    async def tag_scene(self, scene: Scene, *, truth_claim_framing: bool = False) -> list[RawSpan]:
-        """Tag one scene. Falls back to deterministic patterns in mock mode."""
+    async def tag_scene(
+        self,
+        scene: Scene,
+        *,
+        truth_claim_framing: bool = False,
+        speakers: frozenset[str] = frozenset(),
+    ) -> list[RawSpan]:
+        """Tag one scene. Falls back to deterministic patterns in mock mode.
+
+        `speakers` is every character cue in the whole draft, not just this
+        scene's. A character who speaks in scene four is still a person when
+        they are named in an action line in scene nine, and scoping the check
+        to one scene classified a lead as an institution for exactly that
+        reason.
+        """
         if settings.offline:
-            return self._tag_deterministic(scene, truth_claim_framing=truth_claim_framing)
+            return self._tag_deterministic(
+                scene, truth_claim_framing=truth_claim_framing, speakers=speakers
+            )
 
         from google.genai import types
 
@@ -232,7 +251,9 @@ class IngestAgent:
             # the report, so it is flagged for manual attention and the
             # deterministic pass still runs.
             log.warning("scene %s model pass failed, falling back: %s", scene.scene_no, exc)
-            spans = self._tag_deterministic(scene, truth_claim_framing=truth_claim_framing)
+            spans = self._tag_deterministic(
+                scene, truth_claim_framing=truth_claim_framing, speakers=speakers
+            )
             for s in spans:
                 s.attributes["needs_manual_breakdown"] = True
             return spans
@@ -307,7 +328,11 @@ class IngestAgent:
 
     # ── offline path ─────────────────────────────────────────────────────────
     def _tag_deterministic(
-        self, scene: Scene, *, truth_claim_framing: bool = False
+        self,
+        scene: Scene,
+        *,
+        truth_claim_framing: bool = False,
+        speakers: frozenset[str] = frozenset(),
     ) -> list[RawSpan]:
         """Pattern based tagging so mock mode exercises the whole pipeline.
 
@@ -320,6 +345,12 @@ class IngestAgent:
         lines = scene.text.splitlines()
         current_cue: str | None = None
         seen_names: set[str] = set()
+
+        # The format's own ground truth about who is a person. A name with a
+        # cue block is a character, whatever else the rules below would make of
+        # its surface string. The script wide set is preferred; this scene's own
+        # cues are the floor when a caller does not supply one.
+        speakers = speakers | frozenset(c.upper() for c in scene.characters)
 
         # In a production that asserts a true story, a named character is far
         # more likely to be a real person than an invention. Tagging them as
@@ -352,14 +383,29 @@ class IngestAgent:
         # Music cues are matched against the whole scene rather than line by
         # line, because a quoted song title routinely wraps across a line break
         # in a formatted screenplay and a per line scan simply misses it.
-        # American style puts the comma inside the closing quote, so the
-        # separator has to be optional or every correctly typeset cue is missed.
-        for match in re.finditer(
-            r'"([^"]{4,90}?)[,.]?"\s*(?:by\s+|,\s*)?([A-Z][\w\s&.\'-]{2,40})',
-            scene.text,
-            re.DOTALL,
-        ):
+        #
+        # Quotation marks alone do not make a cue. This pattern used to accept
+        # any quoted run of four to ninety characters followed by a capitalised
+        # word, which is also the shape of every quoted line in a script:
+        #
+        #     This sentence says, "MS Dhoni scored 97 in the 2011 World Cup
+        #     final."
+        #
+        # became a music cue, and from there routed to music_rights_v1 at HIGH
+        # rather than to claim verification at CRITICAL. A quoted factual
+        # assertion about a living person is the exact shape this product
+        # exists to catch, and it was being sent to licensing.
+        #
+        # So a cue now has to look like a cue. Either the `by ARTIST`
+        # connector, which is unambiguous, or a music word in the surrounding
+        # line -- the two ways the convention actually writes one:
+        #
+        #     MUSIC: "Sweet Home Alabama" by Lynyrd Skynyrd
+        #     The jukebox plays "Wichita Lineman."
+        for match in re.finditer(r'"([^"]{4,90}?)[,.]?"', scene.text, re.DOTALL):
             title = " ".join(match.group(1).split()).strip(" ,.")
+            if title in seen_names or not _is_music_cue(scene.text, match, title):
+                continue
             seen_names.add(title)
             spans.append(
                 _span(
@@ -367,7 +413,7 @@ class IngestAgent:
                     0,
                     ElementType.MUSIC_CUE,
                     title,
-                    " ".join(match.group(0).split()),
+                    " ".join(_cue_context(scene.text, match).split()),
                     Modality.SCRIPT_ACTION,
                     None,
                     confidence=0.7,
@@ -447,7 +493,7 @@ class IngestAgent:
                     _span(
                         scene,
                         line_no,
-                        person_type,
+                        _caps_element_type(name, person_type, speakers),
                         name.title(),
                         # Claim extraction needs sentences to decompose, so a
                         # person span carries the surrounding scene rather than
@@ -620,6 +666,197 @@ def _all_noise(phrase: str) -> bool:
     """True when every token in the phrase is screenplay formatting."""
     tokens = [t.strip(".,:-'") for t in phrase.split()]
     return all(t.upper() in _CAPS_NOISE for t in tokens if t)
+
+
+# =============================================================================
+# what a capitalised phrase actually is
+# =============================================================================
+# Screenplay convention introduces a character in capitals inside an action
+# line, so a capitalised run is decent evidence of a person. It is not proof of
+# one, and the tagger treated it as proof: on a cricket script it produced
+# BCCI and ICC CRICKET WORLD CUP as depicted people, which routes a governing
+# body and a tournament to CRITICAL person research.
+#
+# These two tests do not attempt general entity recognition -- that is the
+# model pass, and this is the offline fallback that stands in for it. They
+# catch the two shapes that are unmistakable from the surface string alone.
+
+#: Words that make a phrase an institution rather than a person.
+_ORG_WORDS = frozenset(
+    {
+        "ASSOCIATION",
+        "AUTHORITY",
+        "BANK",
+        "BOARD",
+        "BUREAU",
+        "CLUB",
+        "COLLEGE",
+        "COMMISSION",
+        "COMMITTEE",
+        "COMPANY",
+        "CONGRESS",
+        "CORP",
+        "CORPORATION",
+        "COUNCIL",
+        "DEPARTMENT",
+        "DIVISION",
+        "FEDERATION",
+        "FOUNDATION",
+        "FUND",
+        "GROUP",
+        "HOSPITAL",
+        "INC",
+        "INSTITUTE",
+        "LABORATORY",
+        "LEAGUE",
+        "LLC",
+        "LTD",
+        "MINISTRY",
+        "OFFICE",
+        "ORGANISATION",
+        "ORGANIZATION",
+        "PARTY",
+        "PLC",
+        "SCHOOL",
+        "SOCIETY",
+        "STUDIO",
+        "STUDIOS",
+        "TRUST",
+        "UNION",
+        "UNIVERSITY",
+    }
+)
+
+#: Words that make a phrase an occasion rather than a person.
+_EVENT_WORDS = frozenset(
+    {
+        "CHAMPIONSHIP",
+        "CHAMPIONSHIPS",
+        "CLASSIC",
+        "CONFERENCE",
+        "CUP",
+        "DERBY",
+        "FESTIVAL",
+        "FINAL",
+        "FINALS",
+        "GAMES",
+        "GRAND",
+        "HEARING",
+        "INQUIRY",
+        "INVITATIONAL",
+        "MARATHON",
+        "MASTERS",
+        "OLYMPIAD",
+        "OLYMPICS",
+        "OPEN",
+        "PRIX",
+        "RALLY",
+        "SERIES",
+        "SUMMIT",
+        "TOURNAMENT",
+        "TRIAL",
+        "TRIALS",
+        "WORLDS",
+    }
+)
+
+
+def _caps_element_type(
+    name: str, person_type: ElementType, speakers: frozenset[str] = frozenset()
+) -> ElementType:
+    """Classify a capitalised phrase found in an action line.
+
+    Falls through to `person_type` for anything it cannot place, which keeps
+    the previous behaviour as the default rather than the only answer. A place
+    name still comes back as a person: no surface rule separates SRI LANKA from
+    a surname, and inventing a country list here would be a gazetteer competing
+    with the identity stage, which already exists to resolve what a name
+    denotes before any research is spent on it.
+
+    `speakers` is the script's own character cue list, and it outranks every
+    rule below. A cue block is the format stating unambiguously that a name is
+    a person, and without that check the acronym rule below reclassified DHONI,
+    ANIKA and RAVI as institutions on its first run: a short all capitals word
+    is exactly what a character name looks like too.
+    """
+    if name.upper() in speakers:
+        return person_type
+
+    tokens = {t.strip(".,:-'").upper() for t in name.split()}
+
+    if tokens & _EVENT_WORDS:
+        return ElementType.REAL_EVENT
+    if tokens & _ORG_WORDS:
+        return ElementType.ORGANIZATION
+
+    # There is deliberately no acronym rule here.
+    #
+    # One was written -- a short all capitals token with no spaces is an
+    # institution, which is true of BCCI and ICC -- and it is unusable. It is
+    # equally true of DHONI, and of most surnames: five capital letters is what
+    # a screenplay surname looks like. The cue block check above rescues any
+    # name that speaks, and a depicted person who is only ever named in action
+    # lines has no cue block to be rescued by.
+    #
+    # The two errors are not symmetric. An institution misread as a person
+    # spends a little budget and is caught by the identity stage, which exists
+    # to resolve what a name denotes before research runs. A person misread as
+    # an institution loses CRITICAL person routing altogether, which is the
+    # product. So the fallthrough favours the person.
+    return person_type
+
+
+# =============================================================================
+# music cues
+# =============================================================================
+#: How a screenplay says a song is playing. One of these near the quotation, or
+#: an explicit `by ARTIST`, is what separates a cue from a quoted sentence.
+_MUSIC_CONTEXT = re.compile(
+    r"\b(?:music|song|track|single|tune|melody|anthem|plays?|playing|played|"
+    r"blar(?:es|ing)|blasts?|drifts?|swells?|fades?|jukebox|radio|stereo|"
+    r"turntable|record(?:s|ing|er)?|album|vinyl|speakers?|headphones|earbuds|"
+    r"sings?|singing|sung|hums?|humming|cue|score|soundtrack|band|"
+    r"needle\s+drop|on\s+the\s+air)\b",
+    re.I,
+)
+
+#: `"Title" by Artist`. The connector is decisive on its own.
+_MUSIC_BY = re.compile(r"^\s*(?:,\s*)?by\s+[A-Z]", re.M)
+
+#: A song title is a phrase. Beyond this it is a sentence somebody said, and
+#: the quoted dialogue in a script is routinely long.
+_MAX_CUE_WORDS = 12
+
+
+def _cue_context(text: str, match: re.Match[str]) -> str:
+    """The line or two around a quotation, for the music context test."""
+    start = text.rfind("\n", 0, max(0, match.start() - 1)) + 1
+    end = text.find("\n", match.end())
+    end = len(text) if end < 0 else text.find("\n", end + 1)
+    return text[start : end if end > 0 else len(text)]
+
+
+def _is_music_cue(text: str, match: re.Match[str], title: str) -> bool:
+    """Whether a quoted phrase is a song cue rather than a quoted sentence.
+
+    Precision over recall, deliberately. A missed cue is one unlicensed song
+    on a report that a music supervisor will catch anyway; a quoted claim about
+    a real person misfiled as a cue is routed away from the verification path
+    that is the entire product.
+    """
+    if len(title.split()) > _MAX_CUE_WORDS:
+        return False
+
+    # A sentence somebody spoke, not a title. Song titles do not carry
+    # sentence punctuation inside them.
+    if any(mark in title for mark in ".?!;"):
+        return False
+
+    trailing = text[match.end() : match.end() + 60]
+    if _MUSIC_BY.match(trailing):
+        return True
+
+    return bool(_MUSIC_CONTEXT.search(_cue_context(text, match)))
 
 
 def _window(text: str, anchor: str, size: int) -> str:
