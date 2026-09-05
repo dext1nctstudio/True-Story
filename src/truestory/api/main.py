@@ -18,6 +18,8 @@ import json
 import logging
 import tempfile
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +45,59 @@ from truestory.storage import get_store
 
 log = logging.getLogger("truestory.api")
 
+
+def _reconcile_orphaned_runs() -> None:
+    """Fail every run this process finds still in flight at boot.
+
+    A run's actual work happens inside a `BackgroundTasks` callback in this
+    same process, not a durable job queue -- nothing resumes it if the
+    process that owned it is gone. A redeploy or a free tier restart mid run
+    abandons that callback with no trace, and the run's stored status just
+    stays wherever it last landed: QUEUED forever if the process died before
+    ingest even produced a state, since nothing else ever revisits it. Any
+    run still non terminal when a fresh process starts up is, by
+    construction, one of those -- mark it FAILED so the dashboard reflects
+    reality and the user can resubmit, instead of it sitting there forever
+    looking like work is happening.
+    """
+    try:
+        store = get_store()
+        runs = store.list_all_runs()
+    except Exception:
+        log.warning("could not reconcile orphaned runs at startup", exc_info=True)
+        return
+
+    terminal = {str(RunStatus.COMPLETE), str(RunStatus.FAILED)}
+    for run in runs:
+        status = run.get("status")
+        if status in terminal:
+            continue
+        project_id, run_id = run.get("project_id"), run.get("run_id")
+        if not project_id or not run_id:
+            continue
+        try:
+            store.update_run(
+                project_id,
+                run_id,
+                {
+                    "status": str(RunStatus.FAILED),
+                    "error": (
+                        f"Interrupted while {status or 'QUEUED'}: the server restarted "
+                        "before this run finished. Please resubmit."
+                    ),
+                },
+            )
+            log.warning("marked orphaned run %s (was %s) as failed on startup", run_id, status)
+        except Exception:
+            log.warning("could not mark orphaned run %s as failed", run_id, exc_info=True)
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    _reconcile_orphaned_runs()
+    yield
+
+
 app = FastAPI(
     title="TRUE STORY",
     description=(
@@ -50,6 +105,7 @@ app = FastAPI(
         "Decision support for a clearance attorney. Not legal advice."
     ),
     version="0.1.0",
+    lifespan=_lifespan,
 )
 
 app.add_middleware(
@@ -170,11 +226,31 @@ class InterrogateRequest(BaseModel):
 
 @app.get("/healthz")
 async def healthz() -> dict[str, Any]:
+    """Liveness, plus which run store actually answered.
+
+    Added after a deployment returned `{"runs": []}` with no error anywhere
+    -- the ambiguous result get_store() produces both when there is a real
+    project with zero runs in it and when nothing is configured for it to
+    try. Distinguishing those from outside the process meant reading log
+    scrollback for a warning that only fires on an actual exception, which
+    said nothing when the true cause was a variable that was simply never
+    set. `store` here names the class directly, so the answer is one request
+    rather than a log archaeology exercise, and it never raises: a failure
+    to even construct the store is itself the finding, reported as its own
+    string rather than turning a liveness probe into a 500.
+    """
+    try:
+        store_name = type(get_store()).__name__
+    except Exception as exc:
+        store_name = f"unavailable: {type(exc).__name__}: {exc}"
+
     return {
         "ok": True,
         "mode": str(settings.mode),
         "env": settings.env_name,
         "version": app.version,
+        "store": store_name,
+        "gcp_project": settings.gcp_project or None,
     }
 
 
@@ -396,7 +472,12 @@ async def _execute_run(
     # every read 404'd, so a run that was busy working looked like a run that
     # had never been started. The placeholder is replaced by the real state
     # the moment ingest produces one.
-    _RUNS[run_id] = RunState(run_id=run_id, project_id=config.project_id)
+    initial = RunState(run_id=run_id, project_id=config.project_id)
+    _RUNS[run_id] = initial
+    try:
+        get_store().create_run(config.project_id, run_id, initial.to_dict())
+    except Exception:
+        log.warning("could not persist queued run %s", run_id, exc_info=True)
 
     async def on_progress(payload: dict[str, Any]) -> None:
         if queue is not None:
@@ -419,10 +500,17 @@ async def _execute_run(
             on_state=on_state,
         )
         _RUNS[run_id] = state
-        get_store().create_run(config.project_id, run_id, state.to_dict())
+        get_store().update_run(config.project_id, run_id, state.to_dict())
         _persist_artifacts(config.project_id, run_id, state)
     except Exception as exc:
         log.exception("run %s failed", run_id)
+        failed = _RUNS.get(run_id) or initial
+        failed.status = RunStatus.FAILED
+        failed.error = str(exc)
+        try:
+            get_store().update_run(config.project_id, run_id, failed.to_dict())
+        except Exception:
+            log.warning("could not persist failed run %s", run_id, exc_info=True)
         if queue is not None:
             await queue.put({"event": "run_failed", "error": str(exc)})
     finally:
@@ -450,6 +538,30 @@ def _persist_artifacts(project_id: str, run_id: str, state: RunState) -> None:
             ("claims", {c.claim_id: c.to_dict() for c in state.claims}),
             ("elements", {e.element_id: e.to_dict() for e in state.elements}),
             ("remedies", {r.remedy_id: r.to_dict() for r in state.remedies}),
+            # One record per finding, keyed the same way the assessment itself
+            # is keyed, so a restored run can look either up by subject id
+            # exactly as the in process path does.
+            (
+                "exposure",
+                {
+                    a["subject_id"]: a
+                    for a in state.exposure.get("assessments", [])
+                    if a.get("subject_id")
+                },
+            ),
+            (
+                # `list_subjects` returns only the stored values, not the key
+                # each is stored under (both backends: a document's own id is
+                # never part of `.to_dict()`), which is why claims and
+                # elements already carry their own id field. This one needs
+                # the same treatment or a restored run cannot tell which
+                # finding each match list belongs to.
+                "precedents",
+                {
+                    subject_id: {"subject_id": subject_id, "matches": matches}
+                    for subject_id, matches in state.precedents.items()
+                },
+            ),
         ):
             if subjects:
                 store.batch_put_subjects(project_id, run_id, kind, subjects)
@@ -457,6 +569,37 @@ def _persist_artifacts(project_id: str, run_id: str, state: RunState) -> None:
         overlay = state.artifacts.get("report", {}).get("overlay")
         if overlay:
             store.put_subject(project_id, run_id, "artifacts", "overlay", overlay)
+
+        claim_register = state.artifacts.get("report", {}).get("claim_register")
+        if claim_register:
+            store.put_subject(project_id, run_id, "artifacts", "claim_register", claim_register)
+
+        eo_report = state.artifacts.get("report", {}).get("eo_report")
+        if eo_report:
+            store.put_subject(project_id, run_id, "artifacts", "eo_report", eo_report)
+
+        clearance_log = state.artifacts.get("report", {}).get("clearance_log_csv")
+        if clearance_log:
+            store.put_subject(
+                project_id,
+                run_id,
+                "artifacts",
+                "clearance_log_csv",
+                {"artifact_kind": "clearance_log_csv", "content": clearance_log},
+            )
+
+        # The rollup fields (by_band, costs and research summary)
+        # live only on the aggregate, not on any one assessment, so they are
+        # stored once here rather than reconstructed by summing persisted
+        # per finding records back up on every read.
+        if state.exposure:
+            store.put_subject(
+                project_id,
+                run_id,
+                "artifacts",
+                "exposure_summary",
+                {k: v for k, v in state.exposure.items() if k != "assessments"},
+            )
     except Exception:
         log.warning("could not persist artifacts for run %s", run_id, exc_info=True)
 
@@ -468,12 +611,9 @@ async def get_run(run_id: str, principal: Principal = Depends(current_principal)
         _require_project(principal, state.project_id)
         return apply_view(state.to_dict(), principal)
 
-    # Not in this process. It may still be a completed run from before the
-    # last restart, so fall back to the store rather than reporting a run
-    # that plainly exists as missing. The stored record carries the script,
-    # the summary and the counts; the claims and the overlay are not
-    # persisted, so a restored run opens as a summary rather than as the
-    # annotated script.
+    # Not in this process. It may still be a run from before the last restart,
+    # so fall back to the store rather than reporting a run that plainly
+    # exists as missing. Detailed artifacts are restored by their endpoints.
     stored = _stored_run(run_id, principal)
     if stored is None:
         raise HTTPException(status_code=404, detail="run not found")
@@ -607,6 +747,12 @@ async def get_remedies(
     `apply_remedy` was the only remedy endpoint, so the frontend had a claim's
     `remedy_id` and no way to fetch what that id actually proposed.
     """
+    if run_id not in _RUNS:
+        stored = _stored_subjects(run_id, principal, "remedies")
+        if stored is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        return apply_view({"remedies": stored, "total": len(stored)}, principal)
+
     state = _state_or_404(run_id, principal)
     remedies = [r.to_dict() for r in state.remedies]
     return apply_view({"remedies": remedies, "total": len(remedies)}, principal)
@@ -616,6 +762,12 @@ async def get_remedies(
 async def get_elements(
     run_id: str, principal: Principal = Depends(current_principal)
 ) -> dict[str, Any]:
+    if run_id not in _RUNS:
+        stored = _stored_subjects(run_id, principal, "elements")
+        if stored is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        return apply_view({"elements": stored, "total": len(stored)}, principal)
+
     state = _state_or_404(run_id, principal)
     elements = [
         e.to_dict(
@@ -625,6 +777,57 @@ async def get_elements(
         for e in state.elements
     ]
     return apply_view({"elements": elements, "total": len(elements)}, principal)
+
+
+@app.get("/v1/runs/{run_id}/exposure")
+async def get_exposure(
+    run_id: str, principal: Principal = Depends(current_principal)
+) -> dict[str, Any]:
+    """Severity band, statutory anchors, cost to cure, and the modelled
+    exposure figure, per finding, plus the run wide rollup.
+
+    Gated on the same "cost" capability as `cost_cents` and `budget`. This is
+    a dollar figure about the production's own risk, and a role that may not
+    see the cost meter should not see a modelled lawsuit exposure either.
+    """
+    if not can(principal, "cost"):
+        raise HTTPException(status_code=403, detail="role may not view exposure")
+
+    if run_id not in _RUNS:
+        assessments = _stored_subjects(run_id, principal, "exposure")
+        if assessments is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        summary_rows = _stored_subjects(run_id, principal, "artifacts") or []
+        summary = next((r for r in summary_rows if "by_band" in r), {})
+        payload = {**summary, "assessments": assessments}
+        return apply_view(payload, principal)
+
+    state = _state_or_404(run_id, principal)
+    return apply_view(dict(state.exposure), principal)
+
+
+@app.get("/v1/runs/{run_id}/precedents")
+async def get_precedents(
+    run_id: str, principal: Principal = Depends(current_principal)
+) -> dict[str, Any]:
+    """Published disputes of the same failure shape, keyed by finding.
+
+    Never gated on "cost" or "evidence": a precedent carries no dollar figure
+    and no masked identity of its own, only a matched shape and a citation to
+    a public matter, and it is exactly the context a writer benefits from as
+    much as counsel does.
+    """
+    if run_id not in _RUNS:
+        rows = _stored_subjects(run_id, principal, "precedents")
+        if rows is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        precedents = {
+            row["subject_id"]: row.get("matches", []) for row in rows if row.get("subject_id")
+        }
+        return apply_view({"precedents": precedents}, principal)
+
+    state = _state_or_404(run_id, principal)
+    return apply_view({"precedents": state.precedents}, principal)
 
 
 @app.get("/v1/runs/{run_id}/register")
@@ -641,6 +844,13 @@ async def get_claim_register(
     """
     if not can(principal, "review_queue"):
         raise HTTPException(status_code=403, detail="role may not view the person register")
+    if run_id not in _RUNS:
+        artifacts = _stored_subjects(run_id, principal, "artifacts")
+        if artifacts is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        register = next((r for r in artifacts if "persons" in r), {})
+        return apply_view(register, principal)
+
     state = _state_or_404(run_id, principal)
     return apply_view(state.artifacts.get("report", {}).get("claim_register", {}), principal)
 
@@ -779,9 +989,17 @@ async def estimate(body: EstimateRequest) -> dict[str, Any]:
 async def get_eo_report(
     run_id: str, principal: Principal = Depends(current_principal)
 ) -> dict[str, Any]:
-    state = _state_or_404(run_id, principal)
     if not can(principal, "reports"):
         raise HTTPException(status_code=403, detail="role may not view reports")
+
+    if run_id not in _RUNS:
+        artifacts = _stored_subjects(run_id, principal, "artifacts")
+        if artifacts is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        report = next((r for r in artifacts if "title_page" in r), {})
+        return apply_view(report, principal)
+
+    state = _state_or_404(run_id, principal)
     return apply_view(state.artifacts.get("report", {}).get("eo_report", {}), principal)
 
 
@@ -790,10 +1008,21 @@ async def get_clearance_log(
     run_id: str, principal: Principal = Depends(current_principal)
 ) -> Response:
     """The insurer checklist. Every visible piece of IP and its status."""
-    state = _state_or_404(run_id, principal)
     if not can(principal, "reports"):
         raise HTTPException(status_code=403, detail="role may not view reports")
-    csv_text = state.artifacts.get("report", {}).get("clearance_log_csv", "")
+
+    if run_id not in _RUNS:
+        artifacts = _stored_subjects(run_id, principal, "artifacts")
+        if artifacts is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        record = next(
+            (r for r in artifacts if r.get("artifact_kind") == "clearance_log_csv"),
+            {},
+        )
+        csv_text = str(record.get("content") or "")
+    else:
+        state = _state_or_404(run_id, principal)
+        csv_text = state.artifacts.get("report", {}).get("clearance_log_csv", "")
     return Response(
         content=csv_text,
         media_type="text/csv",
@@ -805,14 +1034,22 @@ async def get_clearance_log(
 async def get_report_pdf(
     run_id: str, principal: Principal = Depends(current_principal)
 ) -> Response:
-    state = _state_or_404(run_id, principal)
     if not can(principal, "reports"):
         raise HTTPException(status_code=403, detail="role may not view reports")
+
+    if run_id not in _RUNS:
+        artifacts = _stored_subjects(run_id, principal, "artifacts")
+        if artifacts is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        report = next((r for r in artifacts if "title_page" in r), {})
+    else:
+        state = _state_or_404(run_id, principal)
+        report = state.artifacts.get("report", {}).get("eo_report", {})
 
     from truestory.reports.eo_report import render_pdf
 
     pdf = render_pdf(
-        state.artifacts.get("report", {}).get("eo_report", {}),
+        report,
         watermark="UNDERWRITER COPY" if principal.role is Role.UNDERWRITER else None,
     )
     return Response(

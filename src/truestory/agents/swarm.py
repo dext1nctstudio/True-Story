@@ -402,8 +402,36 @@ class ResearchSwarm:
 
         # Side effects declared by the routing rule. These are what turn a
         # one off report into Living Clearance.
-        for side_effect in element.also:
-            await self._run_side_effect(side_effect, element, result)
+        #
+        # The evidence goes with them. A monitor opened before the research is
+        # read can only watch the string that was in the script; one opened
+        # after can watch the record the research actually found, which for a
+        # mark is a serial number rather than a word.
+        # The side effects were awaited one after another, and they are the
+        # reason a research task took minutes rather than seconds: a person
+        # element routinely carries three of them, each its own provider round
+        # trip, so the element's wall clock was the sum rather than the slowest.
+        # Measured on a two page script, 43 dispatched tasks produced 121
+        # evidence records — nearly three round trips per task, in series,
+        # inside a stage that was already running its tasks concurrently.
+        #
+        # They are independent of each other: each appends to `result` and none
+        # reads what another produced. The one exception is
+        # `extract_evidence_page`, which captures pages from the evidence
+        # accumulated so far, so it still runs after the others rather than
+        # beside them — concurrently it would race the records it exists to read.
+        deferred = [e for e in element.also if e == "extract_evidence_page"]
+        concurrent = [e for e in element.also if e != "extract_evidence_page"]
+
+        await asyncio.gather(
+            *(
+                self._run_side_effect(side_effect, element, result, evidence)
+                for side_effect in concurrent
+            ),
+            return_exceptions=True,
+        )
+        for side_effect in deferred:
+            await self._run_side_effect(side_effect, element, result, evidence)
 
         await self._emit(
             {
@@ -463,14 +491,18 @@ class ResearchSwarm:
                 return await self.tools.check_entity(eid, name, str(element.element_type).lower())
 
     async def _run_side_effect(
-        self, side_effect: str, element: ClearableElement, result: SwarmResult
+        self,
+        side_effect: str,
+        element: ClearableElement,
+        result: SwarmResult,
+        evidence: Evidence | None = None,
     ) -> None:
         if side_effect == "monitor":
             request = {
                 "subject_id": element.element_id,
-                "query": _monitor_query(element),
+                "query": _monitor_query(element, evidence),
                 "cadence": self.tools.routing.monitor_cadence(element.element_type),
-                "reason": _monitor_reason(element),
+                "reason": _monitor_reason(element, evidence),
             }
             result.monitors_requested.append(request)
             return
@@ -586,7 +618,33 @@ def _identifying_attributes(element: ClearableElement) -> list[str]:
     return attributes or ["unspecified attribute cluster"]
 
 
-def _monitor_query(element: ClearableElement) -> str:
+#: Element types whose monitor can be pinned to a register record.
+_MARK_TYPES = (
+    ElementType.TRADEMARK_LOGO,
+    ElementType.BUSINESS_NAME,
+    ElementType.BRAND_PRODUCT,
+)
+
+
+def _register_records(evidence: Evidence | None) -> list[dict[str, Any]]:
+    """The register records behind a mark finding, if the register answered it.
+
+    Only `registry_lookup` populates `registry_context`, so this is how a
+    monitor tells a fact from the custodian apart from a sentence assembled off
+    the open web. Research prose can name a mark; it cannot hand over a serial
+    number to watch.
+    """
+    if evidence is None or evidence.error or not isinstance(evidence.finding, dict):
+        return []
+    if "registry_context" not in evidence.finding:
+        return []
+    numbers = evidence.finding.get("registration_numbers") or []
+    if not isinstance(numbers, list):
+        return []
+    return [{"registration_number": str(n)} for n in numbers if n]
+
+
+def _monitor_query(element: ClearableElement, evidence: Evidence | None = None) -> str:
     match element.element_type:
         case ElementType.MUSIC_CUE:
             return (
@@ -598,21 +656,60 @@ def _monitor_query(element: ClearableElement) -> str:
                 f"News concerning {element.canonical_form}: death, new litigation naming "
                 f"them, or newly surfaced records bearing on their documented history."
             )
-        case ElementType.TRADEMARK_LOGO | ElementType.BUSINESS_NAME:
-            return (
-                f"Registration changes, ownership transfers or enforcement actions "
-                f"involving the mark '{element.canonical_form}'."
-            )
+        case t if t in _MARK_TYPES:
+            return _mark_monitor_query(element, evidence)
         case _:
             return f"Material changes affecting the clearance position of {element.canonical_form}."
 
 
-def _monitor_reason(element: ClearableElement) -> str:
+def _mark_monitor_query(element: ClearableElement, evidence: Evidence | None) -> str:
+    """Watch the registration, not the word, whenever the register answered.
+
+    "The mark Kestrel" is a search that returns every Kestrel: a bird, a
+    consultancy, three bands. Monitor deduplicates events, not irrelevance, so
+    a query that broad delivers noise monthly for the commercial life of the
+    title and trains the reviewer to ignore it.
+
+    A registration number is unambiguous, and the events that actually change a
+    clearance position are events on that record: a renewal missed, an
+    assignment to a new owner, a cancellation, an opposition. Naming the number
+    is what turns Living Clearance for marks from a standing web search into a
+    watch on a document.
+
+    Falls back to the old prose when the register did not answer, which is the
+    unkeyed and non US case. A vaguer watch is still a watch.
+    """
+    mark = element.canonical_form
+    records = _register_records(evidence)
+    if not records:
+        return (
+            f"Registration changes, ownership transfers or enforcement actions "
+            f"involving the mark '{mark}'."
+        )
+
+    numbers = ", ".join(r["registration_number"] for r in records)
+    owner = (evidence.finding.get("owner") if evidence else None) or "the registered proprietor"
+    return (
+        f"Status changes on US trademark registration(s) {numbers} for the mark "
+        f"'{mark}', held by {owner}: renewal, cancellation, abandonment, "
+        f"opposition, assignment to a new owner, or an enforcement action "
+        f"brought by the proprietor against a production use."
+    )
+
+
+def _monitor_reason(element: ClearableElement, evidence: Evidence | None = None) -> str:
     match element.element_type:
         case ElementType.MUSIC_CUE:
             return "Licence terms are time boxed and lapse silently after delivery."
         case ElementType.REAL_PERSON_DEPICTED:
             return "Death changes publicity rights by state, and new litigation changes risk."
+        case t if t in _MARK_TYPES and _register_records(evidence):
+            # Said precisely, because the manifest is read by a person deciding
+            # whether the watch is worth its cadence.
+            return (
+                "Pinned to the register record found at clearance. A live mark can "
+                "lapse, be assigned, or acquire an owner who enforces."
+            )
         case _:
             return "Rights positions change after the report is filed."
 

@@ -170,7 +170,15 @@ def _print_summary(state: Any) -> None:
     table.add_row("counsel items", str(summary.counsel_items))
     table.add_row("remedies verified", str(summary.remedies_verified))
     table.add_row("monitors opened", str(summary.monitors_created))
-    table.add_row("cost", f"${summary.cost_usd:.4f}")
+    # Research spend and model spend, then the total, because printing only
+    # the first understated a run by 69x on measurement — $0.0100 shown against
+    # $0.6873 actually spent — and cost per script is a number this project
+    # quotes publicly.
+    table.add_row(
+        "cost",
+        f"${summary.total_cost_usd:.4f}  "
+        f"[dim]research ${summary.cost_usd:.4f} + model ${summary.model_cost_usd:.4f}[/dim]",
+    )
     table.add_row("elapsed", f"{summary.duration_seconds:.1f}s")
     table.add_row("cache hit rate", f"{summary.cache_hit_rate:.0%}")
 
@@ -289,7 +297,7 @@ def warm_cache(
 
     if state.summary:
         console.print(
-            f"cache warmed. This run cost ${state.summary.cost_usd:.4f}. "
+            f"cache warmed. This run cost ${state.summary.total_cost_usd:.4f}. "
             "Subsequent runs in cached mode are free and deterministic."
         )
 
@@ -345,6 +353,41 @@ def doctor(
     except Exception as exc:
         row("rubric", False, str(exc))
 
+    # Everything above asks whether a value is present. Nothing above asked
+    # whether it works, and the difference is not academic: this table printed
+    # seven green rows on a machine where the credentials path pointed at
+    # another operating system, the configured region served none of the
+    # configured models, and the research account was out of credit. Three
+    # independent live blockers, no red rows, and the first symptom was a run
+    # that hung. In live mode the checks that can be settled cheaply are
+    # settled here instead.
+    if settings.mode is Mode.LIVE:
+        creds = settings.google_credentials
+        if creds:
+            row(
+                "credentials file",
+                Path(creds).exists(),
+                creds if Path(creds).exists() else f"{creds} does not exist",
+            )
+        else:
+            row(
+                "credentials file",
+                True,
+                "unset, falling back to application default credentials",
+            )
+
+        row(
+            "vertex region",
+            settings.gcp_location == "global",
+            f"{settings.gcp_location}"
+            + (
+                "" if settings.gcp_location == "global" else " serves no Gemini 3 model, use global"
+            ),
+        )
+
+        ok, detail = _probe_parallel_credit()
+        row("parallel credit", ok, detail)
+
     console.print(table)
     console.print(
         "\n[dim]Mock mode needs none of the above. Every red row is a live mode "
@@ -353,6 +396,35 @@ def doctor(
 
     if models:
         _probe_models()
+
+
+def _probe_parallel_credit() -> tuple[bool, str]:
+    """One cheap call that distinguishes a funded account from an empty one.
+
+    A drained account answers every research request with HTTP 402, and the
+    pipeline turns that into "no record found either way" on every subject —
+    a report that reads exactly like a clean one. Finding that out before the
+    run rather than after it is the whole point of this command.
+    """
+    import httpx
+
+    try:
+        resp = httpx.post(
+            f"{settings.parallel_api_base.rstrip('/')}/v1/tasks/runs",
+            headers={"x-api-key": settings.parallel_api_key},
+            json={"input": "ping", "processor": "lite"},
+            timeout=20.0,
+        )
+    except Exception as exc:
+        return False, f"could not reach Parallel: {type(exc).__name__}"
+
+    if resp.status_code == 402:
+        return False, "insufficient credit, top up before any live run"
+    if resp.status_code in (401, 403):
+        return False, f"key rejected (HTTP {resp.status_code})"
+    if resp.status_code >= 400:
+        return False, f"HTTP {resp.status_code}"
+    return True, "account is funded"
 
 
 def _probe_models() -> None:
@@ -372,13 +444,9 @@ def _probe_models() -> None:
     table.add_column("detail", style="dim")
 
     try:
-        from google import genai
+        from truestory.providers import model_fallback
 
-        client = genai.Client(
-            vertexai=settings.use_vertex,
-            project=settings.gcp_project or None,
-            location=settings.gcp_location,
-        )
+        client = model_fallback.genai_client()
     except Exception as exc:
         console.print(f"\n[red]could not build a Gemini client:[/red] {exc}")
         return

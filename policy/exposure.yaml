@@ -1,0 +1,491 @@
+# =============================================================================
+# TRUE STORY  ·  exposure model
+# =============================================================================
+# What a finding could cost, stated only in terms that are actually knowable.
+#
+# WHAT IT PRODUCES
+#   Four things about every finding, in increasing order of how much modelling
+#   stands behind them.
+#
+#     1. STATUTORY ANCHORS. Published figures, quoted with the provision they
+#        come from. Not a prediction of what a claim is worth: a statement of
+#        the floor and ceiling a statute sets, which is the number counsel
+#        actually reasons from. A quotation, not a model.
+#
+#     2. VENUE ASYMMETRY. Whether the forum offers anti SLAPP relief with fee
+#        shifting, which decides whether a weak claim is cheap or expensive to
+#        defend. Recorded per state in jurisdictions.yaml. Also a fact.
+#
+#     3. COST TO CURE. What fixing it costs. Estimable because it is a quote
+#        rather than a forecast about somebody else's behaviour, and for the
+#        elements a production actually buys it is researched rather than
+#        declared. The number a producer will act on first.
+#
+#     4. MODELLED EXPOSURE. Frequency times severity, decomposed, reported as a
+#        range. See the `quantitative` block for the whole argument.
+#
+#   Plus an ordinal severity band, which sorts findings into four buckets.
+#
+# WHAT IT STILL REFUSES TO DO
+#   Emit a confident point estimate with no decomposition. "$2.4M expected
+#   exposure" is a reserve figure a producer will treat as one, and it is a
+#   guess wearing authority. Every modelled figure here is a range, carries its
+#   arithmetic, and names the inputs that produced it, so a reader can
+#   disagree with a specific multiplier rather than with a verdict.
+#
+#   An earlier version of this file refused to quantify at all, on the grounds
+#   that settlements are confidential and any fitted model would inherit the
+#   bias of the handful that reached the trade press. That objection is real
+#   and it is the reason nothing here is fitted to reported outcomes. But it
+#   proved too much: underwriters price this risk daily without refusing, by
+#   decomposing it and stating their assumptions. And the bands alone failed at
+#   their own job, returning counsel_required for eighteen of twenty two
+#   findings on a real script, which ranks nothing. Ranking the queue is the
+#   job, so the model exists and shows its work.
+#
+# VERIFY BEFORE CITING
+#   Every figure below carries a `verify` flag, on the same convention as the
+#   `instruments` block in jurisdictions.yaml. Nothing here has been confirmed
+#   against a primary source in this repository, statutory damages provisions
+#   are amended, and a figure that appears in a deliverable must be checked
+#   first. Nothing in this file is legal advice.
+# =============================================================================
+
+version: 1
+updated: "2026-09-05"
+
+# -----------------------------------------------------------------------------
+# severity bands
+# -----------------------------------------------------------------------------
+# Ordinal, deliberately. Four bands a producer can act on, in the order a
+# review queue should be worked. Rank is for sorting only and is not a score,
+# a probability, or a multiplier on anything.
+bands:
+  routine:
+    rank: 1
+    means: "Note it. No action required before the camera rolls."
+  negotiable:
+    rank: 2
+    means: "Obtainable. A licence or a permission exists and the question is price."
+  counsel_required:
+    rank: 3
+    means: "A qualified attorney decides this one before it is shot."
+  blocking:
+    rank: 4
+    means: "Do not shoot as written. Remedy first, then re clear."
+
+# How a finding lands in a band. First match wins, so the order is the policy.
+# Read the `when` clauses as: every key present must hold.
+band_rules:
+  - id: research_never_ran
+    when: { status: RESEARCH_FAILED }
+    band: counsel_required
+    because: >
+      The record was never asked. That is not a clean finding and it must never
+      queue below one that was actually checked.
+
+  - id: counsel_flagged
+    when: { needs_counsel: true }
+    band: counsel_required
+    because: "The rubric already sent this to a human. The band agrees with it."
+
+  - id: contradicted_negative_living
+    when: { verdict: CONTRADICTED, polarity: negative, subject_alive: true }
+    band: blocking
+    because: >
+      A demonstrably false disparaging statement about someone who can sue is
+      the shape of every marquee case in the litigation set. There is no
+      version of this that is shot as written.
+
+  - id: contradicted
+    when: { verdict: CONTRADICTED }
+    band: counsel_required
+    because: "The record says otherwise. Someone qualified decides what follows."
+
+  - id: unsupported_negative_living
+    when: { verdict: UNSUPPORTED, polarity: negative, subject_alive: true }
+    band: counsel_required
+    because: >
+      The category that settles. Not provably false, so not defensible either,
+      and a production can neither stand behind it nor cheaply cut it.
+
+  - id: licence_available
+    when: { status: NEEDS_LICENSE }
+    band: negotiable
+    because: "There is a rights holder and a market rate. This is a purchase."
+
+  - id: not_clear
+    when: { status: NOT_CLEAR }
+    band: counsel_required
+
+  - id: conditions_attached
+    when: { status: CLEAR_WITH_CONDITIONS }
+    band: routine
+    because: >
+      The correct answer for protected expressive use. Conditions are art
+      department instructions, not a legal problem.
+
+# -----------------------------------------------------------------------------
+# statutory anchors
+# -----------------------------------------------------------------------------
+# Published figures only. Each is what a provision says, not what a matter is
+# worth. `applies_to` matches element types and claim shapes; an anchor with no
+# match is simply not attached.
+anchors:
+  - id: copyright_statutory_damages
+    provision: "17 U.S.C. 504(c)"
+    jurisdiction: US
+    applies_to: [ARTWORK_VISUAL, TATTOO, FILM_CLIP, MUSIC_CUE, PRINT_QUOTE, SOURCE_MATERIAL]
+    basis: per_work
+    floor_usd: 750
+    ceiling_usd: 30000
+    willful_ceiling_usd: 150000
+    innocent_floor_usd: 200
+    note: >
+      Elected instead of actual damages, at the copyright owner's option, and
+      only where the work was registered in time. Per work infringed, not per
+      infringing act, which is why a wall of posters is not one exposure.
+    verify: required
+
+  - id: publicity_rights_california
+    provision: "Cal. Civ. Code 3344"
+    jurisdiction: US-CA
+    applies_to: [REAL_PERSON_DEPICTED, REAL_PERSON_IDENTIFIABLE]
+    requires: { subject_alive: true }
+    basis: per_claimant
+    floor_usd: 750
+    note: >
+      A statutory minimum awarded where actual damages are lower, plus profits
+      attributable to the use, plus fees to the prevailing party. The floor is
+      not the exposure; it is the number below which the exposure cannot fall.
+    verify: required
+
+  - id: publicity_rights_california_deceased
+    provision: "Cal. Civ. Code 3344.1"
+    jurisdiction: US-CA
+    applies_to: [REAL_PERSON_DEPICTED]
+    requires: { subject_alive: false }
+    basis: per_claimant
+    floor_usd: 750
+    note: >
+      Post mortem right, seventy years in California. Whether it applies at all
+      turns on the domicile of the person at death, which jurisdictions.yaml
+      records per state.
+    verify: required
+
+  - id: digital_replica_california
+    provision: "Cal. Civ. Code 3344.1, as amended by AB 1836"
+    jurisdiction: US-CA
+    applies_to: [DIGITAL_REPLICA, AI_GENERATED_ASSET]
+    basis: per_claimant
+    note: >
+      Statutory damages floor for the unauthorised digital replica of a
+      deceased performer. The figure is recent and moves; it is deliberately
+      not restated here until it has been confirmed against the code.
+    verify: required
+
+  - id: lanham_act_remedies
+    provision: "15 U.S.C. 1117"
+    jurisdiction: US
+    applies_to: [TRADEMARK_LOGO, BRAND_PRODUCT, BUSINESS_NAME]
+    basis: actual_damages
+    note: >
+      No statutory damages figure is quoted here on purpose. The statutory
+      damages provision in this section is for counterfeiting, which is not
+      what a production use is, and quoting a counterfeiting ceiling beside a
+      brand visible on a coffee cup would be alarming and wrong. Ordinary
+      exposure is the owner's actual damages and the infringer's profits, which
+      is not a published number and is therefore not stated as one.
+    verify: required
+
+# -----------------------------------------------------------------------------
+# cost to cure
+# -----------------------------------------------------------------------------
+# The number a producer actually acts on, and the one part of this file that is
+# an estimate rather than a quotation. Ranges are order of magnitude and are
+# labelled as such wherever they render.
+#
+# The production stage is what dominates. The same rename is a find and replace
+# in development and a reshoot after picture lock, and that difference is far
+# larger than any difference between element types.
+cure:
+  stages:
+    development:    { multiplier: 1,   note: "Script changes are free. This is the whole argument for clearing early." }
+    pre_production: { multiplier: 1,   note: "Casting and design are set; pages are still cheap to change." }
+    production:     { multiplier: 12,  note: "Crew, cast and location are standing. A change is a scheduled day." }
+    post:           { multiplier: 40,  note: "Reshoot, digital paint out, or an ADR session, plus the edit around it." }
+    delivered:      { multiplier: 120, note: "Recall, re delivery, and the distributor's own remedies." }
+
+  # Two components, because only one of them moves with the stage.
+  #
+  #   fee     the rights payment. A synchronisation licence costs what it costs
+  #           whether it is negotiated in development or in post. Late leverage
+  #           is worse, but that is a negotiating position, not a multiplier,
+  #           and it is not modelled as one.
+  #
+  #   change  the cost of altering material that already exists. This is what
+  #           the stage multiplies: nothing has been made in development, and
+  #           in post it is a reshoot, a paint out or an edit session.
+  #
+  #   total = fee + (change x stage multiplier)
+  #
+  # Multiplying the fee was the first version of this table and it produced a
+  # three million dollar music cue, which is not a risk model, it is a
+  # arithmetic error with a currency symbol on it.
+  by_remedy:
+    rename:
+      fee: { low: 0, high: 0 }
+      change: { low: 0, high: 400 }
+      note: "A find and replace in the script, or a reshoot of every scene that says the name."
+    rewrite:
+      fee: { low: 0, high: 0 }
+      change: { low: 0, high: 600 }
+      note: "A line change, or the coverage and ADR to replace a line already shot."
+    disclaimer:
+      fee: { low: 0, high: 500 }
+      change: { low: 0, high: 250 }
+      note: "A card, and counsel's time to word it. Cheap at any stage."
+    substitution:
+      fee: { low: 0, high: 0 }
+      change: { low: 250, high: 2500 }
+      note: "Art department builds a fictional mark, or the logo is painted out of the frame."
+    license_music:
+      fee: { low: 5000, high: 75000 }
+      change: { low: 0, high: 1500 }
+      note: "Two rights per cue, composition and master, negotiated separately. The change cost is the swap if the licence is refused."
+    license_art:
+      fee: { low: 1000, high: 25000 }
+      change: { low: 150, high: 2000 }
+      note: "Still artwork, per work, per territory and term."
+    license_clip:
+      fee: { low: 5000, high: 50000 }
+      change: { low: 250, high: 3000 }
+      note: "Archive footage, per second, plus any performers appearing in it."
+    life_rights:
+      fee: { low: 25000, high: 500000 }
+      change: { low: 0, high: 2000 }
+      note: "A depicted person's cooperation and release. Enormously variable and frequently unobtainable at any price."
+
+  # Which remedy a finding needs, by element type. The remedy loop proposes the
+  # specific fix; this is only what class of fix to price.
+  #
+  # A depicted real person prices as a rewrite, not as life rights. Life rights
+  # are how a production buys a principal subject's cooperation, and they are
+  # a commercial choice about one or two people. They are not the cure for a
+  # finding, and pricing them as one produced an eight million dollar estimate
+  # on a script whose ledger held eighteen named people -- a number that is
+  # both alarming and meaningless, which is the exact failure this whole file
+  # is written to avoid. The cure for a finding about a person is to change
+  # what the script says about them.
+  remedy_for:
+    MUSIC_CUE:                license_music
+    ARTWORK_VISUAL:           license_art
+    TATTOO:                   license_art
+    FILM_CLIP:                license_clip
+    PRINT_QUOTE:              license_art
+    SOURCE_MATERIAL:          life_rights     # underlying rights, genuinely optioned
+    REAL_PERSON_DEPICTED:     rewrite
+    REAL_PERSON_IDENTIFIABLE: rewrite
+    PERSON_NAME_FICTIONAL:    rename
+    BUSINESS_NAME:            substitution
+    BRAND_PRODUCT:            substitution
+    TRADEMARK_LOGO:           substitution
+    DEFAMATORY_REF:           rewrite
+    TRADE_LIBEL:              rewrite
+    REAL_EVENT:               rewrite
+    ORGANIZATION:             substitution
+
+# -----------------------------------------------------------------------------
+# quantitative exposure
+# -----------------------------------------------------------------------------
+# The bands above sort findings into four buckets, and that is not enough. On a
+# real script eighteen of twenty two findings came back counsel_required, which
+# tells a producer nothing about which of the eighteen to deal with first. An
+# ordinal scale with four values cannot rank a queue of that size, and ranking
+# the queue is the job.
+#
+# So this is a frequency and severity model, the same decomposition a media
+# liability underwriter uses, with every parameter written down where it can be
+# argued with.
+#
+#     expected_usd = P(claim) x E[cost | claim]
+#
+#     P(claim)       base rate for the finding type, multiplied by modifiers
+#                    for the facts that actually drive whether someone sues
+#     E[cost|claim]  probability weighted over three outcomes: early dismissal,
+#                    negotiated settlement, and adverse judgment
+#
+# HOW THIS DIFFERS FROM THE THING THIS FILE REFUSES TO DO
+#   The refusal stands where it was aimed: at a confident point estimate
+#   presented as a prediction. What is produced here is a modelled range with
+#   its inputs visible and its arithmetic shown, which is a different object.
+#   A reader can see that a number moved because the subject is living and the
+#   claim is disparaging, disagree with that multiplier, edit it here, and get a
+#   different answer. That is a model. "$2.4M expected exposure" with no
+#   decomposition is a guess wearing authority, and it is still refused.
+#
+#   Three properties keep it honest, and all three are enforced in code:
+#     * every output is a range, never a point
+#     * every output carries its decomposition
+#     * the ranking is the product; the absolute figure is the by product
+#
+# EXTERNAL REFERENCE, NOT CALIBRATION
+#   eval/precedent_corpus/dataset.json holds 210 real federal dockets fetched
+#   live from CourtListener's public search API -- genuine public record,
+#   including the actual Baby Reindeer suit (Harvey v. Netflix). It confirms
+#   claims of this shape are filed in real volume in the expected venues and
+#   that a filed claim takes a median of 400 days to resolve.
+#
+#   It does not calibrate anything below. Disposition detail (dismissed on
+#   anti-SLAPP, settled, tried) and dollar amounts both sit behind deeper,
+#   often sealed, docket access that a keyless search cannot reach, which is
+#   the same wall this file's numbers were already written around. See
+#   eval/precedent_corpus/README.md for exactly what the dataset does and does
+#   not support, and do not treat 210 filed dockets as though it moved
+#   `calibrated` to true.
+#
+# CALIBRATION STATUS: UNCALIBRATED
+#   Every number below is a reasoned prior, not a fitted parameter. None has
+#   been validated against a book of actual claims, because no such book is
+#   public. They are stated to an order of magnitude and are meant to be
+#   replaced by a carrier's or a studio's own loss experience. Until that
+#   happens the ranking is far more trustworthy than the magnitude, and every
+#   surface that renders a figure has to say so.
+quantitative:
+  enabled: true
+  calibrated: false
+
+  # Probability that a finding of this shape draws a claim at all, per finding,
+  # before modifiers. Anchored on the observation that the overwhelming
+  # majority of cleared productions are never sued over any single element, so
+  # these are deliberately small.
+  base_frequency:
+    # One rate for every claim. Splitting out a "negative, living" base rate
+    # was tried first and was a double count: that rate already encodes both
+    # facts, and the polarity_negative and subject_living modifiers below then
+    # multiplied them in again, stacking a single claim past probability 1 on
+    # its own. The modifiers are what differentiate a claim now; the base rate
+    # is deliberately generic.
+    claim:                     0.0025
+    REAL_PERSON_DEPICTED:     0.004
+    REAL_PERSON_IDENTIFIABLE: 0.010   # identifiable without being named is worse
+    DEFAMATORY_REF:           0.020
+    TRADE_LIBEL:              0.010
+    ARTWORK_VISUAL:           0.006   # rights holders do enforce on set dressing
+    TATTOO:                   0.010
+    FILM_CLIP:                0.006
+    MUSIC_CUE:                0.004
+    PRINT_QUOTE:              0.003
+    SOURCE_MATERIAL:          0.005
+    TRADEMARK_LOGO:           0.002
+    BRAND_PRODUCT:            0.002
+    BUSINESS_NAME:            0.002
+    PERSON_NAME_FICTIONAL:    0.001
+    REAL_EVENT:               0.001
+    ORGANIZATION:             0.001
+    default:                  0.001
+
+  # Multipliers on frequency. Each is a fact the pipeline already establishes,
+  # and each carries the reason for its direction.
+  frequency_modifiers:
+    verdict_contradicted:
+      value: 4.0
+      because: "The record demonstrably says otherwise. Truth is the defence and it is unavailable."
+    verdict_unsupported:
+      value: 1.8
+      because: "Neither provable nor disprovable. The category that settles rather than tries."
+    verdict_verified:
+      value: 0.15
+      because: "Substantially true. A claim can still be filed and it starts from a losing position."
+    polarity_negative:
+      value: 2.5
+      because: "Reputational harm is the injury. Nobody sues over a flattering portrayal."
+    subject_living:
+      value: 3.0
+      because: "Defamation claims do not survive the subject in most US jurisdictions."
+    public_figure:
+      value: 0.4
+      because: "Actual malice is a materially higher bar than negligence."
+    private_figure:
+      value: 1.6
+      because: "Negligence standard, and no assumption of public scrutiny."
+    truth_claim_framing:
+      value: 1.5
+      because: "Two federal courts treated the framing itself as bearing on reckless disregard."
+    high_prominence:
+      value: 1.4
+      because: "A subject appearing throughout is likelier to notice and likelier to be harmed."
+      threshold_occurrences: 5
+    research_failed:
+      value: 2.0
+      because: "The record was never checked. Unchecked is not clean and must not be modelled as clean."
+
+  # What a claim costs once it is made. Three outcomes, probability weighted.
+  # Defence cost is the most knowable quantity in this entire file: it is
+  # billed by the hour against published rates and does not depend on anybody's
+  # confidential settlement.
+  severity:
+    outcomes:
+      dismissed_early:
+        # Requires anti SLAPP or an equivalent early exit. Cost is the motion.
+        defence_usd: { low: 25000, high: 150000 }
+        indemnity_usd: { low: 0, high: 0 }
+      settled:
+        defence_usd: { low: 50000, high: 400000 }
+        # Anchored on defence cost avoidance rather than on reported verdicts.
+        # A rational defendant settles below the cost of continuing, which is
+        # why most settlements are small, and why the reported ones are not
+        # representative of anything.
+        indemnity_usd: { low: 25000, high: 750000 }
+      adverse_judgment:
+        defence_usd: { low: 250000, high: 2000000 }
+        indemnity_usd: { low: 100000, high: 5000000 }
+
+    # How a claim resolves, given one was filed. Anti SLAPP availability moves
+    # weight out of settlement and into early dismissal, which is the entire
+    # commercial point of the doctrine.
+    outcome_weights:
+      with_anti_slapp:
+        dismissed_early: 0.55
+        settled: 0.40
+        adverse_judgment: 0.05
+      without_anti_slapp:
+        dismissed_early: 0.20
+        settled: 0.70
+        adverse_judgment: 0.10
+
+    # Copyright and publicity findings resolve as licence disputes rather than
+    # as speech cases. Anti SLAPP does not apply to them and the numbers are
+    # smaller and far more predictable.
+    rights_dispute_types:
+      [ARTWORK_VISUAL, TATTOO, FILM_CLIP, MUSIC_CUE, PRINT_QUOTE, SOURCE_MATERIAL]
+    rights_dispute_weights:
+      dismissed_early: 0.15
+      settled: 0.80
+      adverse_judgment: 0.05
+
+  # Reported as a range, never a point. The low end runs every input at its low
+  # value and the high end runs every input at its high value. The spread
+  # between them is the honest statement of how little is known, and a spread of
+  # two orders of magnitude is a normal and correct result here rather than a
+  # sign the model is broken.
+  reporting:
+    round_to_usd: 100
+    # Below this a figure is noise, and renders as "negligible" rather than as
+    # a false precision like "$41".
+    negligible_below_usd: 500
+
+# -----------------------------------------------------------------------------
+# venue
+# -----------------------------------------------------------------------------
+# Not a number. A statement about who pays to find out.
+venue:
+  anti_slapp_note: >
+    Anti SLAPP relief with fee shifting is available in this forum. A meritless
+    claim against protected expressive speech can be dismissed early and the
+    production's fees recovered, which changes the economics of defending
+    rather than the merits of the finding.
+  no_anti_slapp_note: >
+    No anti SLAPP relief is recorded for this forum. A weak claim still has to
+    be defended on ordinary terms, so nuisance exposure is materially higher
+    for the same finding than it would be in a state that offers it.

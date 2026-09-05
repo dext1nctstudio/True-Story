@@ -118,6 +118,19 @@ class Settings(BaseSettings):
     # quote check catches its mistakes, so it takes the fast model and stays
     # cheap enough to run on every source of every claim.
     model_attribution: str = Field(default="gemini-3.7-flash", alias="TRUESTORY_MODEL_ATTRIBUTION")
+
+    # Wall clock ceiling on a single Gemini call, in seconds.
+    #
+    # There was none, and the absence was not theoretical. Two live runs of a
+    # two page script hung indefinitely on an open Vertex socket — fifty five
+    # minutes on the first before it was killed — with no error, no retry and
+    # no way for the run to end. Every other outbound call in this system
+    # carries a deadline; the model calls, which are the most numerous, carried
+    # none, so one stalled connection could hold a clearance run open forever.
+    #
+    # Set well above a slow reasoning call on a long prompt and well below the
+    # patience of anybody watching a demo.
+    model_timeout_seconds: int = Field(default=180, alias="TRUESTORY_MODEL_TIMEOUT_SECONDS")
     # Identity resolution: is this name a real person or an invention.
     model_identity: str = Field(default="gemini-3.7-flash", alias="TRUESTORY_MODEL_IDENTITY")
     # The grounded fallback, and the one model choice here that is not about
@@ -165,6 +178,31 @@ class Settings(BaseSettings):
     parallel_webhook_secret: str = Field(default="", alias="PARALLEL_WEBHOOK_SECRET")
     parallel_webhook_url: str = Field(default="", alias="PARALLEL_WEBHOOK_URL")
 
+    # ── registers ────────────────────────────────────────────────────────────
+    # Optional, and the run is unchanged without it. USPTO's structured search
+    # sits behind the Open Data Portal and wants a free key; with no key the
+    # registry_lookup provider reports unhealthy and marks route to Parallel
+    # Task exactly as they do today. Register at developer.uspto.gov.
+    uspto_api_key: str = Field(default="", alias="USPTO_API_KEY")
+    uspto_api_base: str = Field(default="https://api.uspto.gov", alias="USPTO_API_BASE")
+    uspto_search_path: str = Field(default="/api/v1/trademarks/search", alias="USPTO_SEARCH_PATH")
+    uspto_timeout_seconds: int = Field(default=30, alias="USPTO_TIMEOUT_SECONDS")
+    # Optional court-data enrichment. Public CourtListener search is keyless;
+    # opinion/docket detail and RECAP document APIs require a free token.
+    courtlistener_api_token: str = Field(default="", alias="COURTLISTENER_API_TOKEN")
+    courtlistener_api_base: str = Field(
+        default="https://www.courtlistener.com/api/rest/v4",
+        alias="COURTLISTENER_API_BASE",
+    )
+    # Public, keyless, and human openable. These are what a citation points at,
+    # so a reviewer or an underwriter can repeat the search rather than take
+    # the pipeline's word for the register's contents.
+    uspto_tsdr_url: str = Field(default="https://tsdr.uspto.gov", alias="USPTO_TSDR_URL")
+    uspto_search_url: str = Field(
+        default="https://tmsearch.uspto.gov/search/search-information",
+        alias="USPTO_SEARCH_URL",
+    )
+
     # ── storage ──────────────────────────────────────────────────────────────
     firestore_database: str = Field(default="(default)", alias="FIRESTORE_DATABASE")
     firestore_emulator: str = Field(default="", alias="FIRESTORE_EMULATOR_HOST")
@@ -205,13 +243,38 @@ class Settings(BaseSettings):
     # not fail loudly; it queues, every subject ages out, and the report is
     # carried entirely by the fallback while Parallel is billed for runs nobody
     # collected. Eight leaves margin without re-entering that regime.
-    swarm_max_concurrency: int = Field(default=8, alias="SWARM_MAX_CONCURRENCY")
+    # Re-measured 5 September 2026, against this account, because the note
+    # above was the single largest cost in a run and it was written from one
+    # observation. 24 identical lite Task runs, same questions, same client:
+    #
+    #     concurrency  8    103.1s wall, 0 failures, 30.6s mean per task
+    #     concurrency 24     45.3s wall, 0 failures, 21.3s mean per task
+    #
+    # 2.3x the throughput and the mean task got *faster*, which is the opposite
+    # of the queueing the earlier note describes: nothing was ageing out, the
+    # dispatcher was simply idle. 16 rather than 24 because a live run also
+    # bursts Vertex for the attribution gate, and 429s there cost more in
+    # backoff than the extra parallelism buys. Raise it if research dominates a
+    # run and the fallback rate stays flat.
+    swarm_max_concurrency: int = Field(default=16, alias="SWARM_MAX_CONCURRENCY")
     # The two model stages that run per scene and per span. Both were serial
     # loops, which is what made a feature length script take tens of minutes
     # before a single subject had been dispatched. Bounded rather than
     # unbounded so a long script does not open two hundred sockets at once.
     ingest_max_concurrency: int = Field(default=12, alias="INGEST_MAX_CONCURRENCY")
     claims_max_concurrency: int = Field(default=16, alias="CLAIMS_MAX_CONCURRENCY")
+    # Adjudication and remedy were the two stages the same fix never reached.
+    # Both ran as serial `for` loops of model calls placed after the swarm, so
+    # a run whose research finished in 269 seconds then spent another eleven
+    # minutes deciding one subject at a time on the most expensive model in the
+    # system. Measured on a two page script: 938 seconds wall against a fully
+    # warm cache, almost all of it here.
+    #
+    # Lower than the claims cap because these are reasoning calls under forced
+    # function calling rather than extraction, and Vertex answers a burst of
+    # them with 429s that `model_fallback` then has to sit out.
+    adjudicate_max_concurrency: int = Field(default=8, alias="ADJUDICATE_MAX_CONCURRENCY")
+    remedy_max_concurrency: int = Field(default=4, alias="REMEDY_MAX_CONCURRENCY")
 
     # ── freshness ────────────────────────────────────────────────────────────
     # How old a cached research answer may be before a live run re researches

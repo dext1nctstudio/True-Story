@@ -37,6 +37,10 @@ rules:
     processor: core
     schema: claim_verification_v1
     post: { if_not_verified: NEEDS_COUNSEL }
+    # The strongest source is archived at the moment it is read. A CONTRADICTED
+    # verdict resting on a page that has since changed is worth much less to an
+    # underwriter than one that travels with the copy the run actually quoted.
+    also: [extract_evidence_page]
     note: "Queen's Gambit, Baby Reindeer and Fairstein are all this rule."
 
   # A quotation is a different research question from a fact. It has an
@@ -68,7 +72,7 @@ rules:
     tier: CRITICAL
     processor: core
     schema: real_person_v2
-    also: [findall_similar_persons, monitor]
+    also: [findall_similar_persons, monitor, extract_evidence_page]
 
   # The Baby Reindeer rule. No name required. FindAll enumerates the real
   # people who match the attribute cluster in the relevant territories.
@@ -77,7 +81,7 @@ rules:
     tier: CRITICAL
     processor: core
     schema: identifiability_v1
-    also: [findall_matching_persons]
+    also: [findall_matching_persons, extract_evidence_page]
     note: "The character was never named and it did not help. Identifiability is the trigger."
 
   # Two separate rights per cue, composition and master, and both are time
@@ -90,9 +94,21 @@ rules:
     also: [monitor]
     note: "WKRP. Licences expire quietly, years after the report is filed."
 
+  # Whether a mark is on the register is a fact with a custodian, so it is
+  # asked of the custodian. Before this rule the answer came from whatever the
+  # crawler surfaced, which on a live run was uspto.report, a scraper of the
+  # register rather than the register: a registry claim resting on a source
+  # that source_quality correctly scores as an ordinary web page.
+  #
+  # registry_lookup answers only the registration half of trademark_v1 and
+  # leaves the expressive use assessment to adjudication. It costs nothing, and
+  # if it has no key or the territory is outside the USPTO register it reports
+  # unhealthy and the existing fallback chain returns this rule to Parallel
+  # Task. The processor below is what that fallback then runs at.
   - id: marks
     match: { type: [BUSINESS_NAME, TRADEMARK_LOGO, BRAND_PRODUCT] }
     tier: HIGH
+    provider: registry_lookup
     processor: base
     schema: trademark_v1
     also: [findall_registered_entities, monitor]
@@ -150,6 +166,7 @@ rules:
     processor: core
     schema: claim_verification_v1
     post: { if_not_verified: NEEDS_COUNSEL }
+    also: [extract_evidence_page]
 
   # The 555 convention and its equivalents. Rules, not research. Zero spend.
   - id: deterministic
@@ -247,6 +264,10 @@ monitors:
     REAL_PERSON_DEPICTED: monthly  # deaths change publicity rights by state
     TRADEMARK_LOGO: quarterly
     BUSINESS_NAME: quarterly
+    # Routed by the same `marks` rule as the two above, and it was the only one
+    # of the three falling through to the monthly default: three times the
+    # checks for the same class of subject, for no stated reason.
+    BRAND_PRODUCT: quarterly
   expiry_window_days: 180          # inside this window, escalate to weekly
   watch_for:
     - new_litigation_naming_subject

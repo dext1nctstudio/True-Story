@@ -81,8 +81,20 @@ class OperatorMessage:
         report look like a stack trace.
         """
         scope = ""
-        if self.subjects_total:
+        if self.subjects_total and self.subjects_affected:
             scope = f" {self.subjects_affected} of {self.subjects_total} subjects were affected."
+        elif self.subjects_total:
+            # The provider left service and yet no subject in this run went
+            # unchecked, because the ones it would have reached were already
+            # answered. Saying "0 of 15 subjects were affected" directly after
+            # "it shows that nobody looked" is a sentence that argues with
+            # itself, and it was printed on the front page of a clearance
+            # report. State the reassuring half plainly instead, without
+            # asserting a cause this layer cannot see.
+            scope = (
+                f" No subject in this run was left unchecked by it: "
+                f"all {self.subjects_total} were answered."
+            )
         return f"{self.headline} {self.meaning}{scope} {self.action}".strip()
 
 

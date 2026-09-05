@@ -47,7 +47,7 @@ from truestory.config import settings
 from truestory.mcp.tools import ClearanceTools
 from truestory.models.claims import FactualClaim
 from truestory.models.elements import ClearableElement, Remedy, RunSummary
-from truestory.models.enums import RunStatus
+from truestory.models.enums import ClearanceStatus, RunStatus, Verdict
 from truestory.models.evidence import Evidence, MonitorHandle
 from truestory.models.spans import ScriptDocument
 from truestory.policy import load_jurisdictions
@@ -77,6 +77,14 @@ class RunState:
     remedies: list[Remedy] = field(default_factory=list)
     monitors: list[MonitorHandle] = field(default_factory=list)
     review_queue: list[dict[str, Any]] = field(default_factory=list)
+    #: Subject id -> published disputes of the same failure shape. Context for
+    #: the reviewer, attached after adjudication and read by nothing that
+    #: decides anything. See agents/precedent.py.
+    precedents: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: Severity bands, statutory anchors and cost to cure per finding, plus the
+    #: rollup. Ordinal and quoted, never a predicted damages figure. See
+    #: agents/exposure.py.
+    exposure: dict[str, Any] = field(default_factory=dict)
 
     summary: RunSummary | None = None
     artifacts: dict[str, Any] = field(default_factory=dict)
@@ -97,6 +105,8 @@ class RunState:
                 "remedies": len(self.remedies),
                 "monitors": len(self.monitors),
                 "review_queue": len(self.review_queue),
+                "precedents": sum(len(v) for v in self.precedents.values()),
+                "exposure_assessed": len(self.exposure.get("assessments", [])),
             },
             "summary": self.summary.to_dict() if self.summary else None,
             "error": self.error,
@@ -112,6 +122,11 @@ class ProjectConfig:
     shoot_territories: list[str] = field(default_factory=lambda: ["US"])
     distribution_territories: list[str] = field(default_factory=lambda: ["US"])
     budget_usd: float | None = None
+
+    #: Where the production is. It decides almost nothing about risk and
+    #: almost everything about what a fix costs: a rename is free in
+    #: development and a reshoot after picture lock. See policy/exposure.yaml.
+    production_stage: str = "development"
 
     # Normally detected by ingest. Set explicitly when the production has
     # already decided how it will present itself.
@@ -196,6 +211,8 @@ class TrueStoryPipeline:
             await self._stage_route(state)
             await self._stage_research(state)
             await self._stage_adjudicate(state)
+            self._stage_precedent(state)
+            await self._stage_exposure(state)
             await self._stage_remedy(state)
             await self._stage_report(state, started)
         except Exception as exc:
@@ -485,6 +502,319 @@ class TrueStoryPipeline:
             }
         )
 
+    # ── stage 6b ─────────────────────────────────────────────────────────────
+    #: Findings that need no precedent. A cited dispute beside a green line is
+    #: noise, and OPINION is protected speech that was never researched at all.
+    #:
+    #: CLEAR_WITH_CONDITIONS is deliberately absent. It is the answer the
+    #: defence side cases earned, so it is exactly where a reviewer benefits
+    #: from seeing the matter that established the conditions.
+    _SETTLED_CLEAR = frozenset({ClearanceStatus.CLEAR})
+    _SETTLED_VERDICTS = frozenset({Verdict.VERIFIED, Verdict.OPINION, None})
+
+    def _stage_precedent(self, state: RunState) -> None:
+        """Attach published disputes of the same failure shape to each finding.
+
+        Placed after adjudication and before remedy because it needs the
+        verdict and it informs how a fix is argued for, and nowhere else. It is
+        synchronous, spends nothing, and calls no model: retrieval is a table
+        lookup over a corpus of ten that ships with the repository.
+
+        Only findings that are not clear are enriched. A precedent attached to
+        a green line is noise, and the reviewer's attention is the scarcest
+        thing this product manages.
+
+        Nothing downstream reads `state.precedents` as a signal. A retrieved
+        case is context for the person deciding, and letting resemblance to a
+        past matter move a status would be the same error the attribution gate
+        exists to prevent for sources.
+        """
+        from truestory.agents.precedent import load_precedents
+
+        assert state.document is not None
+        framing = state.document.truth_claim_framing
+
+        try:
+            index = load_precedents()
+        except Exception as exc:  # never fail a run over an enrichment
+            log.warning("precedent retrieval unavailable: %s", exc)
+            return
+
+        if not index.shapes:
+            return
+
+        for element in state.elements:
+            if element.status in self._SETTLED_CLEAR:
+                continue
+            matches = index.for_element(element, truth_claim_framing=framing)
+            if matches:
+                state.precedents[element.element_id] = [m.to_dict() for m in matches]
+
+        for claim in state.claims:
+            if claim.verdict in self._SETTLED_VERDICTS:
+                continue
+            matches = index.for_claim(claim, truth_claim_framing=framing)
+            if matches:
+                state.precedents[claim.claim_id] = [m.to_dict() for m in matches]
+
+        log.info(
+            "precedent: %d findings matched against %d published disputes",
+            len(state.precedents),
+            len(index.shapes),
+        )
+
+    # ── stage 6c ─────────────────────────────────────────────────────────────
+    async def _stage_exposure(self, state: RunState) -> None:
+        """Band every finding, quote the statutes, price the fix.
+
+        Runs after adjudication because it needs the verdict, and before remedy
+        because the cost of a fix is part of choosing one. Synchronous, no
+        model call and no spend.
+
+        The base schedule produces an ordinal band, published provisions,
+        forum context and an order-of-magnitude cure cost. A bounded research
+        pass then asks whether public secondary sources disclose outcome or
+        defence-cost ranges for each distinct claim shape. It records silence
+        as silence and never lets those figures overwrite the planning model.
+
+        The one research call in this stage is the market rate for the elements
+        a production actually buys. Those figures were a hand written table and
+        a table is a guess; a synchronisation fee is a real number with a
+        market behind it, so it is asked rather than declared. The table
+        remains underneath and the record says which of the two it used.
+        """
+        from truestory.agents.exposure import ExposureModel
+
+        try:
+            model = ExposureModel(
+                stage=self.project.production_stage,
+                truth_claim_framing=state.document.truth_claim_framing,
+            )
+            state.exposure = model.schedule(state.elements, state.claims)
+        except Exception as exc:  # never fail a run over a schedule
+            log.warning("exposure model unavailable: %s", exc)
+            return
+
+        await self._research_cure_rates(state)
+        await self._research_damages_ranges(state)
+
+        cure = state.exposure.get("cost_to_cure_usd", {})
+        log.info(
+            "exposure: %d blocking, %d counsel required, cure $%s-$%s at %s stage",
+            state.exposure.get("blocking", 0),
+            state.exposure.get("counsel_required", 0),
+            f"{cure.get('low', 0):,}",
+            f"{cure.get('high', 0):,}",
+            self.project.production_stage,
+        )
+
+    #: How many market rate lookups one run may make. A feature with forty
+    #: cues does not need forty separate answers to "what does a cue cost",
+    #: and the schedule is a budgeting aid rather than a deliverable.
+    _MAX_CURE_LOOKUPS = 8
+
+    #: Settlement terms are commonly confidential and broad research calls are
+    #: not improved by repeating them for every line with the same legal shape.
+    #: Four distinct shapes is enough to calibrate a review board without
+    #: quietly turning exposure context into the run's largest spend category.
+    _MAX_DAMAGES_LOOKUPS = 4
+
+    async def _research_cure_rates(self, state: RunState) -> None:
+        """Replace hand written licence ranges with researched ones.
+
+        Only for the element types a production actually buys, only once per
+        element type rather than once per element, and only up to a cap. The
+        answer to "what does a synchronisation licence cost for this kind of
+        show" does not differ between the fourth cue and the fortieth, so
+        asking per element would spend forty lookups to learn one thing.
+
+        Best effort throughout. A failure here leaves the policy table in
+        place, correctly labelled as a hand written estimate, which is the
+        product exactly as it behaved before this call existed.
+        """
+        from truestory.agents.exposure import RESEARCHABLE_CURES, merge_researched_rate
+
+        assessments = state.exposure.get("assessments", [])
+        by_type: dict[str, list[dict[str, Any]]] = {}
+        for element in state.elements:
+            element_type = str(element.element_type)
+            if element_type not in RESEARCHABLE_CURES:
+                continue
+            for assessment in assessments:
+                if assessment.get("subject_id") != element.element_id:
+                    continue
+                if assessment.get("cost_to_cure"):
+                    by_type.setdefault(element_type, []).append(assessment)
+
+        if not by_type:
+            return
+
+        researched = 0
+        wanted = list(by_type.items())[: self._MAX_CURE_LOOKUPS]
+
+        # At most eight of these, every one a different market question, none
+        # of them reading the others' answers. Serially they cost the run a
+        # minute of pure waiting: measured at 57 seconds for two lookups on a
+        # two page script, and this stage is capped at eight.
+        async def lookup(element_type: str) -> dict[str, Any] | None:
+            try:
+                return await self.tools.research_cure_cost(
+                    subject_id=f"cure_{element_type.lower()}",
+                    element=element_type.replace("_", " ").lower(),
+                    description=_cure_description(element_type),
+                    segment="streaming_series",
+                )
+            except Exception as exc:
+                log.warning("cure rate lookup failed for %s: %s", element_type, exc)
+                return None
+
+        payloads = await asyncio.gather(*(lookup(t) for t, _ in wanted))
+
+        for (_element_type, entries), payload in zip(wanted, payloads, strict=True):
+            if payload is None:
+                continue
+
+            finding = payload.get("finding") or {}
+            if not isinstance(finding, dict):
+                continue
+
+            # One answer, applied to every element of that type. They are all
+            # asking the same market question.
+            for assessment in entries:
+                assessment["cost_to_cure"] = merge_researched_rate(
+                    assessment["cost_to_cure"], finding
+                )
+            if finding.get("rate_found"):
+                researched += 1
+
+        if researched:
+            self._recount_cure_total(state)
+        log.info(
+            "cure rates: %d of %d element types priced from the record",
+            researched,
+            len(by_type),
+        )
+
+    @staticmethod
+    def _recount_cure_total(state: RunState) -> None:
+        """Re add the rollup after researched rates displaced table figures."""
+        priced = [
+            a["cost_to_cure"]
+            for a in state.exposure.get("assessments", [])
+            if a.get("cost_to_cure")
+        ]
+        total = state.exposure.get("cost_to_cure_usd")
+        if not isinstance(total, dict):
+            return
+        total["low"] = sum(int(c.get("low_usd", 0)) for c in priced)
+        total["high"] = sum(int(c.get("high_usd", 0)) for c in priced)
+        total["researched_findings"] = sum(1 for c in priced if c.get("researched"))
+
+    async def _research_damages_ranges(self, state: RunState) -> None:
+        """Attach sourced monetary context to non-routine factual claims.
+
+        Calls are deduplicated by legal/factual shape, not by script wording.
+        A result is context for a human reviewer; it does not change a verdict,
+        band, remedy, or the uncalibrated model. Positive routine statements and
+        protected opinion do not spend a lookup.
+        """
+        from truestory.agents.exposure import normalise_researched_exposure
+
+        assessments = {
+            a.get("subject_id"): a
+            for a in state.exposure.get("assessments", [])
+            if isinstance(a, dict)
+        }
+        by_shape: dict[tuple[str, str, str, str], list[tuple[FactualClaim, dict[str, Any]]]] = {}
+        for claim in state.claims:
+            assessment = assessments.get(claim.claim_id)
+            if not assessment or assessment.get("band") == "routine" or claim.is_opinion:
+                continue
+            if (
+                str(claim.polarity) != "negative"
+                and not claim.needs_counsel
+                and str(claim.verdict) != "CONTRADICTED"
+            ):
+                continue
+            shape = (
+                str(claim.claim_type),
+                str(claim.verdict or "unadjudicated"),
+                "living"
+                if claim.subject_alive is True
+                else "deceased"
+                if claim.subject_alive is False
+                else "life_status_unknown",
+                str(claim.subject_public_figure_status),
+            )
+            by_shape.setdefault(shape, []).append((claim, assessment))
+
+        wanted = list(by_shape.items())[: self._MAX_DAMAGES_LOOKUPS]
+        attempted = len(wanted)
+        failures = 0
+
+        # Four independent questions about four different legal shapes. Run
+        # serially they were the slowest thing left in the pipeline after
+        # research itself: 143 seconds for four lookups, measured, on a stage
+        # whose whole output is context for a reviewer.
+        async def lookup(index: int, shape: tuple[str, str, str, str]) -> dict[str, Any] | None:
+            claim_type, verdict, life_status, public_status = shape
+            descriptor = (
+                "defamation or false-light exposure from a "
+                f"{claim_type.lower().replace('_', ' ')} assertion about a {life_status} "
+                f"person ({public_status.lower().replace('_', ' ')}); verification result {verdict.lower()}"
+            )
+            try:
+                payload = await self.tools.research_damages_range(
+                    subject_id=f"damages_shape_{index}",
+                    claim_type=descriptor,
+                    jurisdiction=", ".join(self.jurisdictions) or "United States",
+                )
+                return normalise_researched_exposure(payload)
+            except Exception as exc:
+                log.warning("damages range lookup failed for %s: %s", descriptor, exc)
+                return None
+
+        results = await asyncio.gather(
+            *(lookup(i, shape) for i, (shape, _) in enumerate(wanted, start=1))
+        )
+
+        for (_shape, entries), researched in zip(wanted, results, strict=True):
+            if researched is None:
+                failures += 1
+                continue
+
+            # One market question, attached to every script claim of that
+            # shape. This is not evidence that any claimant in this production
+            # will receive that amount.
+            for _, assessment in entries:
+                assessment["researched_exposure"] = dict(researched)
+
+        records = [
+            a.get("researched_exposure")
+            for a in assessments.values()
+            if isinstance(a.get("researched_exposure"), dict)
+        ]
+        state.exposure["research_summary"] = {
+            "shapes_available": len(by_shape),
+            "shapes_researched": attempted - failures,
+            "lookup_failures": failures,
+            "findings_with_research": len(records),
+            "ranges_found": sum(1 for r in records if r.get("status") == "range_found"),
+            "defence_cost_only": sum(1 for r in records if r.get("status") == "defence_cost_only"),
+            "no_public_range": sum(1 for r in records if r.get("status") == "no_public_range"),
+            "basis": (
+                "Counts distinct researched records attached to findings. Amounts are not summed "
+                "because claims may overlap and public settlements are commonly confidential."
+            ),
+        }
+        log.info(
+            "damages research: %d shapes checked, %d ranges, %d defence-cost-only, %d failures",
+            attempted,
+            state.exposure["research_summary"]["ranges_found"],
+            state.exposure["research_summary"]["defence_cost_only"],
+            failures,
+        )
+
     # ── stage 7 ──────────────────────────────────────────────────────────────
     async def _stage_remedy(self, state: RunState) -> None:
         state.status = RunStatus.REMEDIATING
@@ -521,8 +851,18 @@ class TrueStoryPipeline:
         """
         from truestory.api.messages import describe
 
-        failed = sum(1 for c in state.claims if getattr(c, "research_failed", False))
-        total = len(state.claims)
+        # Both halves of the ledger, because the outage hits both and counting
+        # only one produced a front page that argued with itself. A live run
+        # that lost fifteen *elements* to HTTP 402 reported "0 of 15 subjects
+        # were affected" directly beneath "it shows that nobody looked",
+        # because `failed` counted claims and `total` counted claims while the
+        # casualties were all elements.
+        from truestory.models.enums import ClearanceStatus
+
+        failed = sum(1 for c in state.claims if getattr(c, "research_failed", False)) + sum(
+            1 for e in state.elements if e.status is ClearanceStatus.RESEARCH_FAILED
+        )
+        total = len(state.claims) + len(state.elements)
 
         warnings: list[str] = []
         outages = getattr(self.registry, "outages", {}) or {}
@@ -883,3 +1223,15 @@ def _share_claim_evidence_with_subjects(
 
     if shared:
         log.info("evidence sharing: %s elements answered by their own claims", shared)
+
+
+def _cure_description(element_type: str) -> str:
+    """What to tell the researcher this element is, in trade terms."""
+    return {
+        "MUSIC_CUE": "a commercially released recording used as a cue, requiring both a synchronisation licence for the composition and a master use licence for the recording",
+        "ARTWORK_VISUAL": "a copyrighted still artwork visible on screen as set dressing",
+        "TATTOO": "a copyrighted tattoo design replicated on a performer",
+        "FILM_CLIP": "archive or third party film footage cut into the programme",
+        "PRINT_QUOTE": "a quoted passage from a copyrighted published text",
+        "SOURCE_MATERIAL": "underlying literary rights optioned as the basis for the adaptation",
+    }.get(element_type, element_type.replace("_", " ").lower())

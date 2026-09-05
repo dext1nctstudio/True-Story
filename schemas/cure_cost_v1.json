@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truestory.dev/schemas/cure_cost_v1.json",
+  "title": "cure_cost_v1",
+  "description": "What it costs to clear or replace one element, at market. Asked of the record rather than declared in a table, because a synchronisation fee is a real, quotable, researchable number and a hand written constant is a guess wearing a currency symbol. Returns a range with its basis, so a producer can see what the figure rests on.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["rate_found", "basis"],
+  "properties": {
+    "rate_found": {
+      "type": "boolean",
+      "description": "Whether the public record supports a rate at all. False is a real answer and must not be rendered as zero."
+    },
+    "low_usd": { "type": ["number", "null"] },
+    "high_usd": { "type": ["number", "null"] },
+    "typical_usd": { "type": ["number", "null"] },
+    "currency": { "type": ["string", "null"], "default": "USD" },
+    "rate_unit": {
+      "type": ["string", "null"],
+      "enum": ["per_work", "per_cue", "per_second", "per_episode", "per_territory_term", "flat", null],
+      "description": "What the figure is priced against. A per second archive rate and a flat synchronisation fee are not comparable and must not be summed as though they were."
+    },
+    "scope": {
+      "type": ["string", "null"],
+      "description": "The rights scope the figure covers: media, territory and term. A festival licence and a worldwide perpetual buyout differ by an order of magnitude for the same cue."
+    },
+    "market_segment": {
+      "type": ["string", "null"],
+      "enum": ["independent", "streaming_series", "studio_feature", "documentary", "unknown", null]
+    },
+    "basis": {
+      "type": "string",
+      "description": "What the range actually rests on: a published rate card, a trade report, a guild schedule, or an inference from comparable deals. This is the field that decides whether the number may be shown to a producer."
+    },
+    "confidence_note": {
+      "type": ["string", "null"],
+      "description": "Why this range is wide or narrow. Licensing is negotiated and most deals are confidential, so a wide range is often the honest answer."
+    },
+    "obtainable": {
+      "type": ["boolean", "null"],
+      "description": "Whether the right can be licensed at any price. Some cannot: an estate that refuses, a mark holder who does not license to productions. Unobtainable is a different finding from expensive."
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "title": { "type": ["string", "null"] },
+          "excerpt": { "type": ["string", "null"] },
+          "source_type": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

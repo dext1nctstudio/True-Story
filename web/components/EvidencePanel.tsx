@@ -20,6 +20,7 @@ import {
   SourcePedigree,
   SourceStance,
 } from "@/components/SourcePedigree";
+import { RiskAndPrecedent } from "@/components/RiskAndPrecedent";
 import { SubjectIdentity } from "@/components/SubjectIdentity";
 import { applyRemedy, unmaskElement } from "@/lib/api";
 import type { Annotation, Claim, ClearableElement, Evidence, Remedy } from "@/lib/types";
@@ -76,6 +77,7 @@ export function EvidencePanel({
           role sees the verdict and the proposed rewrite.
         </div>
         {remedy && <RemedyBlock remedy={remedy} applying={applying} applied={applied} onApply={apply} />}
+        <RiskAndPrecedent runId={runId} subjectId={annotation.id} />
       </div>
     );
   }
@@ -151,6 +153,8 @@ export function EvidencePanel({
       {remedy && (
         <RemedyBlock remedy={remedy} applying={applying} applied={applied} onApply={apply} />
       )}
+
+      <RiskAndPrecedent runId={runId} subjectId={annotation.id} />
 
       {/* What the verdict is standing on, counted rather than asserted. A
           citation total on its own hides the two things that decide whether a
@@ -229,8 +233,8 @@ function EvidenceBlock({ evidence }: { evidence: Evidence }) {
         <span>{Math.round(evidence.effective_confidence * 100)}% confidence</span>
       </div>
 
-      {evidence.citations.map((citation) => (
-        <div className="citation" key={citation.url}>
+      {evidence.citations.map((citation, index) => (
+        <div className="citation" key={`${citation.url}-${index}`}>
           <a
             className="citation-title"
             href={citation.url}

@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from truestory.models.enums import Processor, RiskTier
-from truestory.policy import load_routing, load_schema
+from truestory.policy import RoutingDecision, load_routing, load_schema
 from truestory.providers import ProviderRegistry, ResearchRequest
 
 # =============================================================================
@@ -167,6 +167,56 @@ _Q_ENTITY = (
     "place with criminal or discreditable conduct, which is the most common source "
     "of complaint from a current occupant."
 )
+
+_Q_DAMAGES = (
+    "Establish what a claim of this shape against a film or television "
+    "production actually resolves for.\n\n"
+    "CLAIM TYPE: {claim_type}\n"
+    "AGAINST: {defendant}\n"
+    "JURISDICTION: {jurisdiction}\n\n"
+    "Find what these matters cost in practice. Insurance and errors and "
+    "omissions industry loss studies, media law commentary, practitioner "
+    "guidance, and reported verdict and settlement surveys are all usable. "
+    "Separate the ordinary case from the famous one: report the typical "
+    "figure where the record gives one, and say plainly when the only "
+    "numbers available come from a handful of headline matters, because "
+    "that is the usual condition in this field and presenting an outlier "
+    "as a norm is the specific error to avoid.\n\n"
+    "Report defence cost separately from any amount paid to a claimant. "
+    "Defence is billed hourly against published rates and is the most "
+    "knowable number here; indemnity usually is not, because most of these "
+    "matters resolve confidentially. Say which resolution your range "
+    "describes -- early dismissal, negotiated settlement, or a judgment "
+    "after trial -- since those are three different events and averaging "
+    "them produces a number about nothing.\n\n"
+    "If the public record supports no range, say so rather than "
+    "estimating. A missing figure is a real finding; a fabricated one is "
+    "worse than nothing."
+)
+
+
+_Q_CURE_COST = (
+    "Establish the market cost of clearing or replacing one element of a "
+    "production.\n\n"
+    "ELEMENT: {element}\n"
+    "WHAT IT IS: {description}\n"
+    "RIGHTS SCOPE NEEDED: {scope}\n"
+    "PRODUCTION TYPE: {segment}\n\n"
+    "Find what this actually costs at market, not what it might cost in "
+    "principle. Published rate cards, guild and society schedules, trade "
+    "reporting on comparable deals, and licensing agent guidance are all "
+    "usable; a range from any of those is worth more than a point estimate "
+    "from none. State plainly what the figure rests on.\n\n"
+    "Most licensing is negotiated and most deals are confidential, so a "
+    "wide range is frequently the honest answer, and a narrow one usually "
+    "means the record is thin rather than that the price is certain. If "
+    "the public record supports no rate at all, say so rather than "
+    "estimating: a missing rate is a real finding and a fabricated one is "
+    "worse than nothing. Separately, note whether the right is obtainable "
+    "at any price, because an estate or a mark holder that refuses "
+    "productions is a different problem from an expensive one."
+)
+
 
 _Q_INTERROGATE = (
     "Find sources bearing on a specific question a clearance reviewer has asked "
@@ -621,6 +671,137 @@ class ClearanceTools:
         evidence = await provider.investigate(request)
         return evidence.to_dict()
 
+    async def research_damages_range(
+        self,
+        subject_id: str,
+        claim_type: str,
+        *,
+        defendant: str = "a film or television production",
+        jurisdiction: str = "United States",
+    ) -> dict[str, Any]:
+        """What a claim of this shape resolves for, asked rather than assumed.
+
+        The severity table in policy/exposure.yaml is the largest invented
+        number in the product: an adverse judgment priced at $100,000 to
+        $5,000,000 from general knowledge. Reading it out of court records was
+        tried first and does not work -- published opinions in this field are
+        dominated by awards being reversed on appeal, and settlements never
+        produce an opinion at all, so that corpus returns the wrong sample.
+
+        So this asks the same way `research_cure_cost` asks about a licence
+        fee, and for the same reason: a practitioner answering this question
+        reads industry loss studies and media law commentary rather than
+        pulling dockets. Those are secondary sources and the schema makes the
+        researcher say so, because a figure from an insurance study and a
+        figure from one famous verdict are not the same kind of evidence and
+        must never render as though they were.
+
+        LITE, like the cure cost lookup. This is a calibration input, not a
+        clearance finding, and it must never draw on the reserve that CRITICAL
+        subjects depend on.
+        """
+        decision = RoutingDecision(
+            rule_id="damages_range_lookup",
+            tier=RiskTier.LOW,
+            provider="parallel_task",
+            processor=Processor.LITE,
+            schema_name="damages_range_v1",
+        )
+        request = ResearchRequest(
+            subject_id=subject_id,
+            question=_Q_DAMAGES.format(
+                claim_type=claim_type,
+                defendant=defendant,
+                jurisdiction=jurisdiction,
+            ),
+            output_schema=load_schema("damages_range_v1"),
+            schema_name="damages_range_v1",
+            tier=RiskTier.LOW,
+            processor=Processor.LITE,
+            jurisdictions=self.jurisdictions,
+        )
+        evidence = await self.registry.investigate(decision, request)
+        payload = evidence.to_dict()
+        payload["routing"] = {
+            "rule": decision.rule_id,
+            "tier": str(decision.tier),
+            "escalated_by": [],
+        }
+        return payload
+
+    async def research_cure_cost(
+        self,
+        subject_id: str,
+        element: str,
+        description: str = "",
+        *,
+        scope: str = "US streaming series, five year term",
+        segment: str = "streaming_series",
+    ) -> dict[str, Any]:
+        """What clearing or replacing this element costs at market.
+
+        The exposure model ships a table of licence ranges, and every figure in
+        it was written from general knowledge rather than measured. That is a
+        guess with a currency symbol on it, and it sits exactly where a
+        research call belongs: a synchronisation fee is a real, quotable number
+        with a market behind it, in the same way that a trademark registration
+        is a fact with a custodian.
+
+        So this asks. The table remains the fallback for when research is
+        unavailable or comes back empty, and the exposure record states which
+        of the two produced the number, because a cited range and a hand
+        written one must never be presented as the same kind of figure.
+
+        Deliberately LITE. This is a commercial estimate for a producer's
+        budget, not a clearance finding, and it must never draw on the reserve
+        that CRITICAL subjects depend on.
+
+        Bypasses `_run`'s subject type routing on purpose. `_run` resolves
+        `output_schema` from the *matched routing rule*, not from the
+        `schema_name` a caller passes in -- correct for every other tool here,
+        because the element type is meant to decide the schema. This question
+        has no element type; it is about a market, not about a script subject.
+        The first version passed `subject={"type": "REAL_LOCATION"}` to force
+        a cheap route, which matched `places_and_orgs` and silently swapped in
+        entity_v1's schema. The request text still asked the market cost
+        question, so Parallel and its grounded fallback both answered it
+        correctly in prose, in a schema with no `rate_found` or dollar fields
+        to hold the answer -- so a real, useful figure (confirmed on a live
+        run: "$8,000-$25,000" from an industry source) was found and then
+        discarded, and every call silently fell through to the policy table
+        while reporting nothing wrong. Building the decision directly here is
+        what `interrogate` already does for the same reason, one tool up.
+        """
+        decision = RoutingDecision(
+            rule_id="cure_cost_lookup",
+            tier=RiskTier.LOW,
+            provider="parallel_task",
+            processor=Processor.LITE,
+            schema_name="cure_cost_v1",
+        )
+        request = ResearchRequest(
+            subject_id=subject_id,
+            question=_Q_CURE_COST.format(
+                element=element,
+                description=description or element,
+                scope=scope,
+                segment=segment,
+            ),
+            output_schema=load_schema("cure_cost_v1"),
+            schema_name="cure_cost_v1",
+            tier=RiskTier.LOW,
+            processor=Processor.LITE,
+            jurisdictions=self.jurisdictions,
+        )
+        evidence = await self.registry.investigate(decision, request)
+        payload = evidence.to_dict()
+        payload["routing"] = {
+            "rule": decision.rule_id,
+            "tier": str(decision.tier),
+            "escalated_by": [],
+        }
+        return payload
+
     async def watch_subject(
         self,
         subject_id: str,
@@ -664,5 +845,7 @@ TOOL_MANIFEST: dict[str, str] = {
     "check_public_domain": "Establish copyright status of underlying source material and every derivative layer.",
     "enumerate_matching_entities": "Set valued enumeration returning one evidence record per matched entity.",
     "capture_evidence_page": "Capture a registry or docket page verbatim into the evidence pack.",
+    "research_cure_cost": "Market cost of clearing or replacing one element, with sources.",
+    "research_damages_range": "What a claim of this shape resolves for, with sources.",
     "watch_subject": "Open a recurring Living Clearance watch on a subject.",
 }

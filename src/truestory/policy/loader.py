@@ -501,6 +501,137 @@ class Jurisdictions:
         return [i for i in self.instruments if i.get("status") == "verify_before_citing"]
 
 
+class ExposurePolicy:
+    """What a finding could cost, in the terms that are actually knowable.
+
+    Deliberately not a damages model. See the header of exposure.yaml for why
+    a predicted dollar figure per finding cannot be built honestly from a
+    public record made almost entirely of confidential settlements.
+
+    Everything this class returns is one of three things: a published statutory
+    figure quoted with its provision, a statement about whether the forum
+    shifts fees, or an order of magnitude estimate of what the fix costs. The
+    first two are quotations. Only the third is an estimate, and it says so.
+    """
+
+    def __init__(self, raw: dict[str, Any]) -> None:
+        self.raw = raw
+        self.bands: dict[str, Any] = raw.get("bands", {})
+        self.band_rules: list[dict[str, Any]] = raw.get("band_rules", [])
+        self.anchors: list[dict[str, Any]] = raw.get("anchors", [])
+        self.cure: dict[str, Any] = raw.get("cure", {})
+        self.venue: dict[str, Any] = raw.get("venue", {})
+
+    # ── bands ────────────────────────────────────────────────────────────────
+    def band_for(self, facts: dict[str, Any]) -> tuple[str, str, str]:
+        """First matching rule wins. Returns (band, rule_id, because).
+
+        Order is the policy, which is why the rules are a list rather than a
+        mapping and why this does not score anything. A finding that matches
+        nothing is `routine`: the bands exist to raise attention, and inventing
+        a reason to raise it is how a queue becomes noise.
+        """
+        for rule in self.band_rules:
+            when = rule.get("when") or {}
+            if all(_facts_agree(facts.get(k), v) for k, v in when.items()):
+                return (
+                    str(rule.get("band", "routine")),
+                    str(rule.get("id", "")),
+                    " ".join(str(rule.get("because", "")).split()),
+                )
+        return "routine", "__default__", ""
+
+    def rank(self, band: str) -> int:
+        return int(self.bands.get(band, {}).get("rank", 0))
+
+    def band_meaning(self, band: str) -> str:
+        return str(self.bands.get(band, {}).get("means", ""))
+
+    # ── anchors ──────────────────────────────────────────────────────────────
+    def anchors_for(self, element_type: str, facts: dict[str, Any]) -> list[dict[str, Any]]:
+        """Every published provision that bears on this element type.
+
+        An anchor whose `requires` block disagrees with the facts is not
+        attached at all. Quoting the living person's statute beside a deceased
+        subject would be worse than quoting nothing.
+        """
+        out: list[dict[str, Any]] = []
+        for anchor in self.anchors:
+            if element_type not in (anchor.get("applies_to") or []):
+                continue
+            requires = anchor.get("requires") or {}
+            if not all(_facts_agree(facts.get(k), v) for k, v in requires.items()):
+                continue
+            out.append(anchor)
+        return out
+
+    # ── cost to cure ─────────────────────────────────────────────────────────
+    def cure_estimate(self, element_type: str, stage: str) -> dict[str, Any] | None:
+        """Order of magnitude cost of fixing this, at this production stage.
+
+        The stage dominates. A rename is free in development and a reshoot
+        after picture lock, and that spread is far wider than any difference
+        between element types, which is the entire argument for clearing early.
+        """
+        remedy = (self.cure.get("remedy_for") or {}).get(element_type)
+        if not remedy:
+            return None
+
+        base = (self.cure.get("by_remedy") or {}).get(remedy)
+        if not base:
+            return None
+
+        stages = self.cure.get("stages") or {}
+        entry = stages.get(stage) or stages.get("development") or {}
+        multiplier = float(entry.get("multiplier", 1))
+
+        fee = base.get("fee") or {}
+        change = base.get("change") or {}
+
+        # Only the change component scales. A synchronisation licence costs
+        # what it costs in development and in post; what post adds is the edit
+        # around replacing the cue, not a multiple of the fee.
+        fee_low, fee_high = float(fee.get("low", 0)), float(fee.get("high", 0))
+        change_low = float(change.get("low", 0)) * multiplier
+        change_high = float(change.get("high", 0)) * multiplier
+
+        return {
+            "remedy_class": remedy,
+            "stage": stage,
+            "stage_multiplier": multiplier,
+            "fee_usd": {"low": round(fee_low), "high": round(fee_high)},
+            "change_usd": {"low": round(change_low), "high": round(change_high)},
+            "low_usd": round(fee_low + change_low),
+            "high_usd": round(fee_high + change_high),
+            "basis": " ".join(str(base.get("note", "")).split()),
+            "stage_basis": " ".join(str(entry.get("note", "")).split()),
+            #: Never presented as a quotation. This is the one part of the
+            #: exposure model that is an estimate rather than a published
+            #: figure, and it says so wherever it renders.
+            "estimate": True,
+        }
+
+    # ── venue ────────────────────────────────────────────────────────────────
+    def venue_note(self, anti_slapp: bool) -> str:
+        key = "anti_slapp_note" if anti_slapp else "no_anti_slapp_note"
+        return " ".join(str(self.venue.get(key, "")).split())
+
+
+def _facts_agree(actual: Any, expected: Any) -> bool:
+    """Compare a fact against a rule clause, across enum and string spellings.
+
+    `None` never satisfies a clause. A rule that asks whether the subject is
+    alive is not answered by not knowing, and treating unknown as a match is
+    how a finding about a person whose mortality was never established would
+    acquire a statute that may not apply to them.
+    """
+    if actual is None:
+        return False
+    if isinstance(expected, bool) or isinstance(actual, bool):
+        return bool(actual) is bool(expected)
+    return str(actual).strip().upper() == str(expected).strip().upper()
+
+
 # =============================================================================
 # loading
 # =============================================================================
@@ -531,6 +662,11 @@ def load_jurisdictions() -> Jurisdictions:
     return Jurisdictions(_read_yaml(POLICY_DIR / "jurisdictions.yaml"))
 
 
+@lru_cache(maxsize=1)
+def load_exposure() -> ExposurePolicy:
+    return ExposurePolicy(_read_yaml(POLICY_DIR / "exposure.yaml"))
+
+
 @lru_cache(maxsize=32)
 def load_schema(name: str) -> dict[str, Any]:
     """Load one Parallel output schema by bare name, without the extension."""
@@ -546,6 +682,7 @@ def reload_all() -> None:
     load_routing.cache_clear()
     load_rubric.cache_clear()
     load_jurisdictions.cache_clear()
+    load_exposure.cache_clear()
     load_schema.cache_clear()
 
 

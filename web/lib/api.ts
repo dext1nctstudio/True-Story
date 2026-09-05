@@ -15,8 +15,10 @@ import type {
   ClearableElement,
   Estimate,
   Evidence,
+  ExposureSchedule,
   Overlay,
   PersonRollup,
+  PrecedentsBySubject,
   Remedy,
   Role,
   RunCost,
@@ -88,6 +90,12 @@ export const getElements = (runId: string) =>
 export const getRegister = (runId: string) =>
   get<{ persons: PersonRollup[]; note: string }>(`/v1/runs/${runId}/register`);
 
+export const getExposure = (runId: string) =>
+  get<ExposureSchedule>(`/v1/runs/${runId}/exposure`);
+
+export const getPrecedents = (runId: string) =>
+  get<{ precedents: PrecedentsBySubject }>(`/v1/runs/${runId}/precedents`);
+
 export const listRuns = (projectId: string) =>
   get<{ runs: RunListItem[] }>(`/v1/projects/${projectId}/runs`);
 
@@ -96,8 +104,8 @@ export const getRun = (runId: string) =>
     run_id: string;
     status: string;
     summary: RunSummary | null;
-    /** Rebuilt from the store rather than held in the API process. Only the
-     *  run record persists, so the overlay and claims are unavailable. */
+    error: string | null;
+    /** Rebuilt from durable storage rather than held in the API process. */
     restored?: boolean;
   }>(`/v1/runs/${runId}`);
 

@@ -55,4 +55,15 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 # Default entrypoint is the API. Cloud Run overrides the command for the other
 # two services, see the deploy targets in the Makefile.
-CMD exec uvicorn truestory.api.main:app --host 0.0.0.0 --port ${PORT} --workers 2
+#
+# One worker, deliberately. A run's live progress (_RUNS, _STREAMS,
+# _PIPELINES in api/main.py) lives in that worker's own process memory, not
+# in Firestore -- only the initial placeholder and the final state are ever
+# persisted. With more than one worker, Render's proxy round robins requests
+# between processes that share nothing: a status poll or SSE connection that
+# lands on the worker that didn't start the run finds no record of it in
+# memory and falls back to the Firestore placeholder, reporting a run that
+# is actively executing elsewhere as an archived one stuck at QUEUED.
+# Observed live: a fresh run alternated between real progress and "restored
+# from durable storage" depending which of the two workers answered.
+CMD exec uvicorn truestory.api.main:app --host 0.0.0.0 --port ${PORT} --workers 1

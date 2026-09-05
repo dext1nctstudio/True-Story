@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://truestory.dev/schemas/damages_range_v1.json",
+  "title": "damages_range_v1",
+  "description": "What a claim of this shape against a production actually resolves for, researched rather than assumed. The severity table in policy/exposure.yaml was written from general knowledge; this asks the record instead. Court dockets carry judgments but almost never settlements, so the answer here comes from legal commentary, media law reporting, insurance and E&O industry writing, and reported matters -- secondary sources, which is how a practitioner answers this question too. The schema makes the researcher say which kind of source it found, so a figure from an insurance loss study and a figure from one famous verdict never render as the same thing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["range_found", "basis", "source_kind"],
+  "properties": {
+    "range_found": {
+      "type": "boolean",
+      "description": "Whether the record supports a range at all. False is a real answer and must not be rendered as zero."
+    },
+    "outcome": {
+      "type": ["string", "null"],
+      "enum": ["settled", "adverse_judgment", "dismissed_early", "mixed", null],
+      "description": "Which resolution this range describes. A settlement range and a tried-to-verdict range are different numbers about different events and must not be averaged together."
+    },
+    "low_usd": { "type": ["number", "null"] },
+    "high_usd": { "type": ["number", "null"] },
+    "typical_usd": {
+      "type": ["number", "null"],
+      "description": "The figure the record treats as ordinary, where it says so. Usually far below the reported headline cases."
+    },
+    "defence_cost_usd": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "What defending costs regardless of outcome. The most knowable number here: it is billed hourly against published rates and does not depend on anyone's confidential settlement.",
+      "properties": {
+        "low": { "type": ["number", "null"] },
+        "high": { "type": ["number", "null"] }
+      }
+    },
+    "source_kind": {
+      "type": "string",
+      "enum": [
+        "insurance_industry_study",
+        "legal_commentary",
+        "reported_verdicts",
+        "practitioner_guidance",
+        "single_notable_case",
+        "none"
+      ],
+      "description": "What the range rests on. `single_notable_case` is the weakest and the most likely to be found, because the outlier matters are the ones that get written about; a figure from one famous verdict must never be presented as typical."
+    },
+    "outlier_warning": {
+      "type": ["string", "null"],
+      "description": "Set when the figures found are dominated by a handful of famous matters rather than a body of ordinary ones. This is the expected condition in this field, and saying so is the difference between research and an anecdote."
+    },
+    "basis": {
+      "type": "string",
+      "description": "What the range actually rests on, in a sentence. The field that decides whether a producer may be shown the number."
+    },
+    "confidence_note": {
+      "type": ["string", "null"],
+      "description": "Why the range is wide or narrow. Most of these matters resolve confidentially, so a wide range is frequently the honest answer and a narrow one usually means the record is thin rather than the amount certain."
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "title": { "type": ["string", "null"] },
+          "excerpt": { "type": ["string", "null"] },
+          "source_type": { "type": ["string", "null"] }
+        }
+      }
+    }
+  }
+}

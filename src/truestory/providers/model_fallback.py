@@ -66,6 +66,28 @@ _NEVER_FALLBACK = (
 )
 
 
+def genai_client() -> Any:
+    """The one Gemini client constructor, with a deadline attached.
+
+    Seven modules built their own `genai.Client` from the same three settings
+    and none of them set a timeout, so a stalled Vertex socket held a whole
+    clearance run open with nothing to interrupt it. Constructing the client in
+    one place is what makes the deadline impossible to forget on the eighth.
+    """
+    from google import genai
+    from google.genai import types
+
+    from truestory.config import settings
+
+    return genai.Client(
+        vertexai=settings.use_vertex,
+        project=settings.gcp_project or None,
+        location=settings.gcp_location,
+        # The SDK takes milliseconds here.
+        http_options=types.HttpOptions(timeout=settings.model_timeout_seconds * 1000),
+    )
+
+
 def is_model_unavailable(exc: BaseException) -> bool:
     """Whether this failure means the model itself cannot be reached."""
     text = f"{type(exc).__name__}: {exc}".casefold()

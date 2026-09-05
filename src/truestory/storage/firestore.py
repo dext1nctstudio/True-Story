@@ -25,8 +25,10 @@ of any cloud dependency.
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from truestory.config import settings
@@ -48,6 +50,14 @@ class RunStore:
 
     def list_runs(self, project_id: str) -> list[dict[str, Any]]:
         """Every persisted run for a project, newest first."""
+        raise NotImplementedError
+
+    def list_all_runs(self) -> list[dict[str, Any]]:
+        """Every persisted run across every project, order unspecified.
+
+        Used only for startup reconciliation, where the caller does not yet
+        know which projects exist.
+        """
         raise NotImplementedError
 
     def put_subject(
@@ -121,6 +131,9 @@ class MemoryRunStore(RunStore):
         rows = [v for k, v in self._runs.items() if k.startswith(prefix)]
         return sorted(rows, key=lambda r: r.get("created_at") or "", reverse=True)
 
+    def list_all_runs(self) -> list[dict[str, Any]]:
+        return list(self._runs.values())
+
     def put_subject(
         self, project_id: str, run_id: str, kind: str, subject_id: str, payload: dict[str, Any]
     ) -> None:
@@ -168,6 +181,99 @@ class MemoryRunStore(RunStore):
 
 
 # =============================================================================
+# durable local JSON
+# =============================================================================
+
+
+class LocalJsonRunStore(MemoryRunStore):
+    """The laptop backend: MemoryRunStore semantics with an atomic JSON file.
+
+    Local live mode used to fall back to :class:`MemoryRunStore` whenever
+    Firestore was unavailable. The application still said ``live`` because
+    provider mode and storage mode are separate, but restarting the API erased
+    the docket. This backend keeps the zero-dependency local workflow while
+    making a browser reload and a server restart mean what users expect.
+    """
+
+    VERSION = 1
+
+    def __init__(self, path: Path | None = None) -> None:
+        super().__init__()
+        self.path = path or (settings.cache_dir / "run_store.json")
+        self._load()
+
+    def _load(self) -> None:
+        if not self.path.exists():
+            return
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+            if payload.get("version") != self.VERSION:
+                raise ValueError("unsupported local run-store version")
+            self._runs = dict(payload.get("runs") or {})
+            self._subjects = dict(payload.get("subjects") or {})
+            self._monitors = dict(payload.get("monitors") or {})
+            self._review = dict(payload.get("review") or {})
+            self.audit_log = list(payload.get("audit_log") or [])
+        except Exception as exc:
+            # A damaged local index must not prevent the API starting. Keep it
+            # in place for diagnosis and begin with an empty in-memory view.
+            log.warning("could not read local run store %s: %s", self.path, exc)
+
+    def _flush(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.path.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps(
+                {
+                    "version": self.VERSION,
+                    "runs": self._runs,
+                    "subjects": self._subjects,
+                    "monitors": self._monitors,
+                    "review": self._review,
+                    "audit_log": self.audit_log,
+                },
+                ensure_ascii=False,
+                indent=2,
+                default=str,
+            ),
+            encoding="utf-8",
+        )
+        temporary.replace(self.path)
+
+    def create_run(self, project_id: str, run_id: str, payload: dict[str, Any]) -> None:
+        super().create_run(project_id, run_id, payload)
+        self._flush()
+
+    def update_run(self, project_id: str, run_id: str, patch: dict[str, Any]) -> None:
+        super().update_run(project_id, run_id, patch)
+        self._flush()
+
+    def put_subject(
+        self, project_id: str, run_id: str, kind: str, subject_id: str, payload: dict[str, Any]
+    ) -> None:
+        super().put_subject(project_id, run_id, kind, subject_id, payload)
+        self._flush()
+
+    def batch_put_subjects(
+        self, project_id: str, run_id: str, kind: str, payloads: dict[str, dict[str, Any]]
+    ) -> None:
+        super().batch_put_subjects(project_id, run_id, kind, payloads)
+        self._flush()
+
+    def put_monitor(self, project_id: str, monitor_id: str, payload: dict[str, Any]) -> None:
+        super().put_monitor(project_id, monitor_id, payload)
+        self._flush()
+
+    def queue_review(self, item_id: str, payload: dict[str, Any]) -> None:
+        super().queue_review(item_id, payload)
+        self._flush()
+
+    def audit(self, action: str, principal: str, subject_id: str, detail: dict[str, Any]) -> None:
+        super().audit(action, principal, subject_id, detail)
+        self._flush()
+
+
+# =============================================================================
 # firestore
 # =============================================================================
 
@@ -210,6 +316,9 @@ class FirestoreRunStore(RunStore):
         docs = self.db.collection("projects").document(project_id).collection("runs").stream()
         rows = [d.to_dict() for d in docs]
         return sorted(rows, key=lambda r: str(r.get("created_at") or ""), reverse=True)
+
+    def list_all_runs(self) -> list[dict[str, Any]]:
+        return [d.to_dict() for d in self.db.collection_group("runs").stream()]
 
     # ── subjects ─────────────────────────────────────────────────────────────
     def put_subject(
@@ -303,13 +412,42 @@ _store: RunStore | None = None
 
 
 def get_store() -> RunStore:
-    """Firestore when deployed, memory otherwise. Same interface either way."""
+    """Firestore when it is configured and reachable, local JSON otherwise,
+    memory only in offline mode.
+
+    A prior version of this function selected `LocalJsonRunStore`
+    unconditionally whenever `env_name == "local"`, regardless of whether a
+    real project was configured and Firestore was actually reachable. That
+    was written to solve a real problem -- an unavailable optional Firestore
+    API turning into silent data loss -- but it solved it by never trying
+    Firestore at all on a developer machine, which is also where a developer
+    is most likely to have real credentials configured and the most reason to
+    see the Google Cloud service actually being exercised rather than quietly
+    bypassed. `TRUESTORY_ENV=local` is what a demo environment sets too, and
+    project runs made against a genuinely reachable Firestore were becoming
+    invisible to the app the moment this branch fired, not because Firestore
+    failed but because it was never asked.
+
+    So the choice is now about configuration and reachability, not about
+    which environment name is set. A configured project gets one cheap
+    liveness probe at startup; only a project with nothing configured, or a
+    probe that actually fails, falls back to the local file. That keeps the
+    original failure this function existed to prevent -- data loss when
+    Firestore has a bad day -- while no longer discarding a working
+    connection to a real service on every local run.
+    """
     global _store
     if _store is not None:
         return _store
 
-    if settings.offline or not settings.gcp_project:
+    if settings.offline:
         _store = MemoryRunStore()
+    elif not settings.gcp_project:
+        # Nothing to try: no project configured at all, not a degrade from a
+        # failed attempt. Documented separately from the except branch below
+        # because a reader debugging "why local JSON" needs to know which of
+        # the two this run hit.
+        _store = LocalJsonRunStore()
     else:
         try:
             store = FirestoreRunStore()
@@ -320,8 +458,8 @@ def get_store() -> RunStore:
             next(iter(store.db.collections()), None)
             _store = store
         except Exception as exc:
-            log.warning("firestore unavailable, using memory store: %s", exc)
-            _store = MemoryRunStore()
+            log.warning("firestore unavailable, using local run store: %s", exc)
+            _store = LocalJsonRunStore()
     return _store
 
 

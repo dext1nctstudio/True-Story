@@ -23,6 +23,7 @@ import { ClaimDashboard } from "@/components/ClaimDashboard";
 import { Calculator, CostPanel } from "@/components/CostPanel";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
 import { CostMeter, VerdictCounters } from "@/components/CostMeter";
+import { RiskBoard } from "@/components/RiskBoard";
 import { Dashboard } from "@/components/Dashboard";
 import { EvidencePanel } from "@/components/EvidencePanel";
 import { MonitorPanel } from "@/components/MonitorPanel";
@@ -49,6 +50,7 @@ import {
   uploadRun,
 } from "@/lib/api";
 import { ROLE_VIEWS, TAB_LABEL, type RailTab, viewFor } from "@/lib/roles";
+import { presentRunError } from "@/lib/run-error";
 import type {
   Annotation,
   BudgetSnapshot,
@@ -65,11 +67,7 @@ import type {
 
 const PROJECT_ID = "demo";
 
-/**
- * Run ids are minted per upload and the store is in memory, so there is no
- * id to bake in at build time. No `?run=` means no run is open yet, and the
- * home dashboard is what renders instead of the single track workspace view.
- */
+/** No `?run=` means no run is open; the durable docket renders instead. */
 function resolveRunId(): string | null {
   if (typeof window === "undefined") return null;
   return new URLSearchParams(window.location.search).get("run");
@@ -93,6 +91,28 @@ function pageLabel(pageCount: number): string {
  * on the server, and reading it in the render path is the SSR/client
  * divergence that produces a hydration mismatch.
  */
+/**
+ * "Absent" and "could not be fetched" are different answers, and collapsing
+ * them loses data that is already on screen.
+ *
+ * The workspace re-reads a run every few seconds while it moves, and on every
+ * stream event. Catching a failed read to a null or an empty list meant one
+ * transient failure -- a cold start, a 502, a dropped socket, all routine on a
+ * free tier -- overwrote a good overlay with nothing. The annotated script
+ * vanished mid run and a restored run then fell through to the "archived, no
+ * detailed artifacts" branch, which was never true: the artifacts were in
+ * durable storage the whole time and the very next read returned them.
+ */
+type Settled<T> = { ok: true; value: T } | { ok: false };
+
+async function settled<T>(promise: Promise<T>): Promise<Settled<T>> {
+  try {
+    return { ok: true, value: await promise };
+  } catch {
+    return { ok: false };
+  }
+}
+
 function useModifierKey(): string {
   const [key, setKey] = useState("Ctrl");
   useEffect(() => {
@@ -126,8 +146,7 @@ export default function Workspace() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [stage, setStage] = useState<string>("");
   const [runStatus, setRunStatus] = useState<string>("");
-  // Rebuilt from the store rather than held in this process. Only the run
-  // record is persisted, so the annotated script is not available.
+  // Rebuilt from durable storage rather than held in this process.
   const [restored, setRestored] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -282,29 +301,36 @@ export default function Workspace() {
     if (!runId) return;
     try {
       // The run record is the authoritative one and the only required read.
-      // Everything else is stage dependent or, for a run restored from the
-      // store after a restart, permanently absent: only the run record is
-      // persisted, so treating a missing overlay as "not ready yet" left a
-      // completed run spinning on "Parsing the screenplay" forever.
+      // Everything else is stage dependent. Restored runs read their detailed
+      // artifacts from durable storage through the same endpoints.
       const run = await getRun(runId);
       setSummary(run.summary);
       setRunStatus(run.status);
       setRestored(Boolean(run.restored));
       setJustStarted(false);
-      setError(null);
+      setError(run.status === "FAILED" ? presentRunError(run.error) : null);
+
+      const overlayRead: Promise<Settled<Overlay | null>> = caps.overlay
+        ? settled(getOverlay(runId))
+        : Promise.resolve({ ok: true, value: null });
 
       const [overlayData, claimData, remedyData, elementData] = await Promise.all([
-        caps.overlay ? getOverlay(runId).catch(() => null) : Promise.resolve(null),
-        getClaims(runId).catch(() => ({ claims: [] as Claim[] })),
-        getRemedies(runId).catch(() => ({ remedies: [] as Remedy[] })),
-        getElements(runId).catch(() => ({ elements: [] as ClearableElement[] })),
+        overlayRead,
+        settled(getClaims(runId)),
+        settled(getRemedies(runId)),
+        settled(getElements(runId)),
       ]);
+
+      // Only a read that actually answered may replace what is on screen. A
+      // read that failed leaves the previous value alone, so a blip cannot
+      // blank the script.
+      //
       // A run that has not reached the report stage can answer with {}, which
       // is truthy and would render an overlay with no script behind it.
-      setOverlay(overlayData?.script ? overlayData : null);
-      setClaims(claimData.claims);
-      setRemedies(remedyData.remedies);
-      setElements(elementData.elements ?? []);
+      if (overlayData.ok) setOverlay(overlayData.value?.script ? overlayData.value : null);
+      if (claimData.ok) setClaims(claimData.value.claims);
+      if (remedyData.ok) setRemedies(remedyData.value.remedies);
+      if (elementData.ok) setElements(elementData.value.elements ?? []);
 
       // The register is counsel and producer only, and the server enforces
       // that, so a 403 here is the governance model working rather than a
@@ -371,7 +397,7 @@ export default function Workspace() {
           void load();
           break;
         case "run_failed":
-          setError(String(event.error ?? "run failed"));
+          setError(presentRunError(String(event.error ?? "Run failed.")));
           break;
       }
     });
@@ -575,6 +601,45 @@ export default function Workspace() {
           )}
 
           <div className="header-controls">
+            {/* The report was reachable only through the command palette and
+                the last rail tab, and that tab was being clipped off the edge
+                of the strip. A finished run's deliverable should not be
+                something you have to know a keyboard shortcut to find. */}
+            {caps.reports && runId && (
+              <div className="export-actions">
+                {runStatus === "COMPLETE" ? (
+                  <>
+                    <a
+                      className="btn"
+                      href={reportPdfUrl(runId)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="The E&O clearance report for this draft"
+                    >
+                      Report
+                    </a>
+                    <a
+                      className="btn btn-quiet"
+                      href={clearanceLogUrl(runId)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="The clearance log, the insurer checklist, as CSV"
+                    >
+                      CSV
+                    </a>
+                  </>
+                ) : (
+                  <span
+                    className="btn btn-quiet is-disabled"
+                    aria-disabled="true"
+                    title="The report is written in the final stage of the run."
+                  >
+                    Report
+                  </span>
+                )}
+              </div>
+            )}
+
             <button suppressHydrationWarning
               className="btn btn-quiet"
               onClick={() => setPaletteOpen(true)}
@@ -689,23 +754,16 @@ export default function Workspace() {
                   setTab("evidence");
                 }}
               />
-            ) : restored ? (
-              // Rebuilt from the store after a restart. The run record persists;
-              // the claims, elements and overlay do not, so there is no script to
-              // annotate and no amount of waiting will produce one.
-              <div className="starting">
-                <p className="starting-title">Summary only</p>
-                <p className="starting-sub">
-                  This run was restored from storage after a restart. Its verdicts and
-                  cost are in the header, but the annotated script is not retained
-                  between restarts.
-                </p>
-              </div>
             ) : justStarted ||
               (runStatus && runStatus !== "COMPLETE" && runStatus !== "FAILED") ? (
               // No overlay yet and the run is still moving. Covers both the
               // window before the run registers and the ingest stage after it,
               // which on a feature length script is minutes of model calls.
+              //
+              // Checked before the restored branch, deliberately: a run that is
+              // still executing is not an archive, whether or not this process
+              // is the one holding it in memory. Calling it archived while it
+              // works is worse than saying nothing.
               <div className="starting">
                 <RunTimeline stage={stage} status={runStatus} />
                 <p className="starting-title">
@@ -714,6 +772,14 @@ export default function Workspace() {
                 <p className="starting-sub">
                   The script appears here as soon as ingest finishes, then lines light
                   up as verdicts land.
+                </p>
+              </div>
+            ) : restored ? (
+              <div className="starting">
+                <p className="starting-title">Archived run</p>
+                <p className="starting-sub">
+                  This run was restored from durable storage. Its summary is available,
+                  but no annotated script was stored for it.
                 </p>
               </div>
             ) : (
@@ -754,19 +820,34 @@ export default function Workspace() {
                     claims={claims}
                     elements={elements}
                     onSelectClaim={openSubject}
+                    runId={runId}
                   />
                 ))}
 
               {tab === "people" && <ClaimDashboard persons={persons} />}
 
               {tab === "queue" && (
-                <ReviewQueue claims={claims} elements={elements} onSelectClaim={openSubject} />
+                <ReviewQueue
+                  claims={claims}
+                  elements={elements}
+                  onSelectClaim={openSubject}
+                  runId={runId}
+                />
               )}
 
               {tab === "cost" && (
                 <CostPanel
                   runId={runId}
                   live={runStatus !== "COMPLETE" && runStatus !== "FAILED"}
+                />
+              )}
+
+              {tab === "risk" && (
+                <RiskBoard
+                  runId={runId}
+                  claims={claims}
+                  elements={elements}
+                  onOpenLine={openSubject}
                 />
               )}
 
@@ -829,6 +910,11 @@ export default function Workspace() {
         commands={commands}
         onSelectClaim={openSubject}
         onSelectElement={openSubject}
+        runId={runId}
+        canAsk={caps.evidence}
+        runs={runs}
+        remedies={remedies}
+        onSelectRun={openRun}
       />
     </div>
   );

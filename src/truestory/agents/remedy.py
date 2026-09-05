@@ -18,8 +18,10 @@ preserves what the line was doing dramatically.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+from collections.abc import Awaitable
 from typing import Any
 
 from truestory.config import settings
@@ -62,19 +64,45 @@ class RemedyLoop:
     ) -> list[Remedy]:
         remedies: list[Remedy] = []
 
-        for claim in claims:
-            if claim.verdict is Verdict.CONTRADICTED:
-                remedy = await self.remedy_claim(claim)
-                if remedy:
-                    remedies.append(remedy)
-                    claim.remedy_id = remedy.remedy_id
+        # Each remedy is a propose/verify loop of up to three rounds, so a
+        # serial pass over them multiplies the slowest stage in the system by
+        # the number of findings — on the run that is worth fixing most, the
+        # one with many contradicted claims. They are independent of each
+        # other, so they are bounded rather than sequenced.
+        semaphore = asyncio.Semaphore(max(1, settings.remedy_max_concurrency))
 
-        for element in elements:
-            if element.status in _NEEDS_REMEDY:
-                remedy = await self.remedy_element(element)
-                if remedy:
-                    remedies.append(remedy)
-                    element.remedies.append(remedy)
+        async def guarded(coro: Awaitable[Remedy | None], label: str) -> Remedy | None:
+            async with semaphore:
+                try:
+                    return await coro
+                except Exception as exc:
+                    # A remedy is an offer of a fix. Failing to produce one is
+                    # a smaller harm than losing the finding it attaches to, so
+                    # it is logged and the run continues.
+                    log.warning("remedy failed for %s: %s", label, exc)
+                    return None
+
+        targets = [c for c in claims if c.verdict is Verdict.CONTRADICTED]
+        for claim, remedy in zip(
+            targets,
+            await asyncio.gather(*(guarded(self.remedy_claim(c), c.claim_id) for c in targets)),
+            strict=True,
+        ):
+            if remedy:
+                remedies.append(remedy)
+                claim.remedy_id = remedy.remedy_id
+
+        el_targets = [e for e in elements if e.status in _NEEDS_REMEDY]
+        for element, remedy in zip(
+            el_targets,
+            await asyncio.gather(
+                *(guarded(self.remedy_element(e), e.element_id) for e in el_targets)
+            ),
+            strict=True,
+        ):
+            if remedy:
+                remedies.append(remedy)
+                element.remedies.append(remedy)
 
         # The disclaimer remedy is project level and is generated from the
         # terms of an actual settlement, in which the negotiated fix was moving
@@ -363,13 +391,7 @@ class RemedyLoop:
 
     def _genai(self) -> Any:
         if self._client is None:
-            from google import genai
-
-            self._client = genai.Client(
-                vertexai=settings.use_vertex,
-                project=settings.gcp_project or None,
-                location=settings.gcp_location,
-            )
+            self._client = model_fallback.genai_client()
         return self._client
 
 
