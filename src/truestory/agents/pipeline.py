@@ -650,9 +650,15 @@ class TrueStoryPipeline:
             return
 
         researched = 0
-        for element_type, entries in list(by_type.items())[: self._MAX_CURE_LOOKUPS]:
+        wanted = list(by_type.items())[: self._MAX_CURE_LOOKUPS]
+
+        # At most eight of these, every one a different market question, none
+        # of them reading the others' answers. Serially they cost the run a
+        # minute of pure waiting: measured at 57 seconds for two lookups on a
+        # two page script, and this stage is capped at eight.
+        async def lookup(element_type: str) -> dict[str, Any] | None:
             try:
-                payload = await self.tools.research_cure_cost(
+                return await self.tools.research_cure_cost(
                     subject_id=f"cure_{element_type.lower()}",
                     element=element_type.replace("_", " ").lower(),
                     description=_cure_description(element_type),
@@ -660,6 +666,12 @@ class TrueStoryPipeline:
                 )
             except Exception as exc:
                 log.warning("cure rate lookup failed for %s: %s", element_type, exc)
+                return None
+
+        payloads = await asyncio.gather(*(lookup(t) for t, _ in wanted))
+
+        for (_element_type, entries), payload in zip(wanted, payloads, strict=True):
+            if payload is None:
                 continue
 
             finding = payload.get("finding") or {}
@@ -736,26 +748,39 @@ class TrueStoryPipeline:
             )
             by_shape.setdefault(shape, []).append((claim, assessment))
 
-        attempted = 0
+        wanted = list(by_shape.items())[: self._MAX_DAMAGES_LOOKUPS]
+        attempted = len(wanted)
         failures = 0
-        for shape, entries in list(by_shape.items())[: self._MAX_DAMAGES_LOOKUPS]:
+
+        # Four independent questions about four different legal shapes. Run
+        # serially they were the slowest thing left in the pipeline after
+        # research itself: 143 seconds for four lookups, measured, on a stage
+        # whose whole output is context for a reviewer.
+        async def lookup(index: int, shape: tuple[str, str, str, str]) -> dict[str, Any] | None:
             claim_type, verdict, life_status, public_status = shape
             descriptor = (
                 "defamation or false-light exposure from a "
                 f"{claim_type.lower().replace('_', ' ')} assertion about a {life_status} "
                 f"person ({public_status.lower().replace('_', ' ')}); verification result {verdict.lower()}"
             )
-            attempted += 1
             try:
                 payload = await self.tools.research_damages_range(
-                    subject_id=f"damages_shape_{attempted}",
+                    subject_id=f"damages_shape_{index}",
                     claim_type=descriptor,
                     jurisdiction=", ".join(self.jurisdictions) or "United States",
                 )
-                researched = normalise_researched_exposure(payload)
+                return normalise_researched_exposure(payload)
             except Exception as exc:
-                failures += 1
                 log.warning("damages range lookup failed for %s: %s", descriptor, exc)
+                return None
+
+        results = await asyncio.gather(
+            *(lookup(i, shape) for i, (shape, _) in enumerate(wanted, start=1))
+        )
+
+        for (_shape, entries), researched in zip(wanted, results, strict=True):
+            if researched is None:
+                failures += 1
                 continue
 
             # One market question, attached to every script claim of that

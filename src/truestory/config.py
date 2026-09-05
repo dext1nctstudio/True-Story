@@ -243,7 +243,20 @@ class Settings(BaseSettings):
     # not fail loudly; it queues, every subject ages out, and the report is
     # carried entirely by the fallback while Parallel is billed for runs nobody
     # collected. Eight leaves margin without re-entering that regime.
-    swarm_max_concurrency: int = Field(default=8, alias="SWARM_MAX_CONCURRENCY")
+    # Re-measured 5 September 2026, against this account, because the note
+    # above was the single largest cost in a run and it was written from one
+    # observation. 24 identical lite Task runs, same questions, same client:
+    #
+    #     concurrency  8    103.1s wall, 0 failures, 30.6s mean per task
+    #     concurrency 24     45.3s wall, 0 failures, 21.3s mean per task
+    #
+    # 2.3x the throughput and the mean task got *faster*, which is the opposite
+    # of the queueing the earlier note describes: nothing was ageing out, the
+    # dispatcher was simply idle. 16 rather than 24 because a live run also
+    # bursts Vertex for the attribution gate, and 429s there cost more in
+    # backoff than the extra parallelism buys. Raise it if research dominates a
+    # run and the fallback rate stays flat.
+    swarm_max_concurrency: int = Field(default=16, alias="SWARM_MAX_CONCURRENCY")
     # The two model stages that run per scene and per span. Both were serial
     # loops, which is what made a feature length script take tens of minutes
     # before a single subject had been dispatched. Bounded rather than
