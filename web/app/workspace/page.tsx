@@ -91,6 +91,28 @@ function pageLabel(pageCount: number): string {
  * on the server, and reading it in the render path is the SSR/client
  * divergence that produces a hydration mismatch.
  */
+/**
+ * "Absent" and "could not be fetched" are different answers, and collapsing
+ * them loses data that is already on screen.
+ *
+ * The workspace re-reads a run every few seconds while it moves, and on every
+ * stream event. Catching a failed read to a null or an empty list meant one
+ * transient failure -- a cold start, a 502, a dropped socket, all routine on a
+ * free tier -- overwrote a good overlay with nothing. The annotated script
+ * vanished mid run and a restored run then fell through to the "archived, no
+ * detailed artifacts" branch, which was never true: the artifacts were in
+ * durable storage the whole time and the very next read returned them.
+ */
+type Settled<T> = { ok: true; value: T } | { ok: false };
+
+async function settled<T>(promise: Promise<T>): Promise<Settled<T>> {
+  try {
+    return { ok: true, value: await promise };
+  } catch {
+    return { ok: false };
+  }
+}
+
 function useModifierKey(): string {
   const [key, setKey] = useState("Ctrl");
   useEffect(() => {
@@ -288,18 +310,27 @@ export default function Workspace() {
       setJustStarted(false);
       setError(run.status === "FAILED" ? presentRunError(run.error) : null);
 
+      const overlayRead: Promise<Settled<Overlay | null>> = caps.overlay
+        ? settled(getOverlay(runId))
+        : Promise.resolve({ ok: true, value: null });
+
       const [overlayData, claimData, remedyData, elementData] = await Promise.all([
-        caps.overlay ? getOverlay(runId).catch(() => null) : Promise.resolve(null),
-        getClaims(runId).catch(() => ({ claims: [] as Claim[] })),
-        getRemedies(runId).catch(() => ({ remedies: [] as Remedy[] })),
-        getElements(runId).catch(() => ({ elements: [] as ClearableElement[] })),
+        overlayRead,
+        settled(getClaims(runId)),
+        settled(getRemedies(runId)),
+        settled(getElements(runId)),
       ]);
+
+      // Only a read that actually answered may replace what is on screen. A
+      // read that failed leaves the previous value alone, so a blip cannot
+      // blank the script.
+      //
       // A run that has not reached the report stage can answer with {}, which
       // is truthy and would render an overlay with no script behind it.
-      setOverlay(overlayData?.script ? overlayData : null);
-      setClaims(claimData.claims);
-      setRemedies(remedyData.remedies);
-      setElements(elementData.elements ?? []);
+      if (overlayData.ok) setOverlay(overlayData.value?.script ? overlayData.value : null);
+      if (claimData.ok) setClaims(claimData.value.claims);
+      if (remedyData.ok) setRemedies(remedyData.value.remedies);
+      if (elementData.ok) setElements(elementData.value.elements ?? []);
 
       // The register is counsel and producer only, and the server enforces
       // that, so a 403 here is the governance model working rather than a
@@ -684,19 +715,16 @@ export default function Workspace() {
                   setTab("evidence");
                 }}
               />
-            ) : restored ? (
-              <div className="starting">
-                <p className="starting-title">Archived run</p>
-                <p className="starting-sub">
-                  This run was restored from durable storage. Its summary is available,
-                  but it predates detailed artifact persistence.
-                </p>
-              </div>
             ) : justStarted ||
               (runStatus && runStatus !== "COMPLETE" && runStatus !== "FAILED") ? (
               // No overlay yet and the run is still moving. Covers both the
               // window before the run registers and the ingest stage after it,
               // which on a feature length script is minutes of model calls.
+              //
+              // Checked before the restored branch, deliberately: a run that is
+              // still executing is not an archive, whether or not this process
+              // is the one holding it in memory. Calling it archived while it
+              // works is worse than saying nothing.
               <div className="starting">
                 <RunTimeline stage={stage} status={runStatus} />
                 <p className="starting-title">
@@ -705,6 +733,14 @@ export default function Workspace() {
                 <p className="starting-sub">
                   The script appears here as soon as ingest finishes, then lines light
                   up as verdicts land.
+                </p>
+              </div>
+            ) : restored ? (
+              <div className="starting">
+                <p className="starting-title">Archived run</p>
+                <p className="starting-sub">
+                  This run was restored from durable storage. Its summary is available,
+                  but no annotated script was stored for it.
                 </p>
               </div>
             ) : (
