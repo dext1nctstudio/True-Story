@@ -76,30 +76,52 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _preflight_live(env: dict) -> list[str]:
-    """What's missing before a --live run is attempted. Empty means go."""
-    missing = []
-    for name in _REQUIRED_FOR_LIVE:
-        value = env.get(name, "")
-        if not value or value.startswith("PLACEHOLDER"):
-            missing.append(name)
-    return missing
-
-
 _ARGS = _parse_args()
 
 import os  # noqa: E402
 
+# The credential this preflight cares about lives in .env, not necessarily in
+# the shell's exported environment -- checking os.environ directly here was
+# the bug in the first cut of this script. `Settings` is what actually reads
+# .env (pydantic-settings, configured with env_file=.env in config.py), so the
+# check has to go through it rather than duplicate that loading logic badly.
+# An exported shell variable still wins, because that is `Settings`' own
+# precedence and this has to agree with it, not invent a second opinion.
 if _ARGS.live:
-    missing = _preflight_live(os.environ)
+    os.environ["TRUESTORY_MODE"] = "live"
+
+import truestory.config as _config  # noqa: E402
+from truestory.config import Mode  # noqa: E402
+
+if _ARGS.live and _config.settings.mode is not Mode.LIVE:
+    # `settings` is a module level singleton built the moment truestory.config
+    # is first imported anywhere in this process. Setting TRUESTORY_MODE above
+    # only affects a *fresh* import, so if something already imported
+    # truestory.config earlier (a stray site-packages .pth, an eager plugin),
+    # the module level `settings` name below would otherwise stay bound to a
+    # stale mock instance. Clearing the cache and rebuilding closes that gap.
+    _config.get_settings.cache_clear()
+    _config.settings = _config.get_settings()
+
+settings = _config.settings
+
+if _ARGS.live:
+    missing = [
+        name
+        for name, value in (
+            ("PARALLEL_API_KEY", settings.parallel_api_key),
+            ("GOOGLE_CLOUD_PROJECT", settings.gcp_project),
+        )
+        if not value or value.startswith("PLACEHOLDER")
+    ]
     if missing:
         print("--live requires credentials that are not configured:")
         for name in missing:
-            print(f"  {name} is missing or still a PLACEHOLDER in .env")
+            print(f"  {name} is missing or still a PLACEHOLDER, checked via .env and the shell")
         print("\nSet these in .env, or drop --live to run the same proof in mock mode.")
         raise SystemExit(2)
-    os.environ["TRUESTORY_MODE"] = "live"
-    if not os.environ.get("USPTO_API_KEY") or os.environ["USPTO_API_KEY"].startswith("PLACEHOLDER"):
+
+    if not settings.uspto_api_key or settings.uspto_api_key.startswith("PLACEHOLDER"):
         print(
             "note: USPTO_API_KEY is not configured. Feature 1's routing and citation "
             "shape are still proven directly against a fake transport; the mark in "
