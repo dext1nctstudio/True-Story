@@ -407,7 +407,30 @@ class ResearchSwarm:
         # read can only watch the string that was in the script; one opened
         # after can watch the record the research actually found, which for a
         # mark is a serial number rather than a word.
-        for side_effect in element.also:
+        # The side effects were awaited one after another, and they are the
+        # reason a research task took minutes rather than seconds: a person
+        # element routinely carries three of them, each its own provider round
+        # trip, so the element's wall clock was the sum rather than the slowest.
+        # Measured on a two page script, 43 dispatched tasks produced 121
+        # evidence records — nearly three round trips per task, in series,
+        # inside a stage that was already running its tasks concurrently.
+        #
+        # They are independent of each other: each appends to `result` and none
+        # reads what another produced. The one exception is
+        # `extract_evidence_page`, which captures pages from the evidence
+        # accumulated so far, so it still runs after the others rather than
+        # beside them — concurrently it would race the records it exists to read.
+        deferred = [e for e in element.also if e == "extract_evidence_page"]
+        concurrent = [e for e in element.also if e != "extract_evidence_page"]
+
+        await asyncio.gather(
+            *(
+                self._run_side_effect(side_effect, element, result, evidence)
+                for side_effect in concurrent
+            ),
+            return_exceptions=True,
+        )
+        for side_effect in deferred:
             await self._run_side_effect(side_effect, element, result, evidence)
 
         await self._emit(
