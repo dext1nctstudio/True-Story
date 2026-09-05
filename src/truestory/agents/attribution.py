@@ -367,13 +367,7 @@ class AttributionGate:
 
     def _genai(self) -> Any:
         if self._client is None:
-            from google import genai
-
-            self._client = genai.Client(
-                vertexai=settings.use_vertex,
-                project=settings.gcp_project or None,
-                location=settings.gcp_location,
-            )
+            self._client = model_fallback.genai_client()
         return self._client
 
 
