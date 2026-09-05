@@ -17,7 +17,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, interrogate, pageRef } from "@/lib/api";
-import type { Claim, ClearableElement, Evidence, PersonRollup } from "@/lib/types";
+import type {
+  Claim,
+  ClearableElement,
+  Evidence,
+  PersonRollup,
+  Remedy,
+  RunListItem,
+} from "@/lib/types";
 
 export interface Command {
   id: string;
@@ -36,6 +43,11 @@ interface Props {
   commands: Command[];
   onSelectClaim: (claimId: string) => void;
   onSelectElement: (elementId: string) => void;
+  /** Every run on the docket, so the palette reaches past the open one. */
+  runs?: RunListItem[];
+  /** The rewrites this run proposed, which are findings in their own right. */
+  remedies?: Remedy[];
+  onSelectRun?: (runId: string) => void;
   /** The run to ask about. Absent on the docket, where there is nothing to ask. */
   runId?: string | null;
   /** Whether this role may run research. The same gate the endpoint enforces. */
@@ -53,6 +65,9 @@ export function CommandPalette({
   onSelectElement,
   runId,
   canAsk = false,
+  runs = [],
+  remedies = [],
+  onSelectRun,
 }: Props) {
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -117,8 +132,51 @@ export function CommandPalette({
       });
     }
 
+    // A rewrite is a finding, and it is the one a writer is usually looking
+    // for. Searching the verdict but not the fix meant the most actionable
+    // text in the run was the only text the palette could not reach.
+    for (const remedy of remedies) {
+      rows.push({
+        id: `remedy:${remedy.remedy_id}`,
+        label: remedy.proposal,
+        hint: `rewrite · ${remedy.verified ? "verified" : "not yet verified"}`,
+        group: "Rewrites",
+        run: () => onSelectClaim(remedy.subject_id),
+      });
+    }
+
+    // Every other run on the docket. Without these the palette could only see
+    // inside whichever run happened to be open, which is what made it feel
+    // like a filter box rather than a way to get anywhere.
+    if (onSelectRun) {
+      for (const item of runs) {
+        if (item.run_id === runId) continue;
+        const v = item.verdicts;
+        rows.push({
+          id: `run:${item.run_id}`,
+          label: item.script_title || item.run_id,
+          hint: v
+            ? `${item.status.toLowerCase()} · ${v.red} contradicted · ${v.amber} unsupported`
+            : item.status.toLowerCase(),
+          group: "Runs",
+          run: () => onSelectRun(item.run_id),
+        });
+      }
+    }
+
     return rows;
-  }, [claims, commands, elements, onSelectClaim, onSelectElement, persons]);
+  }, [
+    claims,
+    commands,
+    elements,
+    onSelectClaim,
+    onSelectElement,
+    onSelectRun,
+    persons,
+    remedies,
+    runId,
+    runs,
+  ]);
 
   const ask = useCallback(
     async (question: string) => {
@@ -164,11 +222,18 @@ export function CommandPalette({
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     const matches = !q
-      ? entries.slice(0, 40)
+      ? // With nothing typed the list used to be whatever order extraction
+        // happened to produce, which put a verified background prop above a
+        // contradicted claim about a living person. Opened cold, the palette
+        // should show the things that need a decision first.
+        [...entries].sort((a, b) => severity(b) - severity(a)).slice(0, 40)
       : entries
           .map((entry) => ({ entry, score: score(`${entry.label} ${entry.hint ?? ""}`, q) }))
           .filter((row) => row.score > 0)
-          .sort((a, b) => b.score - a.score)
+          // Severity breaks ties rather than driving the order, so typing an
+          // exact title still finds it, and two equally good text matches are
+          // returned worst-first.
+          .sort((a, b) => b.score - a.score || severity(b.entry) - severity(a.entry))
           .slice(0, 40)
           .map((row) => row.entry);
     return askRow ? [...matches, askRow] : matches;
@@ -281,7 +346,16 @@ export function CommandPalette({
         )}
 
         <div className="palette-results">
-          {results.length === 0 && <div className="palette-empty">Nothing matches that.</div>}
+          {results.length === 0 && (
+            <div className="palette-empty">
+              {/* "Nothing matches that" is true and useless. What a reader
+                  needs at this point is what else the box reaches. */}
+              Nothing matches that. This searches every claim, clearance
+              element, person and rewrite in the run, every other run on the
+              docket, and the filters and exports as commands
+              {runId && canAsk ? ", and it can put the question to the record." : "."}
+            </div>
+          )}
           {results.map((entry, index) => {
             const showGroup = entry.group !== lastGroup;
             lastGroup = entry.group;
@@ -313,6 +387,31 @@ export function CommandPalette({
       </div>
     </div>
   );
+}
+
+//: How much a row wants a human's attention, read off the hint the row already
+//: carries. Deliberately a small table rather than threading verdict enums
+//: through every entry: the hint is the same string the reader sees, so what
+//: sorts the list is what is on screen.
+const SEVERITY: ReadonlyArray<readonly [string, number]> = [
+  ["contradicted", 100],
+  ["not clear", 90],
+  ["needs counsel", 80],
+  ["counsel required", 80],
+  ["unsupported", 70],
+  ["needs license", 60],
+  ["not yet verified", 50],
+  ["clear with conditions", 30],
+  ["verified", 10],
+  ["clear", 5],
+];
+
+function severity(entry: Command): number {
+  const text = `${entry.hint ?? ""} ${entry.label}`.toLowerCase();
+  for (const [needle, weight] of SEVERITY) {
+    if (text.includes(needle)) return weight;
+  }
+  return 20;
 }
 
 /** Subsequence match, with a bonus for hits at a word boundary. */

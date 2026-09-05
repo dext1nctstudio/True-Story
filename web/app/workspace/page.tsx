@@ -873,6 +873,9 @@ export default function Workspace() {
         onSelectElement={openSubject}
         runId={runId}
         canAsk={caps.evidence}
+        runs={runs}
+        remedies={remedies}
+        onSelectRun={openRun}
       />
     </div>
   );
