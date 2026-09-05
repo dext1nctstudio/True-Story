@@ -835,6 +835,8 @@ export default function Workspace() {
         commands={commands}
         onSelectClaim={openSubject}
         onSelectElement={openSubject}
+        runId={runId}
+        canAsk={caps.evidence}
       />
     </div>
   );
