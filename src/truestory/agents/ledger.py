@@ -27,7 +27,7 @@ from collections import defaultdict
 
 from truestory.models.claims import FactualClaim
 from truestory.models.elements import ClearableElement
-from truestory.models.enums import ElementType, Modality
+from truestory.models.enums import CLAIM_BEARING, ElementType, Modality
 from truestory.models.spans import RawSpan, ScriptDocument
 
 log = logging.getLogger("truestory.ledger")
@@ -256,11 +256,33 @@ class LedgerAgent:
         what makes the per person rollup, and therefore the amber density rule,
         possible at all.
         """
+        # One name can belong to several elements. A defamatory passage about a
+        # real person yields both a REAL_PERSON_DEPICTED and a DEFAMATORY_REF
+        # under the same canonical form, and the claims belong on the person:
+        # DEFAMATORY_REF is not in CLAIM_BEARING at all, so nothing downstream
+        # expects to find claims hanging off one.
+        #
+        # This map used to be built with a plain assignment, so whichever
+        # element came last simply won the name. Observed live: every claim in
+        # a run about Linda Fairstein landed on the DEFAMATORY_REF, leaving the
+        # person element with none. The register lists person typed elements
+        # that have claims, so she matched neither half of it and vanished from
+        # the People tab entirely -- and because the claims did have an element,
+        # they were not reported as unattributed either. Five unsupported
+        # negative claims about a living person, silently absent from the
+        # document counsel works from.
+        #
+        # Claim bearing types are registered first and nothing may displace
+        # them; canonical forms before aliases, so a name that is one element's
+        # real name is never taken by another element's alias.
         by_name: dict[str, ClearableElement] = {}
-        for element in elements:
-            by_name[normalise(element.canonical_form)] = element
-            for alias in element.aliases:
-                by_name.setdefault(normalise(alias), element)
+        for claim_bearing in (True, False):
+            tier = [e for e in elements if (e.element_type in CLAIM_BEARING) is claim_bearing]
+            for element in tier:
+                by_name.setdefault(normalise(element.canonical_form), element)
+            for element in tier:
+                for alias in element.aliases:
+                    by_name.setdefault(normalise(alias), element)
 
         for claim in claims:
             key = normalise(claim.subject_name)
