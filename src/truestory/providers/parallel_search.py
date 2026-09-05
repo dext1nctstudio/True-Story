@@ -72,9 +72,13 @@ class ParallelSearchProvider(ResearchProvider):
             # name plus attribute questions, which is most of what gets asked
             # here. `search_queries` is required, so an empty list was a 422.
             "search_queries": list(request.search_queries) or _queries_from(request.question),
+            # `max_results` and `max_chars_per_result` used to be sent here and
+            # the endpoint now rejects both with `extra_forbidden`, so every
+            # call this provider made returned 422 and became a research
+            # failure. Verified against api.parallel.ai on 5 September 2026:
+            # the same body without those two fields returns 200. Result count
+            # is trimmed below instead, where it costs nothing to get wrong.
             "mode": self.mode,
-            "max_results": request.max_results,
-            "max_chars_per_result": 1500,
         }
 
         with self._timed() as timing:
@@ -90,7 +94,7 @@ class ParallelSearchProvider(ResearchProvider):
             except Exception as exc:
                 return Evidence.failed(request.subject_id, request.question, self.name, str(exc))
 
-        results = body.get("results", [])
+        results = (body.get("results") or [])[: request.max_results]
         citations = [
             Citation.classified(
                 url=r.get("url", ""),
