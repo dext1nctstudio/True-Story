@@ -138,6 +138,11 @@ export function Dashboard({
         <span className="dashboard-section-count">{runs.length}</span>
       </div>
       <RunList runs={runs} onOpen={onOpen} />
+      {runs.length === 0 ? (
+        <p className="run-persistence-note">
+          No stored runs yet. New runs will remain here after reloads and local server restarts.
+        </p>
+      ) : null}
 
       <div className="dashboard-section-head benchmark-dashboard-head">
         <h2 className="dashboard-section-title">Litigation benchmark</h2>

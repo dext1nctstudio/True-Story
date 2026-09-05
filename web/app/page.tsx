@@ -78,7 +78,7 @@ const BENCHMARKS = [
     outcome: "Exact proposition isolated and escalated",
     result: "1 supported claim · 1 unsupported negative claim · counsel required",
     detail:
-      "The live retrospective run separated the supported championship statement from the unsupported statement about male opponents. It marked the phrase NOT CLEAR and routed the real-person claim to counsel.",
+      "The retrospective run separated the supported championship statement from the unsupported statement about male opponents. It marked the phrase NOT CLEAR and routed the real-person claim to counsel.",
     stakes: "$5M claimed",
     stakesNote: "Complaint demand—not a payment. The later settlement was undisclosed.",
     sources: [
@@ -101,7 +101,7 @@ const BENCHMARKS = [
     outcome: "Five separate evidentiary burdens surfaced",
     result: "5 of 5 unsupported · 100% amber density · counsel required",
     detail:
-      "The live retrospective run did not flatten the scene into one warning. It split attributed conduct, knowledge and motive into five claims and escalated every one for a human decision.",
+      "The retrospective run did not flatten the scene into one warning. It split attributed conduct, knowledge and motive into five claims and escalated every one for a human decision.",
     stakes: "Settled before trial",
     stakesNote: "$1M donation; no payment to Fairstein. This is not a damages figure.",
     sources: [
