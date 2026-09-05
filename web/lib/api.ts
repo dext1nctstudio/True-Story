@@ -104,6 +104,7 @@ export const getRun = (runId: string) =>
     run_id: string;
     status: string;
     summary: RunSummary | null;
+    error: string | null;
     /** Rebuilt from durable storage rather than held in the API process. */
     restored?: boolean;
   }>(`/v1/runs/${runId}`);

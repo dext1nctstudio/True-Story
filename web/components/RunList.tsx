@@ -4,10 +4,10 @@
  * The docket. Every run this project has produced, newest first, live while
  * any of them are still executing.
  *
- * Runs are process memory only, so this list, like everything else, resets on
- * the next API restart, it can only show what the current process has seen.
+ * The API rebuilds this list from durable storage after a restart.
  */
 
+import { presentRunError } from "@/lib/run-error";
 import type { RunListItem } from "@/lib/types";
 
 interface Props {
@@ -21,7 +21,7 @@ export function RunList({ runs, onOpen }: Props) {
   if (runs.length === 0) {
     return (
       <div className="dashboard-empty">
-        No runs yet in this session. Drop a draft above to open the first one.
+        No stored runs yet. Drop a draft above to open the first one.
       </div>
     );
   }
@@ -43,7 +43,9 @@ export function RunList({ runs, onOpen }: Props) {
               </div>
               <div className="run-row-meta">
                 <span>{new Date(run.started_at).toLocaleString()}</span>
-                {run.error && <span className="warning-inline">{run.error}</span>}
+                {run.error && (
+                  <span className="warning-inline">{presentRunError(run.error)}</span>
+                )}
               </div>
             </div>
 

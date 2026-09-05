@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from truestory.agents.ingest import IngestAgent, _caps_element_type
+from truestory.agents.ingest import IngestAgent, _caps_element_type, _read_source
 from truestory.models.enums import ElementType
 from truestory.models.spans import Scene
 
@@ -31,6 +31,19 @@ def _scene(text: str, characters: list[str] | None = None) -> Scene:
 def _types(scene: Scene, **kw) -> dict[str, ElementType]:
     spans = IngestAgent()._tag_deterministic(scene, **kw)
     return {s.surface_form: s.element_type for s in spans}
+
+
+def test_long_pasted_screenplay_is_content_not_a_filename() -> None:
+    screenplay = (
+        "Title: Litigation reconstruction 001\n\n"
+        "INT. INTERNATIONAL CHESS TOURNAMENT - DAY (1968)\n\n"
+        "COMMENTATOR\nNona Gaprindashvili has never faced men.\n"
+    ) * 30
+
+    text, source_format = _read_source(screenplay)
+
+    assert text == screenplay
+    assert source_format == "txt"
 
 
 # ── quoted text is not a song ───────────────────────────────────────────────

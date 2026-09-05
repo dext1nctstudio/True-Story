@@ -50,6 +50,7 @@ import {
   uploadRun,
 } from "@/lib/api";
 import { ROLE_VIEWS, TAB_LABEL, type RailTab, viewFor } from "@/lib/roles";
+import { presentRunError } from "@/lib/run-error";
 import type {
   Annotation,
   BudgetSnapshot,
@@ -285,7 +286,7 @@ export default function Workspace() {
       setRunStatus(run.status);
       setRestored(Boolean(run.restored));
       setJustStarted(false);
-      setError(null);
+      setError(run.status === "FAILED" ? presentRunError(run.error) : null);
 
       const [overlayData, claimData, remedyData, elementData] = await Promise.all([
         caps.overlay ? getOverlay(runId).catch(() => null) : Promise.resolve(null),
@@ -365,7 +366,7 @@ export default function Workspace() {
           void load();
           break;
         case "run_failed":
-          setError(String(event.error ?? "run failed"));
+          setError(presentRunError(String(event.error ?? "Run failed.")));
           break;
       }
     });

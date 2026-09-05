@@ -907,10 +907,22 @@ def _strip_fdx(raw: str) -> str:
 
 
 def _read_source(source: Path | str) -> tuple[str, str]:
-    if isinstance(source, str) and not Path(source).exists():
-        return source, "txt"
+    if isinstance(source, str):
+        # A string can be either a server-side path (the CLI/API compatibility
+        # route) or the screenplay itself (the paste/editor route). On Windows,
+        # asking Path.exists() about a screenplay longer than MAX_PATH raises
+        # OSError before we can recognise it as text. Treat any unstatable
+        # string as content; real uploaded files reach this function as Path.
+        candidate = Path(source)
+        try:
+            if not candidate.exists():
+                return source, "txt"
+        except (OSError, ValueError):
+            return source, "txt"
+        path = candidate
+    else:
+        path = source
 
-    path = Path(source)
     suffix = path.suffix.lower()
 
     if suffix == ".pdf":
