@@ -1910,3 +1910,159 @@ button.apply:disabled {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── risk exposure and precedent ───────────────────────────────────────── */
+/* See components/RiskAndPrecedent.tsx. Reuses the verdict pill palette for
+   the band chip, because a "blocking" finding is the same severity of thing
+   as a red verdict and should read as one at a glance. */
+
+.risk-precedent {
+  margin: var(--space-3) 0 var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.risk-precedent.loading {
+  font-size: var(--fs-tiny);
+  color: var(--text-quiet);
+  padding: var(--space-2) 0;
+}
+
+.risk-card,
+.precedent-card {
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--line-strong);
+  padding: var(--space-3);
+}
+
+.panel-subhead {
+  font-size: var(--fs-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  margin: 0 0 var(--space-2);
+}
+
+.risk-card .panel-subhead:not(:first-child) {
+  margin-top: var(--space-3);
+}
+
+.band-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  margin-bottom: var(--space-1);
+}
+
+.band-chip.band-red   { background: var(--red-tint);    color: var(--red);   border-color: var(--red-line); }
+.band-chip.band-amber { background: var(--amber-tint);  color: var(--amber); border-color: var(--amber-line); }
+.band-chip.band-grey  { background: var(--neutral-tint); color: var(--text-secondary); border-color: var(--line-strong); }
+
+.band-means {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-2);
+}
+
+.modelled-range {
+  font-size: var(--fs-large, 1.05rem);
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.driver-list {
+  margin: var(--space-2) 0;
+  padding-left: var(--space-4);
+  font-size: var(--fs-tiny);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.cost-to-cure,
+.statutory-anchors {
+  margin-top: var(--space-3);
+}
+
+.source-tag {
+  font-size: var(--fs-micro);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.source-tag.source-researched  { background: var(--green-tint); color: var(--green); }
+.source-tag.source-policy_table { background: var(--neutral-tint); color: var(--text-secondary); }
+
+.anchor-row {
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+}
+
+.anchor-row:first-of-type {
+  border-top: none;
+}
+
+.anchor-provision {
+  font-size: var(--fs-small);
+  font-weight: 500;
+  margin: 0;
+}
+
+.risk-card .disclaimer,
+.precedent-row .disclaimer {
+  padding: 0;
+  margin: var(--space-1) 0 0;
+  border-top: none;
+  font-size: var(--fs-micro);
+  color: var(--text-quiet);
+  line-height: 1.5;
+}
+
+.precedent-row {
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+}
+
+.precedent-row:first-of-type {
+  border-top: none;
+}
+
+.precedent-name {
+  font-size: var(--fs-small);
+  font-weight: 500;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.precedent-outcome {
+  font-size: var(--fs-tiny);
+  color: var(--text-secondary);
+  margin: var(--space-1) 0 0;
+  line-height: 1.5;
+}
+
+.side-tag {
+  font-size: var(--fs-micro);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.side-tag.side-plaintiff { background: var(--amber-tint); color: var(--amber); }
+.side-tag.side-defence   { background: var(--green-tint); color: var(--green); }

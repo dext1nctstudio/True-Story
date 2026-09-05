@@ -420,3 +420,141 @@ export const COLORS: Record<VerdictColor, { line: string; chip: string; label: s
   grey: { line: "transparent", chip: "transparent", label: "Opinion" },
   pending: { line: "var(--verdict-pending)", chip: "transparent", label: "Pending" },
 };
+
+// ── exposure and precedent ──────────────────────────────────────────────────
+// See src/truestory/agents/exposure.py and agents/precedent.py. Deliberately
+// not a damages prediction: a band to sort a queue by, statutes quoted with
+// their provision, a cost to fix that is a quote rather than a forecast, and
+// a modelled range whose ranking is trustworthy and whose magnitude is an
+// order of magnitude. Every field name here is the literal key the API sends.
+
+export interface StatutoryAnchor {
+  id: string;
+  provision: string;
+  jurisdiction: string;
+  basis: string;
+  floor_usd: number | null;
+  ceiling_usd: number | null;
+  willful_ceiling_usd: number | null;
+  innocent_floor_usd: number | null;
+  note: string;
+  verified: boolean;
+  caveat: string;
+}
+
+export interface CureRateResearch {
+  rate_found: boolean;
+  typical_usd?: number | null;
+  rate_unit?: string | null;
+  scope?: string | null;
+  basis: string;
+  confidence_note?: string;
+  obtainable?: boolean | null;
+  sources?: string[];
+}
+
+export interface CostToCure {
+  remedy_class: string;
+  stage: string;
+  stage_multiplier: number;
+  fee_usd: { low: number; high: number };
+  change_usd: { low: number; high: number };
+  low_usd: number;
+  high_usd: number;
+  basis: string;
+  stage_basis: string;
+  estimate: true;
+  /** "policy_table" until a real market rate replaces it; "researched" once
+   *  Parallel finds one with sources. Never render these as the same kind of
+   *  figure -- the UI should always show which one it is looking at. */
+  source: "policy_table" | "researched";
+  researched: boolean;
+  rate_research?: CureRateResearch;
+}
+
+export interface Venue {
+  anti_slapp_available: boolean;
+  note: string;
+  jurisdictions: string[];
+  with_anti_slapp?: string[];
+  without_anti_slapp?: string[];
+}
+
+export interface ExposureDriver {
+  id: string;
+  value: number;
+  because: string;
+  detail?: string;
+}
+
+export interface ModelledExposure {
+  expected_usd: { low: number; high: number };
+  claim_probability: number;
+  severity_given_claim_usd: { low: number; high: number };
+  base_rate: number;
+  base_rate_key: string;
+  drivers: ExposureDriver[];
+  outcome_weights: Record<string, number>;
+  calibrated: boolean;
+  negligible: boolean;
+  caveat: string;
+}
+
+export type ExposureBand = "routine" | "negotiable" | "counsel_required" | "blocking";
+
+/** One finding's exposure picture, keyed by the same claim_id / element_id
+ *  used everywhere else in the run. */
+export interface ExposureAssessment {
+  subject_id: string;
+  band: ExposureBand;
+  band_rank: number;
+  band_means: string;
+  rule_id: string;
+  because: string;
+  statutory_anchors: StatutoryAnchor[];
+  cost_to_cure: CostToCure | null;
+  venue: Venue;
+  modelled_exposure: ModelledExposure | null;
+  disclaimer: string;
+}
+
+/** The run wide rollup: `/v1/runs/{id}/exposure`. */
+export interface ExposureSchedule {
+  stage: string;
+  by_band: Partial<Record<ExposureBand, number>>;
+  blocking: number;
+  counsel_required: number;
+  cost_to_cure_usd: {
+    low: number;
+    high: number;
+    priced_findings: number;
+    estimate: true;
+    basis: string;
+    researched_findings?: number;
+  };
+  modelled_exposure_usd: {
+    low: number;
+    high: number;
+    findings: number;
+    calibrated: boolean;
+    basis?: string;
+  };
+  assessments: ExposureAssessment[];
+}
+
+/** One published dispute matched to a finding by failure shape, not topic. */
+export interface PrecedentMatch {
+  case_id: string;
+  name: string;
+  side: "plaintiff" | "defence";
+  outcome: string;
+  lesson: string;
+  score: number;
+  matched_on: string[];
+  verified: boolean;
+  caveat: string;
+}
+
+/** `/v1/runs/{id}/precedents`: subject id (claim_id or element_id) to its
+ *  matches, at most a handful per finding, both sides represented. */
+export type PrecedentsBySubject = Record<string, PrecedentMatch[]>;

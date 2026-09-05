@@ -450,6 +450,30 @@ def _persist_artifacts(project_id: str, run_id: str, state: RunState) -> None:
             ("claims", {c.claim_id: c.to_dict() for c in state.claims}),
             ("elements", {e.element_id: e.to_dict() for e in state.elements}),
             ("remedies", {r.remedy_id: r.to_dict() for r in state.remedies}),
+            # One record per finding, keyed the same way the assessment itself
+            # is keyed, so a restored run can look either up by subject id
+            # exactly as the in process path does.
+            (
+                "exposure",
+                {
+                    a["subject_id"]: a
+                    for a in state.exposure.get("assessments", [])
+                    if a.get("subject_id")
+                },
+            ),
+            (
+                # `list_subjects` returns only the stored values, not the key
+                # each is stored under (both backends: a document's own id is
+                # never part of `.to_dict()`), which is why claims and
+                # elements already carry their own id field. This one needs
+                # the same treatment or a restored run cannot tell which
+                # finding each match list belongs to.
+                "precedents",
+                {
+                    subject_id: {"subject_id": subject_id, "matches": matches}
+                    for subject_id, matches in state.precedents.items()
+                },
+            ),
         ):
             if subjects:
                 store.batch_put_subjects(project_id, run_id, kind, subjects)
@@ -457,6 +481,19 @@ def _persist_artifacts(project_id: str, run_id: str, state: RunState) -> None:
         overlay = state.artifacts.get("report", {}).get("overlay")
         if overlay:
             store.put_subject(project_id, run_id, "artifacts", "overlay", overlay)
+
+        # The rollup fields (by_band, cost_to_cure_usd, modelled_exposure_usd)
+        # live only on the aggregate, not on any one assessment, so they are
+        # stored once here rather than reconstructed by summing persisted
+        # per finding records back up on every read.
+        if state.exposure:
+            store.put_subject(
+                project_id,
+                run_id,
+                "artifacts",
+                "exposure_summary",
+                {k: v for k, v in state.exposure.items() if k != "assessments"},
+            )
     except Exception:
         log.warning("could not persist artifacts for run %s", run_id, exc_info=True)
 
@@ -625,6 +662,61 @@ async def get_elements(
         for e in state.elements
     ]
     return apply_view({"elements": elements, "total": len(elements)}, principal)
+
+
+@app.get("/v1/runs/{run_id}/exposure")
+async def get_exposure(
+    run_id: str, principal: Principal = Depends(current_principal)
+) -> dict[str, Any]:
+    """Severity band, statutory anchors, cost to cure, and the modelled
+    exposure figure, per finding, plus the run wide rollup.
+
+    Gated on the same "cost" capability as `cost_cents` and `budget`. This is
+    a dollar figure about the production's own risk, and a role that may not
+    see the cost meter should not see a modelled lawsuit exposure either.
+    """
+    if not can(principal, "cost"):
+        raise HTTPException(status_code=403, detail="role may not view exposure")
+
+    if run_id not in _RUNS:
+        assessments = _stored_subjects(run_id, principal, "exposure")
+        if assessments is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        summary_rows = _stored_subjects(run_id, principal, "artifacts") or []
+        summary = next(
+            (r for r in summary_rows if "by_band" in r), {}
+        )
+        payload = {**summary, "assessments": assessments}
+        return apply_view(payload, principal)
+
+    state = _state_or_404(run_id, principal)
+    return apply_view(dict(state.exposure), principal)
+
+
+@app.get("/v1/runs/{run_id}/precedents")
+async def get_precedents(
+    run_id: str, principal: Principal = Depends(current_principal)
+) -> dict[str, Any]:
+    """Published disputes of the same failure shape, keyed by finding.
+
+    Never gated on "cost" or "evidence": a precedent carries no dollar figure
+    and no masked identity of its own, only a matched shape and a citation to
+    a public matter, and it is exactly the context a writer benefits from as
+    much as counsel does.
+    """
+    if run_id not in _RUNS:
+        rows = _stored_subjects(run_id, principal, "precedents")
+        if rows is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        precedents = {
+            row["subject_id"]: row.get("matches", [])
+            for row in rows
+            if row.get("subject_id")
+        }
+        return apply_view({"precedents": precedents}, principal)
+
+    state = _state_or_404(run_id, principal)
+    return apply_view({"precedents": state.precedents}, principal)
 
 
 @app.get("/v1/runs/{run_id}/register")

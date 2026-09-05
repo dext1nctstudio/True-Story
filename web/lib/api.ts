@@ -15,8 +15,10 @@ import type {
   ClearableElement,
   Estimate,
   Evidence,
+  ExposureSchedule,
   Overlay,
   PersonRollup,
+  PrecedentsBySubject,
   Remedy,
   Role,
   RunCost,
@@ -87,6 +89,12 @@ export const getElements = (runId: string) =>
 
 export const getRegister = (runId: string) =>
   get<{ persons: PersonRollup[]; note: string }>(`/v1/runs/${runId}/register`);
+
+export const getExposure = (runId: string) =>
+  get<ExposureSchedule>(`/v1/runs/${runId}/exposure`);
+
+export const getPrecedents = (runId: string) =>
+  get<{ precedents: PrecedentsBySubject }>(`/v1/runs/${runId}/precedents`);
 
 export const listRuns = (projectId: string) =>
   get<{ runs: RunListItem[] }>(`/v1/projects/${projectId}/runs`);
