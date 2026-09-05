@@ -12,6 +12,26 @@ RUN npm ci --omit=dev 2>/dev/null || npm install --omit=dev
 
 FROM node:20-slim AS builder
 WORKDIR /app
+
+# NEXT_PUBLIC_* variables are baked into the compiled output by `next build`,
+# never read from the running container's environment. Render (and Docker
+# generally) only injects a service's configured Environment Variables at
+# container *runtime* -- the `docker build` step that produces this image
+# never sees them unless they arrive as a declared ARG, matching the same
+# name. Without this, `next.config.mjs`'s fallback default
+# (`http://localhost:8080`) is what gets compiled in regardless of whatever
+# is set on the deployed service, and every request the browser makes
+# through the `/api/*` rewrite silently targets a port nothing is listening
+# on inside that container. Confirmed directly: a standalone build made
+# without this ARG kept proxying to localhost:8080 even when a completely
+# different NEXT_PUBLIC_API_BASE was set on the running container afterward.
+#
+# Render passes a service's Environment Variables into the build as
+# matching --build-arg values automatically for Docker runtime services, so
+# declaring the ARG here is the only piece this image needs to add.
+ARG NEXT_PUBLIC_API_BASE
+ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
+
 COPY package.json package-lock.json* ./
 RUN npm ci 2>/dev/null || npm install
 COPY . .
