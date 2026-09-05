@@ -83,8 +83,8 @@ export function RiskBoard({ runId, claims, elements, onOpenLine }: Props) {
       <header className="board-head">
         <h1 className="board-title">Risk exposure</h1>
         <p className="board-sub">
-          {schedule.assessments.length} findings, ranked. Modelled, not predicted -- see the
-          caveat on each figure before it is repeated as a number.
+          {schedule.assessments.length} findings ranked for review. Publicly sourced monetary
+          context is kept separate from cure budgets and the uncalibrated planning model.
         </p>
       </header>
 
@@ -101,12 +101,13 @@ export function RiskBoard({ runId, claims, elements, onOpenLine }: Props) {
         </div>
         <div className="board-tile">
           <span className="board-tile-value wide">
-            {formatUsd(schedule.modelled_exposure_usd.low)}–{formatUsd(schedule.modelled_exposure_usd.high)}
+            {schedule.research_summary?.ranges_found ?? 0}/{schedule.research_summary?.findings_with_research ?? 0}
           </span>
-          <span className="board-tile-label">modelled exposure</span>
+          <span className="board-tile-label">reported ranges found</span>
           <span className="board-tile-note">
-            Sum of expected values across {schedule.modelled_exposure_usd.findings} findings. Not a
-            worst case, and uncalibrated: rank by it, do not budget a reserve against it.
+            {schedule.research_summary
+              ? `${schedule.research_summary.defence_cost_only} findings have defence-cost evidence only; ${schedule.research_summary.no_public_range} have no public range.`
+              : "This run predates researched monetary context. Re-run to retrieve it."}
           </span>
         </div>
         <div className="board-tile">
@@ -154,7 +155,7 @@ function RiskRow({
   label?: string;
   onOpen: (subjectId: string) => void;
 }) {
-  const modelled = assessment.modelled_exposure;
+  const researched = assessment.researched_exposure;
   const text = (label ?? assessment.subject_id).trim();
   const short = text.length > 90 ? `${text.slice(0, 90)}…` : text;
 
@@ -170,11 +171,15 @@ function RiskRow({
         <span className="risk-row-text">{short}</span>
       </div>
       <div className="risk-row-figure">
-        {modelled && !modelled.negligible
-          ? `${formatUsd(modelled.expected_usd.low)}–${formatUsd(modelled.expected_usd.high)}`
-          : assessment.cost_to_cure
-            ? `cure ${formatUsd(assessment.cost_to_cure.low_usd)}–${formatUsd(assessment.cost_to_cure.high_usd)}`
-            : "—"}
+        {researched?.status === "range_found" && researched.damages_usd
+          ? `reported ${formatUsd(researched.damages_usd.low)}–${formatUsd(researched.damages_usd.high)}`
+          : researched?.status === "defence_cost_only" && researched.defence_cost_usd?.high != null
+            ? `defence cost up to ${formatUsd(researched.defence_cost_usd.high)}`
+            : researched?.status === "no_public_range"
+              ? "no public range"
+              : assessment.cost_to_cure
+                ? `cure ${formatUsd(assessment.cost_to_cure.low_usd)}–${formatUsd(assessment.cost_to_cure.high_usd)}`
+                : "ranked for review"}
       </div>
     </button>
   );

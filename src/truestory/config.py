@@ -176,6 +176,13 @@ class Settings(BaseSettings):
         default="/api/v1/trademarks/search", alias="USPTO_SEARCH_PATH"
     )
     uspto_timeout_seconds: int = Field(default=30, alias="USPTO_TIMEOUT_SECONDS")
+    # Optional court-data enrichment. Public CourtListener search is keyless;
+    # opinion/docket detail and RECAP document APIs require a free token.
+    courtlistener_api_token: str = Field(default="", alias="COURTLISTENER_API_TOKEN")
+    courtlistener_api_base: str = Field(
+        default="https://www.courtlistener.com/api/rest/v4",
+        alias="COURTLISTENER_API_BASE",
+    )
     # Public, keyless, and human openable. These are what a citation points at,
     # so a reviewer or an underwriter can repeat the search rather than take
     # the pipeline's word for the register's contents.

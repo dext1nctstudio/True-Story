@@ -571,11 +571,11 @@ class TrueStoryPipeline:
         because the cost of a fix is part of choosing one. Synchronous, no
         model call and no spend.
 
-        It produces no damages estimate and no exposure total. What it produces
-        is an ordinal band a queue can be sorted by, the published provisions
-        that bear on each finding, whether the forum shifts fees, and an order
-        of magnitude cost of curing it. See agents/exposure.py for why the
-        obvious dollar figure is the one thing it refuses to compute.
+        The base schedule produces an ordinal band, published provisions,
+        forum context and an order-of-magnitude cure cost. A bounded research
+        pass then asks whether public secondary sources disclose outcome or
+        defence-cost ranges for each distinct claim shape. It records silence
+        as silence and never lets those figures overwrite the planning model.
 
         The one research call in this stage is the market rate for the elements
         a production actually buys. Those figures were a hand written table and
@@ -596,6 +596,7 @@ class TrueStoryPipeline:
             return
 
         await self._research_cure_rates(state)
+        await self._research_damages_ranges(state)
 
         cure = state.exposure.get("cost_to_cure_usd", {})
         log.info(
@@ -611,6 +612,12 @@ class TrueStoryPipeline:
     #: cues does not need forty separate answers to "what does a cue cost",
     #: and the schedule is a budgeting aid rather than a deliverable.
     _MAX_CURE_LOOKUPS = 8
+
+    #: Settlement terms are commonly confidential and broad research calls are
+    #: not improved by repeating them for every line with the same legal shape.
+    #: Four distinct shapes is enough to calibrate a review board without
+    #: quietly turning exposure context into the run's largest spend category.
+    _MAX_DAMAGES_LOOKUPS = 4
 
     async def _research_cure_rates(self, state: RunState) -> None:
         """Replace hand written licence ranges with researched ones.
@@ -690,6 +697,90 @@ class TrueStoryPipeline:
         total["low"] = sum(int(c.get("low_usd", 0)) for c in priced)
         total["high"] = sum(int(c.get("high_usd", 0)) for c in priced)
         total["researched_findings"] = sum(1 for c in priced if c.get("researched"))
+
+    async def _research_damages_ranges(self, state: RunState) -> None:
+        """Attach sourced monetary context to non-routine factual claims.
+
+        Calls are deduplicated by legal/factual shape, not by script wording.
+        A result is context for a human reviewer; it does not change a verdict,
+        band, remedy, or the uncalibrated model. Positive routine statements and
+        protected opinion do not spend a lookup.
+        """
+        from truestory.agents.exposure import normalise_researched_exposure
+
+        assessments = {
+            a.get("subject_id"): a
+            for a in state.exposure.get("assessments", [])
+            if isinstance(a, dict)
+        }
+        by_shape: dict[tuple[str, str, str, str], list[tuple[FactualClaim, dict[str, Any]]]] = {}
+        for claim in state.claims:
+            assessment = assessments.get(claim.claim_id)
+            if not assessment or assessment.get("band") == "routine" or claim.is_opinion:
+                continue
+            if str(claim.polarity) != "negative" and not claim.needs_counsel and str(claim.verdict) != "CONTRADICTED":
+                continue
+            shape = (
+                str(claim.claim_type),
+                str(claim.verdict or "unadjudicated"),
+                "living" if claim.subject_alive is True else "deceased" if claim.subject_alive is False else "life_status_unknown",
+                str(claim.subject_public_figure_status),
+            )
+            by_shape.setdefault(shape, []).append((claim, assessment))
+
+        attempted = 0
+        failures = 0
+        for shape, entries in list(by_shape.items())[: self._MAX_DAMAGES_LOOKUPS]:
+            claim_type, verdict, life_status, public_status = shape
+            descriptor = (
+                "defamation or false-light exposure from a "
+                f"{claim_type.lower().replace('_', ' ')} assertion about a {life_status} "
+                f"person ({public_status.lower().replace('_', ' ')}); verification result {verdict.lower()}"
+            )
+            attempted += 1
+            try:
+                payload = await self.tools.research_damages_range(
+                    subject_id=f"damages_shape_{attempted}",
+                    claim_type=descriptor,
+                    jurisdiction=", ".join(self.jurisdictions) or "United States",
+                )
+                researched = normalise_researched_exposure(payload)
+            except Exception as exc:
+                failures += 1
+                log.warning("damages range lookup failed for %s: %s", descriptor, exc)
+                continue
+
+            # One market question, attached to every script claim of that
+            # shape. This is not evidence that any claimant in this production
+            # will receive that amount.
+            for _, assessment in entries:
+                assessment["researched_exposure"] = dict(researched)
+
+        records = [
+            a.get("researched_exposure")
+            for a in assessments.values()
+            if isinstance(a.get("researched_exposure"), dict)
+        ]
+        state.exposure["research_summary"] = {
+            "shapes_available": len(by_shape),
+            "shapes_researched": attempted - failures,
+            "lookup_failures": failures,
+            "findings_with_research": len(records),
+            "ranges_found": sum(1 for r in records if r.get("status") == "range_found"),
+            "defence_cost_only": sum(1 for r in records if r.get("status") == "defence_cost_only"),
+            "no_public_range": sum(1 for r in records if r.get("status") == "no_public_range"),
+            "basis": (
+                "Counts distinct researched records attached to findings. Amounts are not summed "
+                "because claims may overlap and public settlements are commonly confidential."
+            ),
+        }
+        log.info(
+            "damages research: %d shapes checked, %d ranges, %d defence-cost-only, %d failures",
+            attempted,
+            state.exposure["research_summary"]["ranges_found"],
+            state.exposure["research_summary"]["defence_cost_only"],
+            failures,
+        )
 
     # ── stage 7 ──────────────────────────────────────────────────────────────
     async def _stage_remedy(self, state: RunState) -> None:

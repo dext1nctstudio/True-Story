@@ -28,10 +28,10 @@ and one ordering that is honest about being ordinal.
                 about somebody else's behaviour. The one estimate here, and it
                 is labelled as one everywhere it renders.
 
-Deterministic throughout. No model call, no research call, no spend. Every
-threshold and every figure lives in `policy/exposure.yaml` where a clearance
-attorney can read it and argue with it, which is the same choice rubric.yaml
-already makes for the adjudicator's post checks.
+The base schedule is deterministic. A later pipeline step may attach separately
+labelled research about reported claimant payments or defence cost. That
+research never overwrites the planning model and an empty public record is
+preserved as ``no public range found``, never converted to zero.
 
 Nothing downstream reads an assessment as a signal. It does not move a status,
 it does not change a tier, and it does not feed the remedy loop. It is the
@@ -87,11 +87,14 @@ class Exposure:
             "cost_to_cure": self.cure,
             "venue": self.venue,
             "modelled_exposure": self.modelled.to_dict() if self.modelled else None,
+            # Added later by the research step. Keeping the key present makes
+            # old and new runs straightforward for API clients to distinguish.
+            "researched_exposure": None,
             "disclaimer": (
-                "Severity is ordinal, not monetary. Statutory figures are quoted "
-                "from the provisions named and are not a prediction of what any "
-                "claim is worth. Cost to cure is an order of magnitude estimate. "
-                "None of this is legal advice."
+                "Severity is ordinal, not monetary. Researched figures "
+                "describe only the public sources cited; missing ranges are not "
+                "zero. The planning model is uncalibrated and is not a reserve or "
+                "prediction. None of this is legal advice."
             ),
         }
 
@@ -558,6 +561,131 @@ RESEARCHABLE_CURES: frozenset[str] = frozenset(
         "SOURCE_MATERIAL",
     }
 )
+
+
+_DAMAGES_SOURCE_KINDS: frozenset[str] = frozenset(
+    {
+        "insurance_industry_study",
+        "legal_commentary",
+        "reported_verdicts",
+        "practitioner_guidance",
+        "single_notable_case",
+        "none",
+    }
+)
+
+
+def normalise_researched_exposure(payload: dict[str, Any]) -> dict[str, Any]:
+    """Turn a damages research evidence envelope into a safe UI record.
+
+    This is intentionally not a merge with :class:`ModelledExposure`. The two
+    answer different questions: the model ranks findings using declared priors;
+    this record reports what public secondary sources actually disclosed.
+
+    A claimant-payment range needs both bounds. Defence cost may legitimately
+    have only one bound (the first live result says a suit can reach $250,000
+    before trial), so each bound remains nullable. Malformed or inverted money
+    values are discarded rather than repaired.
+    """
+    if not isinstance(payload, dict):
+        return {
+            "status": "unusable",
+            "range_found": False,
+            "damages_usd": None,
+            "defence_cost_usd": None,
+            "basis": "The research response could not be read.",
+            "sources": [],
+        }
+
+    finding = payload.get("finding")
+    if not isinstance(finding, dict):
+        finding = {}
+
+    low = _non_negative_number(finding.get("low_usd"))
+    high = _non_negative_number(finding.get("high_usd"))
+    complete_range = low is not None and high is not None and high >= low
+    range_found = bool(finding.get("range_found")) and complete_range
+
+    typical = _non_negative_number(finding.get("typical_usd"))
+    damages = (
+        {"low": low, "high": high, "typical": typical}
+        if range_found
+        else None
+    )
+
+    defence = None
+    raw_defence = finding.get("defence_cost_usd")
+    if isinstance(raw_defence, dict):
+        defence_low = _non_negative_number(raw_defence.get("low"))
+        defence_high = _non_negative_number(raw_defence.get("high"))
+        if (defence_low is not None or defence_high is not None) and (
+            defence_low is None or defence_high is None or defence_high >= defence_low
+        ):
+            defence = {"low": defence_low, "high": defence_high}
+
+    sources: list[dict[str, Any]] = []
+    seen_urls: set[str] = set()
+    for raw in [*(finding.get("sources") or []), *(payload.get("citations") or [])]:
+        if not isinstance(raw, dict):
+            continue
+        url = str(raw.get("url") or "").strip()
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        sources.append(
+            {
+                "url": url,
+                "title": str(raw.get("title") or url)[:300],
+                "excerpt": str(raw.get("excerpt") or raw.get("quote") or "")[:1200],
+                "source_type": str(raw.get("source_type") or "secondary"),
+            }
+        )
+        if len(sources) == 5:
+            break
+
+    source_kind = str(finding.get("source_kind") or "none")
+    if source_kind not in _DAMAGES_SOURCE_KINDS:
+        source_kind = "none"
+
+    if range_found:
+        status = "range_found"
+    elif defence is not None:
+        status = "defence_cost_only"
+    elif finding:
+        status = "no_public_range"
+    else:
+        status = "unusable"
+
+    basis = str(finding.get("basis") or "").strip()
+    if bool(finding.get("range_found")) and not complete_range:
+        basis = (
+            f"{basis} " if basis else ""
+        ) + "The returned claimant-payment range was incomplete or malformed and was not used."
+
+    return {
+        "status": status,
+        "range_found": range_found,
+        "outcome": finding.get("outcome") if range_found else None,
+        "damages_usd": damages,
+        "defence_cost_usd": defence,
+        "source_kind": source_kind,
+        "basis": basis[:1200],
+        "confidence_note": str(finding.get("confidence_note") or "")[:600],
+        "outlier_warning": str(finding.get("outlier_warning") or "")[:600],
+        "sources": sources,
+        "provider": str(payload.get("provider") or ""),
+        "schema_version": str(payload.get("schema_version") or ""),
+        "retrieved_at": payload.get("retrieved_at"),
+        "confidence": payload.get("effective_confidence", payload.get("confidence")),
+        "researched": True,
+    }
+
+
+def _non_negative_number(value: Any) -> float | int | None:
+    # bool is an int subclass and must not become a dollar value.
+    if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
+        return None
+    return value
 
 
 def merge_researched_rate(cure: dict[str, Any], finding: dict[str, Any]) -> dict[str, Any]:

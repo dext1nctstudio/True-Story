@@ -396,7 +396,12 @@ async def _execute_run(
     # every read 404'd, so a run that was busy working looked like a run that
     # had never been started. The placeholder is replaced by the real state
     # the moment ingest produces one.
-    _RUNS[run_id] = RunState(run_id=run_id, project_id=config.project_id)
+    initial = RunState(run_id=run_id, project_id=config.project_id)
+    _RUNS[run_id] = initial
+    try:
+        get_store().create_run(config.project_id, run_id, initial.to_dict())
+    except Exception:
+        log.warning("could not persist queued run %s", run_id, exc_info=True)
 
     async def on_progress(payload: dict[str, Any]) -> None:
         if queue is not None:
@@ -419,10 +424,17 @@ async def _execute_run(
             on_state=on_state,
         )
         _RUNS[run_id] = state
-        get_store().create_run(config.project_id, run_id, state.to_dict())
+        get_store().update_run(config.project_id, run_id, state.to_dict())
         _persist_artifacts(config.project_id, run_id, state)
     except Exception as exc:
         log.exception("run %s failed", run_id)
+        failed = _RUNS.get(run_id) or initial
+        failed.status = RunStatus.FAILED
+        failed.error = str(exc)
+        try:
+            get_store().update_run(config.project_id, run_id, failed.to_dict())
+        except Exception:
+            log.warning("could not persist failed run %s", run_id, exc_info=True)
         if queue is not None:
             await queue.put({"event": "run_failed", "error": str(exc)})
     finally:
@@ -482,7 +494,27 @@ def _persist_artifacts(project_id: str, run_id: str, state: RunState) -> None:
         if overlay:
             store.put_subject(project_id, run_id, "artifacts", "overlay", overlay)
 
-        # The rollup fields (by_band, cost_to_cure_usd, modelled_exposure_usd)
+        claim_register = state.artifacts.get("report", {}).get("claim_register")
+        if claim_register:
+            store.put_subject(
+                project_id, run_id, "artifacts", "claim_register", claim_register
+            )
+
+        eo_report = state.artifacts.get("report", {}).get("eo_report")
+        if eo_report:
+            store.put_subject(project_id, run_id, "artifacts", "eo_report", eo_report)
+
+        clearance_log = state.artifacts.get("report", {}).get("clearance_log_csv")
+        if clearance_log:
+            store.put_subject(
+                project_id,
+                run_id,
+                "artifacts",
+                "clearance_log_csv",
+                {"artifact_kind": "clearance_log_csv", "content": clearance_log},
+            )
+
+        # The rollup fields (by_band, costs and research summary)
         # live only on the aggregate, not on any one assessment, so they are
         # stored once here rather than reconstructed by summing persisted
         # per finding records back up on every read.
@@ -505,12 +537,9 @@ async def get_run(run_id: str, principal: Principal = Depends(current_principal)
         _require_project(principal, state.project_id)
         return apply_view(state.to_dict(), principal)
 
-    # Not in this process. It may still be a completed run from before the
-    # last restart, so fall back to the store rather than reporting a run
-    # that plainly exists as missing. The stored record carries the script,
-    # the summary and the counts; the claims and the overlay are not
-    # persisted, so a restored run opens as a summary rather than as the
-    # annotated script.
+    # Not in this process. It may still be a run from before the last restart,
+    # so fall back to the store rather than reporting a run that plainly
+    # exists as missing. Detailed artifacts are restored by their endpoints.
     stored = _stored_run(run_id, principal)
     if stored is None:
         raise HTTPException(status_code=404, detail="run not found")
@@ -644,6 +673,12 @@ async def get_remedies(
     `apply_remedy` was the only remedy endpoint, so the frontend had a claim's
     `remedy_id` and no way to fetch what that id actually proposed.
     """
+    if run_id not in _RUNS:
+        stored = _stored_subjects(run_id, principal, "remedies")
+        if stored is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        return apply_view({"remedies": stored, "total": len(stored)}, principal)
+
     state = _state_or_404(run_id, principal)
     remedies = [r.to_dict() for r in state.remedies]
     return apply_view({"remedies": remedies, "total": len(remedies)}, principal)
@@ -653,6 +688,12 @@ async def get_remedies(
 async def get_elements(
     run_id: str, principal: Principal = Depends(current_principal)
 ) -> dict[str, Any]:
+    if run_id not in _RUNS:
+        stored = _stored_subjects(run_id, principal, "elements")
+        if stored is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        return apply_view({"elements": stored, "total": len(stored)}, principal)
+
     state = _state_or_404(run_id, principal)
     elements = [
         e.to_dict(
@@ -733,6 +774,13 @@ async def get_claim_register(
     """
     if not can(principal, "review_queue"):
         raise HTTPException(status_code=403, detail="role may not view the person register")
+    if run_id not in _RUNS:
+        artifacts = _stored_subjects(run_id, principal, "artifacts")
+        if artifacts is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        register = next((r for r in artifacts if "persons" in r), {})
+        return apply_view(register, principal)
+
     state = _state_or_404(run_id, principal)
     return apply_view(state.artifacts.get("report", {}).get("claim_register", {}), principal)
 
@@ -871,9 +919,17 @@ async def estimate(body: EstimateRequest) -> dict[str, Any]:
 async def get_eo_report(
     run_id: str, principal: Principal = Depends(current_principal)
 ) -> dict[str, Any]:
-    state = _state_or_404(run_id, principal)
     if not can(principal, "reports"):
         raise HTTPException(status_code=403, detail="role may not view reports")
+
+    if run_id not in _RUNS:
+        artifacts = _stored_subjects(run_id, principal, "artifacts")
+        if artifacts is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        report = next((r for r in artifacts if "title_page" in r), {})
+        return apply_view(report, principal)
+
+    state = _state_or_404(run_id, principal)
     return apply_view(state.artifacts.get("report", {}).get("eo_report", {}), principal)
 
 
@@ -882,10 +938,21 @@ async def get_clearance_log(
     run_id: str, principal: Principal = Depends(current_principal)
 ) -> Response:
     """The insurer checklist. Every visible piece of IP and its status."""
-    state = _state_or_404(run_id, principal)
     if not can(principal, "reports"):
         raise HTTPException(status_code=403, detail="role may not view reports")
-    csv_text = state.artifacts.get("report", {}).get("clearance_log_csv", "")
+
+    if run_id not in _RUNS:
+        artifacts = _stored_subjects(run_id, principal, "artifacts")
+        if artifacts is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        record = next(
+            (r for r in artifacts if r.get("artifact_kind") == "clearance_log_csv"),
+            {},
+        )
+        csv_text = str(record.get("content") or "")
+    else:
+        state = _state_or_404(run_id, principal)
+        csv_text = state.artifacts.get("report", {}).get("clearance_log_csv", "")
     return Response(
         content=csv_text,
         media_type="text/csv",
@@ -897,14 +964,22 @@ async def get_clearance_log(
 async def get_report_pdf(
     run_id: str, principal: Principal = Depends(current_principal)
 ) -> Response:
-    state = _state_or_404(run_id, principal)
     if not can(principal, "reports"):
         raise HTTPException(status_code=403, detail="role may not view reports")
+
+    if run_id not in _RUNS:
+        artifacts = _stored_subjects(run_id, principal, "artifacts")
+        if artifacts is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        report = next((r for r in artifacts if "title_page" in r), {})
+    else:
+        state = _state_or_404(run_id, principal)
+        report = state.artifacts.get("report", {}).get("eo_report", {})
 
     from truestory.reports.eo_report import render_pdf
 
     pdf = render_pdf(
-        state.artifacts.get("report", {}).get("eo_report", {}),
+        report,
         watermark="UNDERWRITER COPY" if principal.role is Role.UNDERWRITER else None,
     )
     return Response(

@@ -104,8 +104,7 @@ export const getRun = (runId: string) =>
     run_id: string;
     status: string;
     summary: RunSummary | null;
-    /** Rebuilt from the store rather than held in the API process. Only the
-     *  run record persists, so the overlay and claims are unavailable. */
+    /** Rebuilt from durable storage rather than held in the API process. */
     restored?: boolean;
   }>(`/v1/runs/${runId}`);
 

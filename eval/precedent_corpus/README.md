@@ -1,65 +1,56 @@
-# Precedent corpus: real docket data
+# Precedent data
 
-`dataset.json` is 210 real, deduplicated federal court dockets, fetched live
-from [CourtListener](https://www.courtlistener.com)'s public search API —
-public record, not synthetic, not scraped from summaries. Regenerate with:
+This directory contains two different datasets. They must not be presented as
+if they prove the same thing.
 
+## Runtime precedent records
+
+`verified_cases.yaml` is the reviewed corpus used by the product. Every record
+has an actual case name, court, docket number, citation where available,
+procedural posture, decision-level outcome, source link, pin cite, and short
+judicial passage. `src/truestory/agents/precedent.py` combines factual/legal
+shape with conservative keyword overlap against each record's issues, holding,
+and sourced passage.
+
+Refresh the CourtListener metadata and re-check passages with:
+
+```powershell
+python eval/precedent_corpus/sync_courtlistener.py
 ```
-python eval/precedent_corpus/fetch_courtlistener.py
-```
 
-It found `Fiona Harvey v. Netflix, Inc.` — the actual Baby Reindeer
-lawsuit — on the first query, filed 2024-06-06. That's a genuine confirmation
-the search terms surface the right shape of case, not noise.
+The command writes `courtlistener_records.json`, including whether each exact
+record was located and whether its passage was found in court text during that
+run. Public search works keylessly but is rate-limited. Set a free
+`COURTLISTENER_API_TOKEN` to enable opinion detail, docket entries, and RECAP
+document retrieval. A search hit alone never changes a record to verified.
 
-## What this data can support
+The application performs retrieval over this local reviewed index rather than
+making a CourtListener call in every user run. This gives reproducible reports,
+avoids leaking screenplay content to a court-data provider, and prevents API
+outages or changing search ranks from silently changing a clearance report.
 
-**That suits of this shape get filed, in real volume, in the venues you'd
-expect.** 210 dockets, dominated by C.D. Cal. (39) and S.D.N.Y. (28) — exactly
-where entertainment litigation concentrates. This is a sanity check that the
-exposure model's base rates aren't absurd on their face, nothing more.
+## Broad docket research dataset
 
-**How long a filed claim actually takes.** Median 400 days from filing to
-termination, across 132 dockets old enough to classify. That's a real,
-citable number nothing in `policy/exposure.yaml` currently uses, because the
-exposure model has no time dimension yet.
+`dataset.json` is a separate set of 210 deduplicated federal dockets fetched by
+`fetch_courtlistener.py`. It is useful for studying filing volume, venue, and
+time to termination. It is not used as runtime precedent because keyword search
+results have not been reviewed judgment by judgment.
 
-## What it cannot support, and why
+It cannot establish settlement amounts or calibrate absolute loss estimates.
+“Terminated” can mean settlement, merits dismissal, jurisdictional dismissal,
+transfer, or abandonment. Those distinctions require docket-entry and document
+review; settlement figures are often confidential even then.
 
-**It cannot calibrate the dollar ranges in `policy/exposure.yaml`.**
-CourtListener's docket detail — the field that would say what a case actually
-settled for — sits behind a free API token, and even with one, settlement
-amounts are very often sealed by the parties regardless. This is the same
-wall the exposure model's own header names. Nothing changes that by scraping
-harder.
+## Verification rule
 
-**It cannot calibrate `outcome_weights` (dismissed / settled / adverse
-judgment).** The 97% "resolution rate" in the summary is a real number and a
-misleading one to use directly: "terminated" in a docket covers a voluntary
-dismissal after settlement, a jurisdictional dismissal, a transfer to state
-court, and a case simply abandoned — all indistinguishably. Telling those
-apart requires reading docket entries, which needs the same paid-or-tokened
-access as the dollar figures. Reporting 97% as if it means "97% of these
-claims resolve favourably for the defendant" would be a worse error than
-having no data, because it would look calibrated and isn't.
+A runtime record is verified only when all of the following exist:
 
-**It is not a random sample.** Six keyword queries against a search-ranked
-index is not a representative draw from "all clearance-shaped litigation." A
-suit that happens to match none of the six phrasings is invisible here.
+- exact court and docket identification;
+- an opinion/order source URL;
+- a short quoted judicial passage and pin cite;
+- an explicit verification method and date;
+- passage confirmation against retrieved court text or documented human review.
 
-## What `policy/exposure.yaml` does with it
-
-Nothing changes automatically. `quantitative.calibrated` stays `false`. This
-dataset is cited as an external reference in the policy file's header — real
-data that exists and is now in the repository — not folded into the model's
-numbers, because folding it in would overclaim what it supports.
-
-## The actual next step, if this is worth pursuing further
-
-A free CourtListener API token (same registration shape as the USPTO key
-already in `.env.example`) unlocks docket entries and full text. With one, a
-second pass over a sample of these 210 dockets could read the actual
-termination filings and classify real dispositions — dismissed on anti-SLAPP,
-settled, tried — which is the piece that would genuinely move
-`outcome_weights` from a reasoned prior to a measured one. Dollar amounts
-would likely still be mostly redacted; disposition category would not be.
+Verification means the metadata and quoted passage were checked. It does not
+mean TRUE STORY predicts how a new dispute would be decided, and precedent
+matches never change a finding's clearance status.

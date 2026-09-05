@@ -1,0 +1,276 @@
+version: 1
+updated_at: "2026-09-05"
+description: >
+  Reviewed precedent records for runtime retrieval. A record is verified only
+  when its short passage has been checked against the linked court document.
+  Outcomes describe the cited decision, not the ultimate value of a claim.
+
+matching:
+  weights:
+    element_type: 4
+    claim_type: 2
+    polarity: 2
+    subject_alive: 2
+    named: 2
+    kind: 1
+    truth_claim_framing: 1
+    semantic_overlap: 2
+  min_score: 4
+  max_matches_per_finding: 3
+  both_sides_always: true
+
+cases:
+  - id: LS-001
+    name: "Gaprindashvili v. Netflix, Inc."
+    side: plaintiff
+    court: "U.S. District Court for the Central District of California"
+    docket_number: "2:21-cv-07408-VAP-SK"
+    citation: "2022 WL 363537"
+    decision_date: "2022-01-27"
+    procedural_posture: "Order denying Netflix's Rule 12(b)(6) motion and anti-SLAPP motion."
+    outcome: "Netflix's motion to dismiss and anti-SLAPP motion were denied."
+    holding: >
+      A fictional series was not categorically insulated from a defamation
+      claim about a real person, and the pleaded record supported proceeding.
+    lesson: >
+      A single named, time-bounded historical assertion can justify escalation
+      when readily available records say the opposite.
+    issues:
+      - "historical achievement"
+      - "never faced male chess players"
+      - "real person named in fictional series"
+      - "source material contradicted screenplay"
+    shape:
+      kind: claim
+      element_type: REAL_PERSON_DEPICTED
+      claim_type: ACHIEVEMENT
+      polarity: negative
+      subject_alive: true
+      named: true
+      project_truth_claim_framing: false
+    courtlistener:
+      docket_id: 60389470
+      search_case_name: "Gaprindashvili"
+      search_query: "Netflix"
+    source:
+      type: court_order
+      url: "https://www.rufuslaw.com/wp-content/uploads/2021/12/37.-Order-Denying-SLAPP-and-12b6-motions.pdf"
+      courtlistener_docket_url: "https://www.courtlistener.com/docket/60389470/nona-gaprindashvili-v-netflix-inc/"
+      document_number: "37"
+      pin_cite: "pp. 24-25"
+      quoted_passage: "Netflix’s own evidence demonstrates knowledge of the truth in its choice to deviate from the text of the Novel."
+      retrieved_at: "2026-09-05"
+    verification:
+      status: verified
+      method: passage_in_court_pdf
+      verified_at: "2026-09-05"
+
+  - id: LS-003
+    name: "Fairstein v. Netflix, Inc."
+    side: plaintiff
+    court: "U.S. District Court for the Southern District of New York"
+    docket_number: "1:20-cv-08042-PKC"
+    citation: "2023 WL 6164291"
+    decision_date: "2023-09-19"
+    procedural_posture: "Opinion and order denying defendants' motion for summary judgment."
+    outcome: "Defendants' summary-judgment motion was denied; plaintiff's sanctions and strike motions were also denied."
+    holding: >
+      A jury could find several scenes conveyed defamatory facts and could
+      consider conflicts between the dramatization and production sources.
+    lesson: >
+      The record must be examined scene by scene: documented chronology,
+      attributed conduct, knowledge, intent, and motive carry different burdens.
+    issues:
+      - "withholding DNA evidence"
+      - "coercing confessions"
+      - "attributed prosecutorial conduct"
+      - "source material conflicts"
+      - "intentional misconduct"
+    shape:
+      kind: person_rollup
+      element_type: REAL_PERSON_DEPICTED
+      polarity: negative
+      subject_alive: true
+      named: true
+      project_truth_claim_framing: true
+    courtlistener:
+      docket_id: 18485000
+      search_case_name: "Fairstein"
+      search_query: "Netflix"
+    source:
+      type: court_opinion_and_order
+      url: "https://law.justia.com/cases/federal/district-courts/new-york/nysdce/1%3A2020cv08042/545262/216/"
+      document_url: "https://www.sdnyblog.com/files/2023/09/12-Civ.-08042-2023.09.19-Opinion-Denying-SJ-Fairstein-v.-Netflix.pdf"
+      courtlistener_docket_url: "https://www.courtlistener.com/docket/18485000/fairstein-v-netflix-inc/"
+      document_number: "216"
+      pin_cite: "p. 34"
+      quoted_passage: "Reasonably understood as defamatory. It shows Fairstein working to manipulate a timeline to cover a 45-minute time gap."
+      retrieved_at: "2026-09-05"
+    verification:
+      status: verified
+      method: passage_in_court_document
+      verified_at: "2026-09-05"
+
+  - id: LS-101
+    name: "Louis Vuitton Malletier S.A. v. Warner Bros. Entertainment Inc."
+    side: defence
+    court: "U.S. District Court for the Southern District of New York"
+    docket_number: "1:11-cv-09436-ALC-HBP"
+    citation: "868 F. Supp. 2d 172"
+    decision_date: "2012-06-15"
+    procedural_posture: "Opinion and order granting Warner Bros.' motion to dismiss."
+    outcome: "The Lanham Act, dilution, and unfair-competition claims were dismissed."
+    holding: >
+      The bag's use in The Hangover Part II had artistic relevance and was not
+      explicitly misleading, so the expressive use was protected under Rogers.
+    lesson: >
+      A real mark in a film is not automatically a block; artistic relevance
+      and explicit misleadingness must be surfaced for counsel.
+    issues:
+      - "trademark in expressive work"
+      - "fictional character identifies luxury bag"
+      - "artistic relevance"
+      - "explicitly misleading"
+    shape:
+      kind: element
+      element_type: TRADEMARK_LOGO
+    courtlistener:
+      opinion_cluster_id: 8716177
+      search_case_name: "Louis Vuitton Mallatier"
+      search_query: "Warner Bros"
+    source:
+      type: published_opinion
+      url: "https://www.courtlistener.com/opinion/8716177/louis-vuitton-mallatier-sa-v-warner-bros-entertainment-inc/"
+      document_url: "https://openjurist.org/868/fsupp2d/172/louis-vuitton-mallatier-s-a-v-warner-bros-entertainment-inc-8716177"
+      document_number: "29"
+      pin_cite: "868 F. Supp. 2d at 183"
+      quoted_passage: "Warner Bros.’ use of the Diophy bag is protected under Rogers."
+      retrieved_at: "2026-09-05"
+    verification:
+      status: verified
+      method: passage_in_published_opinion
+      verified_at: "2026-09-05"
+
+  - id: LS-103
+    name: "De Havilland v. FX Networks, LLC"
+    side: defence
+    court: "California Court of Appeal, Second Appellate District"
+    docket_number: "B285629"
+    citation: "21 Cal. App. 5th 845"
+    decision_date: "2018-03-26"
+    procedural_posture: "Opinion reversing denial of defendants' anti-SLAPP motion."
+    outcome: "The appellate court directed the trial court to grant the anti-SLAPP motion and strike the complaint."
+    holding: >
+      Feud was protected expressive speech; realistic portrayal and invented
+      dialogue did not by themselves remove First Amendment protection.
+    lesson: >
+      A departure from the historical record should be flagged, but that flag
+      is not a legal conclusion that the portrayal is actionable.
+    issues:
+      - "invented dialogue"
+      - "fictitious interview"
+      - "real public figure in docudrama"
+      - "transformative use"
+      - "anti-SLAPP"
+    shape:
+      kind: person_rollup
+      element_type: REAL_PERSON_DEPICTED
+      polarity: negative
+      subject_alive: true
+      named: true
+    courtlistener:
+      opinion_cluster_id: 6239501
+      search_case_name: "De Havilland"
+      search_query: "FX Networks"
+    source:
+      type: published_opinion
+      url: "https://www.courtlistener.com/opinion/6239501/de-havilland-v-fx-networks-llc/"
+      document_url: "https://law.justia.com/cases/california/court-of-appeal/2018/b285629.html"
+      pin_cite: "21 Cal. App. 5th at 860"
+      quoted_passage: "The First Amendment protects these expressive works and the free speech rights of their creators."
+      retrieved_at: "2026-09-05"
+    verification:
+      status: verified
+      method: passage_in_published_opinion
+      verified_at: "2026-09-05"
+
+  - id: LS-104
+    name: "Sarver v. Chartier"
+    side: defence
+    court: "U.S. Court of Appeals for the Ninth Circuit"
+    docket_number: "11-56986, 12-55429"
+    citation: "813 F.3d 891"
+    decision_date: "2016-02-17"
+    procedural_posture: "Published opinion affirming dismissal under California's anti-SLAPP statute."
+    outcome: "Dismissal of the claims concerning The Hurt Locker was affirmed."
+    holding: >
+      The film addressed a matter of public concern and was protected
+      expressive speech; Sarver also failed to establish his defamation claim.
+    lesson: >
+      Identifiability and fictionalization are inputs to review, not automatic
+      liability; the forum and protected-speech analysis can be dispositive.
+    issues:
+      - "real person's professional identity"
+      - "fictionalized film character"
+      - "matter of public concern"
+      - "right of publicity"
+      - "defamation"
+    shape:
+      kind: element
+      element_type: REAL_PERSON_IDENTIFIABLE
+      named: false
+    courtlistener:
+      opinion_cluster_id: 3177903
+      search_case_name: "Sarver"
+      search_query: "Chartier"
+    source:
+      type: published_opinion
+      url: "https://www.courtlistener.com/opinion/3177903/sgt-jeffrey-sarver-v-nicolas-chartier/"
+      document_url: "https://cdn.ca9.uscourts.gov/datastore/opinions/2016/02/17/11-56986.pdf"
+      pin_cite: "813 F.3d at 905"
+      quoted_passage: "The Hurt Locker is speech that is fully protected by the First Amendment."
+      retrieved_at: "2026-09-05"
+    verification:
+      status: verified
+      method: passage_in_official_court_pdf
+      verified_at: "2026-09-05"
+
+  - id: LS-202
+    name: "Ringgold v. Black Entertainment Television, Inc."
+    side: plaintiff
+    court: "U.S. Court of Appeals for the Second Circuit"
+    docket_number: "96-9329"
+    citation: "126 F.3d 70"
+    decision_date: "1997-09-16"
+    procedural_posture: "Published opinion reversing summary judgment for the television defendants."
+    outcome: "Summary judgment was reversed and the copyright claim remanded."
+    holding: >
+      Repeated, observable display of copyrighted artwork as set decoration
+      crossed the de minimis threshold; fair use required further proceedings.
+    lesson: >
+      Brief background visibility does not itself clear artwork. Duration,
+      focus, prominence, purpose, and licensing markets must be reviewed.
+    issues:
+      - "copyrighted artwork as set decoration"
+      - "background poster"
+      - "brief screen visibility"
+      - "de minimis copying"
+      - "fair use"
+    shape:
+      kind: element
+      element_type: ARTWORK_VISUAL
+    courtlistener:
+      opinion_cluster_id: 746829
+      search_case_name: "Ringgold"
+      search_query: "Black Entertainment"
+    source:
+      type: published_opinion
+      url: "https://www.courtlistener.com/opinion/746829/faith-ringgold-v-black-entertainment-television-inc-home-box-office/"
+      document_url: "https://law.justia.com/cases/federal/appellate-courts/F3/126/70/497885/"
+      pin_cite: "126 F.3d at 77"
+      quoted_passage: "The de minimis threshold for actionable copying of protected expression has been crossed."
+      retrieved_at: "2026-09-05"
+    verification:
+      status: verified
+      method: passage_in_published_opinion
+      verified_at: "2026-09-05"

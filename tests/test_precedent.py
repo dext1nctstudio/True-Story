@@ -1,4 +1,4 @@
-"""Precedent retrieval over the litigation set.
+"""Precedent retrieval over reviewed court-source records.
 
 Two failure modes are worse here than returning nothing.
 
@@ -68,8 +68,10 @@ def _claim(
 
 # ── the corpus loads ────────────────────────────────────────────────────────
 def test_every_case_in_the_corpus_becomes_a_matchable_shape(index: PrecedentIndex) -> None:
-    assert len(index.shapes) == 10
-    assert {s.case_id for s in index.shapes} >= {"LS-001", "LS-002", "LS-003", "LS-004"}
+    assert len(index.shapes) == 6
+    assert {s.case_id for s in index.shapes} == {
+        "LS-001", "LS-003", "LS-101", "LS-103", "LS-104", "LS-202"
+    }
 
 
 def test_the_side_of_each_case_is_read_from_the_corpus(index: PrecedentIndex) -> None:
@@ -121,12 +123,9 @@ def test_a_person_with_no_negative_claims_is_not_the_density_shape(index: Preced
 @pytest.mark.parametrize(
     ("element_type", "expected_case"),
     [
-        (ElementType.TATTOO, "LS-201"),
         (ElementType.ARTWORK_VISUAL, "LS-202"),
-        (ElementType.MUSIC_CUE, "LS-004"),
         (ElementType.TRADEMARK_LOGO, "LS-101"),
-        (ElementType.PERSON_NAME_FICTIONAL, "LS-102"),
-        (ElementType.REAL_PERSON_IDENTIFIABLE, "LS-002"),
+        (ElementType.REAL_PERSON_IDENTIFIABLE, "LS-104"),
     ],
 )
 def test_each_element_type_retrieves_its_own_case(
@@ -139,16 +138,16 @@ def test_each_element_type_retrieves_its_own_case(
 def test_a_music_cue_does_not_retrieve_person_cases(index: PrecedentIndex) -> None:
     """`named` is meaningless for a song, and asking anyway pulled in people."""
     matches = index.for_element(_element(ElementType.MUSIC_CUE))
-    assert {m.case_id for m in matches} == {"LS-004"}
+    assert matches == []
 
 
 def test_truth_claim_framing_strengthens_the_identifiability_match(
     index: PrecedentIndex,
 ) -> None:
-    element = _element(ElementType.REAL_PERSON_IDENTIFIABLE)
-    without = next(m for m in index.for_element(element) if m.case_id == "LS-002")
+    element = _element(ElementType.REAL_PERSON_DEPICTED, alive=True, negative_claims=3)
+    without = next(m for m in index.for_element(element) if m.case_id == "LS-003")
     with_framing = next(
-        m for m in index.for_element(element, truth_claim_framing=True) if m.case_id == "LS-002"
+        m for m in index.for_element(element, truth_claim_framing=True) if m.case_id == "LS-003"
     )
     assert with_framing.score > without.score
 
@@ -173,15 +172,33 @@ def test_retrieval_is_capped_so_a_reviewer_reads_it(index: PrecedentIndex) -> No
     assert len(index.for_element(element)) <= index.matching["max_matches_per_finding"]
 
 
-def test_every_match_carries_the_unverified_caveat(index: PrecedentIndex) -> None:
-    """No case in the corpus is confirmed against a primary source.
-
-    An unconfirmed precedent presented as settled law is a worse failure than
-    no precedent at all, so the flag travels with the match.
-    """
+def test_every_match_carries_court_metadata_and_a_checked_passage(index: PrecedentIndex) -> None:
     for match in index.for_claim(_claim()):
-        assert match.verified is False
-        assert "not confirmed against a primary source" in match.to_dict()["caveat"]
+        row = match.to_dict()
+        assert match.verified is True
+        assert row["court"]
+        assert row["docket_number"]
+        assert row["source_url"].startswith("https://")
+        assert row["quoted_passage"]
+        assert "Source passage checked" in row["caveat"]
+
+
+def test_verified_status_requires_both_a_source_and_a_passage(tmp_path) -> None:
+    corpus = tmp_path / "bad.yaml"
+    corpus.write_text(
+        """
+cases:
+  - id: BAD-1
+    name: Looks verified but is not
+    side: plaintiff
+    verification: {status: verified}
+    source: {url: https://example.test/order}
+    shape: {kind: claim, polarity: negative, subject_alive: true, named: true}
+""",
+        encoding="utf-8",
+    )
+    loaded = PrecedentIndex.load(corpus)
+    assert loaded.shapes[0].verified is False
 
 
 def test_a_match_says_which_dimensions_agreed(index: PrecedentIndex) -> None:

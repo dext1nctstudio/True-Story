@@ -20,6 +20,7 @@ const REPO_URL = "https://github.com/dext1nctstudio/True-Story";
 const NAV = [
   { href: "#home", label: "Home" },
   { href: "#about", label: "About" },
+  { href: "#benchmarks", label: "Benchmarks" },
   { href: "#engine", label: "The Engine" },
   { href: "#contact", label: "Contact" },
 ];
@@ -62,10 +63,58 @@ const VERDICTS = [
 ];
 
 const FACTS = [
-  { n: "~$2", label: "Cost per feature", text: "A two-to-three-dollar run against a one-to-three-thousand-dollar manual report." },
-  { n: "min", label: "Turnaround", text: "Minutes, not the three to seven business days a manual clearance takes." },
-  { n: "3×", label: "Atomic claims", text: "“A twice-convicted stalker sentenced to five years” is three claims, each checked alone." },
+  { n: "$", label: "Metered research", text: "Every provider call is recorded, attributed and governed by a project budget." },
+  { n: "min", label: "Turnaround", text: "The litigation reconstructions completed in roughly five minutes each." },
+  { n: "4×", label: "Atomic claims", text: "Convicted, convicted twice, sentenced, and sentence length are checked independently." },
   { n: "∞", label: "Living clearance", text: "A report is a photograph; rights are a film. Monitors keep watching after filing." },
+];
+
+const BENCHMARKS = [
+  {
+    id: "01",
+    title: "The Queen’s Gambit",
+    subtitle: "One checkable sentence",
+    input: "Nona Gaprindashvili … “has never faced men.”",
+    outcome: "Exact proposition isolated and escalated",
+    result: "1 supported claim · 1 unsupported negative claim · counsel required",
+    detail:
+      "The live retrospective run separated the supported championship statement from the unsupported statement about male opponents. It marked the phrase NOT CLEAR and routed the real-person claim to counsel.",
+    stakes: "$5M claimed",
+    stakesNote: "Complaint demand—not a payment. The later settlement was undisclosed.",
+    sources: [
+      {
+        label: "Court order",
+        href: "https://www.rufuslaw.com/wp-content/uploads/2021/12/37.-Order-Denying-SLAPP-and-12b6-motions.pdf",
+      },
+      {
+        label: "Filed complaint",
+        href: "https://www.jurist.org/news/wp-content/uploads/sites/4/2021/09/Gaprindashvili-v-Netflix.pdf",
+      },
+    ],
+  },
+  {
+    id: "02",
+    title: "When They See Us",
+    subtitle: "Claim-by-claim conduct review",
+    input:
+      "Five assertions about Linda Fairstein: timeline, interrogations, roundup, DNA disclosure and motive.",
+    outcome: "Five separate evidentiary burdens surfaced",
+    result: "5 of 5 unsupported · 100% amber density · counsel required",
+    detail:
+      "The live retrospective run did not flatten the scene into one warning. It split attributed conduct, knowledge and motive into five claims and escalated every one for a human decision.",
+    stakes: "Settled before trial",
+    stakesNote: "$1M donation; no payment to Fairstein. This is not a damages figure.",
+    sources: [
+      {
+        label: "Court opinion",
+        href: "https://law.justia.com/cases/federal/district-courts/new-york/nysdce/1%3A2020cv08042/545262/216/",
+      },
+      {
+        label: "Reported settlement",
+        href: "https://www.marketscreener.com/quote/stock/NETFLIX-INC-44292425/news/Netflix-Central-Park-Five-prosecutor-settle-defamation-lawsuit-46902757/",
+      },
+    ],
+  },
 ];
 
 function IconSearch() {
@@ -162,13 +211,12 @@ export default function Marketing() {
           <div className="mk-hero-copy">
             <span className="mk-eyebrow">A fact &amp; rights engine</span>
             <h1>
-              Based on a true story<span className="mk-hero-accent">, without the lawsuit.</span>
+              Based on a true story<span className="mk-hero-accent">, checked before release.</span>
             </h1>
             <p className="mk-hero-sub">
-              TRUE STORY reads a screenplay, checks every factual claim about every real
-              person against the live public record, and clears every name, brand, song and
-              location that could trigger a suit, documented to the standard insurers require
-              before a film can ship.
+              TRUE STORY reads a screenplay, isolates factual claims about real people,
+              checks them against the live public record, and documents names, brands, songs
+              and locations for review by production counsel.
             </p>
             <div className="mk-hero-actions">
               <Link href="/workspace" className="mk-cta">
@@ -248,26 +296,25 @@ export default function Marketing() {
               The five most valuable words in television are also the five most dangerous.
             </h2>
             <div className="mk-pullbar">
-              <p>Clearance is mandatory. No clearance, no E&amp;O policy. No policy, no distribution.</p>
+              <p>Clearance supports E&amp;O. E&amp;O supports a clean path to distribution.</p>
             </div>
           </div>
           <div className="mk-about-body">
             <p>
-              When a production tells a story about real people, <strong>every line of dialogue
-              is a claim about someone&rsquo;s life.</strong> One wrong line has cost streamers
-              nine-figure defamation claims and settlements days before trial. Each time, the
-              problem was the same thing: a statement about a real person that nobody had checked
-              against the record.
+              When a production tells a story about real people, a single line can contain
+              several claims about someone&rsquo;s life. A false historical statement in
+              <strong> The Queen&rsquo;s Gambit</strong> led to a lawsuit seeking $5 million;
+              attributed conduct in <strong>When They See Us</strong> survived years of
+              litigation before a settlement shortly before trial.
             </p>
             <p>
-              The existing fix is a cottage industry of a few dozen expert researchers serving a
-              global content machine. A feature clearance report costs <strong>one to three
-              thousand dollars</strong> and takes <strong>three to seven business days</strong>,
-              and every revised draft or one-off name change bills again.
+              Traditional feature clearance is specialist work commonly priced from roughly
+              <strong> $1,000</strong> and delivered over several business days. New or changed
+              clearance items in later drafts can trigger additional research.
             </p>
             <p>
               TRUE STORY does the structured research and produces the document, in minutes, for
-              a couple of dollars. It decomposes and checks every claim, filters opinion out
+              a metered project budget. It decomposes and checks claims, filters opinion out
               before it costs anything, and keeps watching after the report is filed. <span className="mk-em">It automates the research and the document, never the judgement.</span>
             </p>
 
@@ -284,6 +331,70 @@ export default function Marketing() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* ── litigation benchmark ───────────────────────────────────────── */}
+      <section className="mk-section mk-benchmarks" id="benchmarks">
+        <div className="mk-benchmark-head">
+          <span className="mk-eyebrow">Retrospective validation</span>
+          <h2 className="mk-h2">Tested on the lines that became litigation.</h2>
+          <p className="mk-lede">
+            We reconstructed the challenged passages and ran them through TRUE STORY without
+            supplying the expected verdict or procedural outcome. The question was narrow:
+            would the system surface the script-level issue before release?
+          </p>
+        </div>
+
+        <div className="mk-benchmark-summary">
+          <span className="mk-benchmark-number">$5M</span>
+          <span>
+            <b>claimed damages represented in the benchmark</b>
+            <small>Demanded in The Queen&rsquo;s Gambit complaint—not paid damages or estimated savings.</small>
+          </span>
+        </div>
+
+        <div className="mk-benchmark-grid">
+          {BENCHMARKS.map((benchmark) => (
+            <article className="mk-benchmark-card" key={benchmark.id}>
+              <div className="mk-benchmark-card-head">
+                <span className="mk-benchmark-index">{benchmark.id}</span>
+                <span>
+                  <span className="mk-benchmark-kicker">{benchmark.subtitle}</span>
+                  <h3>{benchmark.title}</h3>
+                </span>
+              </div>
+
+              <blockquote>{benchmark.input}</blockquote>
+
+              <div className="mk-benchmark-result">
+                <span className="mk-benchmark-status">System result</span>
+                <strong>{benchmark.outcome}</strong>
+                <p>{benchmark.result}</p>
+              </div>
+
+              <p className="mk-benchmark-detail">{benchmark.detail}</p>
+
+              <div className="mk-benchmark-stakes">
+                <strong>{benchmark.stakes}</strong>
+                <span>{benchmark.stakesNote}</span>
+              </div>
+
+              <div className="mk-benchmark-links">
+                {benchmark.sources.map((source) => (
+                  <a key={source.href} href={source.href} target="_blank" rel="noreferrer">
+                    {source.label} ↗
+                  </a>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <p className="mk-benchmark-disclosure">
+          Retrospective reconstructions are validation tests, not contemporaneous clearance
+          reports. A flag cannot prove litigation would have been avoided or quantify savings;
+          it shows that the disputed proposition could have been found and escalated before lock.
+        </p>
       </section>
 
       {/* ── the engine ──────────────────────────────────────────────────── */}

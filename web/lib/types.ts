@@ -500,6 +500,33 @@ export interface ModelledExposure {
   caveat: string;
 }
 
+export interface ExposureResearchSource {
+  url: string;
+  title: string;
+  excerpt: string;
+  source_type: string;
+}
+
+/** Publicly reported monetary context. This never replaces modelled exposure:
+ * one is sourced historical evidence, the other is an uncalibrated ranker. */
+export interface ResearchedExposure {
+  status: "range_found" | "defence_cost_only" | "no_public_range" | "unusable";
+  range_found: boolean;
+  outcome: "settled" | "adverse_judgment" | "dismissed_early" | "mixed" | null;
+  damages_usd: { low: number; high: number; typical: number | null } | null;
+  defence_cost_usd: { low: number | null; high: number | null } | null;
+  source_kind: string;
+  basis: string;
+  confidence_note: string;
+  outlier_warning: string;
+  sources: ExposureResearchSource[];
+  provider: string;
+  schema_version: string;
+  retrieved_at: string | null;
+  confidence: number | null;
+  researched: true;
+}
+
 export type ExposureBand = "routine" | "negotiable" | "counsel_required" | "blocking";
 
 /** One finding's exposure picture, keyed by the same claim_id / element_id
@@ -515,6 +542,7 @@ export interface ExposureAssessment {
   cost_to_cure: CostToCure | null;
   venue: Venue;
   modelled_exposure: ModelledExposure | null;
+  researched_exposure?: ResearchedExposure | null;
   disclaimer: string;
 }
 
@@ -539,6 +567,16 @@ export interface ExposureSchedule {
     calibrated: boolean;
     basis?: string;
   };
+  research_summary?: {
+    shapes_available: number;
+    shapes_researched: number;
+    lookup_failures: number;
+    findings_with_research: number;
+    ranges_found: number;
+    defence_cost_only: number;
+    no_public_range: number;
+    basis: string;
+  };
   assessments: ExposureAssessment[];
 }
 
@@ -553,6 +591,18 @@ export interface PrecedentMatch {
   matched_on: string[];
   verified: boolean;
   caveat: string;
+  court: string;
+  docket_number: string;
+  citation: string;
+  decision_date: string;
+  procedural_posture: string;
+  holding: string;
+  source_url: string;
+  source_type: string;
+  document_number: string;
+  pin_cite: string;
+  quoted_passage: string;
+  retrieved_at: string;
 }
 
 /** `/v1/runs/{id}/precedents`: subject id (claim_id or element_id) to its

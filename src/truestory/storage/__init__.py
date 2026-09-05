@@ -13,6 +13,7 @@ project at all.
 from truestory.storage.bigquery import TelemetrySink, get_sink, render_query
 from truestory.storage.firestore import (
     FirestoreRunStore,
+    LocalJsonRunStore,
     MemoryRunStore,
     RunStore,
     get_store,
@@ -34,6 +35,7 @@ __all__ = [
     "FirestoreRunStore",
     "GcsBlobStore",
     "LocalBlobStore",
+    "LocalJsonRunStore",
     "MemoryRunStore",
     "RunStore",
     "TelemetrySink",

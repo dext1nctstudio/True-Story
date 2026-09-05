@@ -66,11 +66,7 @@ import type {
 
 const PROJECT_ID = "demo";
 
-/**
- * Run ids are minted per upload and the store is in memory, so there is no
- * id to bake in at build time. No `?run=` means no run is open yet, and the
- * home dashboard is what renders instead of the single track workspace view.
- */
+/** No `?run=` means no run is open; the durable docket renders instead. */
 function resolveRunId(): string | null {
   if (typeof window === "undefined") return null;
   return new URLSearchParams(window.location.search).get("run");
@@ -127,8 +123,7 @@ export default function Workspace() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [stage, setStage] = useState<string>("");
   const [runStatus, setRunStatus] = useState<string>("");
-  // Rebuilt from the store rather than held in this process. Only the run
-  // record is persisted, so the annotated script is not available.
+  // Rebuilt from durable storage rather than held in this process.
   const [restored, setRestored] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -283,10 +278,8 @@ export default function Workspace() {
     if (!runId) return;
     try {
       // The run record is the authoritative one and the only required read.
-      // Everything else is stage dependent or, for a run restored from the
-      // store after a restart, permanently absent: only the run record is
-      // persisted, so treating a missing overlay as "not ready yet" left a
-      // completed run spinning on "Parsing the screenplay" forever.
+      // Everything else is stage dependent. Restored runs read their detailed
+      // artifacts from durable storage through the same endpoints.
       const run = await getRun(runId);
       setSummary(run.summary);
       setRunStatus(run.status);
@@ -691,15 +684,11 @@ export default function Workspace() {
                 }}
               />
             ) : restored ? (
-              // Rebuilt from the store after a restart. The run record persists;
-              // the claims, elements and overlay do not, so there is no script to
-              // annotate and no amount of waiting will produce one.
               <div className="starting">
-                <p className="starting-title">Summary only</p>
+                <p className="starting-title">Archived run</p>
                 <p className="starting-sub">
-                  This run was restored from storage after a restart. Its verdicts and
-                  cost are in the header, but the annotated script is not retained
-                  between restarts.
+                  This run was restored from durable storage. Its summary is available,
+                  but it predates detailed artifact persistence.
                 </p>
               </div>
             ) : justStarted ||

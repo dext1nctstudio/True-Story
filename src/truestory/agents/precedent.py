@@ -1,55 +1,21 @@
-"""Precedent retrieval. The litigation set, read forwards.
+"""Court-sourced precedent retrieval for clearance findings.
 
-`eval/litigation_set/cases.yaml` has been a scoring harness: run the pipeline
-over a reconstruction and check whether it caught what the court eventually
-did. That is the corpus answering a retrospective question.
+The runtime index is built from ``eval/precedent_corpus/verified_cases.yaml``.
+Each record names the court and docket, links the underlying opinion or order,
+and carries a short passage from that document.  Matching is deliberately
+explainable: legal/factual shape is combined with lexical overlap against the
+case's issues, holding, and sourced passage.  A precedent never changes a
+clearance verdict; it is review context for counsel.
 
-The same corpus answers a more useful one at adjudication time. A finding does
-not arrive in a vacuum; it has a shape, and a dozen of those shapes have
-already been litigated in public. Telling a reviewer that the line in front of
-them is the same shape as a matter that settled is worth more than another
-paragraph of rationale, because it is the reasoning a clearance attorney
-actually does.
-
-SHAPE, NOT SUBJECT MATTER
-    A chess prodigy and a prosecutor have nothing in common as topics. As
-    failure shapes they are one object -- a negative assertion about a named,
-    living person -- and that is what a court responds to. So matching runs
-    over the dimensions the pipeline already routes on: element type, claim
-    type, polarity, whether the subject is alive, whether they are named,
-    whether the production asserts a true story.
-
-    A match therefore reports *which dimensions matched*, not a similarity
-    score. "Matched on element_type, polarity, subject_alive" is something a
-    lawyer can disagree with. "0.87" is not.
-
-NO MODEL, NO SPEND
-    This stage makes no research call and no model call. Retrieval is a table
-    lookup over a corpus of twelve, and the weights live in `cases.yaml` where
-    an attorney can argue with them. Deciding by hand what a model would have
-    guessed is the same choice `policy/rubric.yaml` already makes for the
-    adjudicator's post checks.
-
-THREE GUARDRAILS, ALL OF THEM LOAD BEARING
-    A precedent never moves a status. It is attached to a finding as context
-    for the human who decides, and nothing downstream reads it as a signal.
-    The alternative -- letting a retrieved case nudge a verdict -- is reasoning
-    from resemblance, which is exactly the error the attribution gate exists to
-    prevent for sources.
-
-    Defence side cases are retrieved on the same terms as plaintiff side ones.
-    A corpus that surfaced only losses would make every finding look like a
-    disaster, which is the paranoia engine `cases.yaml` opens by warning about.
-
-    Every case in the corpus is marked `verify: required` and none has been
-    confirmed against a primary source in this repository. That flag travels
-    with the match and the renderer is expected to say so. An unconfirmed
-    precedent presented as settled law is a worse failure than no precedent.
+The separate sync command retrieves CourtListener data and validates that a
+quoted passage occurs in court text.  Runtime matching is local and stable so
+a report does not change merely because a third-party API is unavailable.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -64,8 +30,9 @@ from truestory.models.enums import PERSON_ADJACENT, ElementType
 
 log = logging.getLogger("truestory.precedent")
 
-#: The corpus. Ships with the repository and runs with no credentials.
-CASES_PATH = EVAL_DIR / "litigation_set" / "cases.yaml"
+#: The reviewed court-source corpus. Ships with the repository and is refreshed
+#: by ``eval/precedent_corpus/sync_courtlistener.py``.
+CASES_PATH = EVAL_DIR / "precedent_corpus" / "verified_cases.yaml"
 
 #: Used when `cases.yaml` declares no `matching` block, so an older copy of the
 #: corpus still retrieves rather than silently returning nothing.
@@ -78,6 +45,7 @@ _DEFAULT_MATCHING: dict[str, Any] = {
         "named": 2,
         "kind": 1,
         "truth_claim_framing": 1,
+        "semantic_overlap": 2,
     },
     "min_score": 4,
     "max_matches_per_finding": 3,
@@ -103,6 +71,20 @@ class PrecedentShape:
     lesson: str
     verified: bool
 
+    court: str = ""
+    docket_number: str = ""
+    citation: str = ""
+    decision_date: str = ""
+    procedural_posture: str = ""
+    holding: str = ""
+    source_url: str = ""
+    source_type: str = ""
+    document_number: str = ""
+    pin_cite: str = ""
+    quoted_passage: str = ""
+    retrieved_at: str = ""
+    semantic_text: str = ""
+
     kind: str | None = None
     element_type: ElementType | None = None
     claim_type: str | None = None
@@ -125,9 +107,21 @@ class PrecedentMatch:
     #: The dimensions that agreed. This is the audit trail, and it is what the
     #: report prints rather than the score.
     matched_on: tuple[str, ...]
-    #: False for every case in the corpus today. Rendered as an explicit
-    #: caveat, never dropped.
+    #: True only when the source and quoted passage passed corpus review.
+    #: Rendered as an explicit badge and caveat, never dropped.
     verified: bool
+    court: str = ""
+    docket_number: str = ""
+    citation: str = ""
+    decision_date: str = ""
+    procedural_posture: str = ""
+    holding: str = ""
+    source_url: str = ""
+    source_type: str = ""
+    document_number: str = ""
+    pin_cite: str = ""
+    quoted_passage: str = ""
+    retrieved_at: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -139,16 +133,31 @@ class PrecedentMatch:
             "score": self.score,
             "matched_on": list(self.matched_on),
             "verified": self.verified,
+            "court": self.court,
+            "docket_number": self.docket_number,
+            "citation": self.citation,
+            "decision_date": self.decision_date,
+            "procedural_posture": self.procedural_posture,
+            "holding": self.holding,
+            "source_url": self.source_url,
+            "source_type": self.source_type,
+            "document_number": self.document_number,
+            "pin_cite": self.pin_cite,
+            "quoted_passage": self.quoted_passage,
+            "retrieved_at": self.retrieved_at,
             "caveat": (
-                "Reconstructed from public reporting and not confirmed against a "
-                "primary source. Context for counsel, not authority."
+                "Source passage checked against the linked court document; context "
+                "for counsel, not legal advice."
+                if self.verified
+                else "Court metadata located, but the quoted passage has not been "
+                "verified against retrieved court text. Do not cite as authority."
             ),
         }
 
 
 @dataclass(slots=True)
 class PrecedentIndex:
-    """The litigation set, queryable by failure shape."""
+    """Reviewed court records, queryable by failure shape and sourced text."""
 
     shapes: list[PrecedentShape] = field(default_factory=list)
     matching: dict[str, Any] = field(default_factory=lambda: dict(_DEFAULT_MATCHING))
@@ -217,7 +226,10 @@ class PrecedentIndex:
                     if element.element_type in PERSON_ADJACENT
                     else None
                 ),
-                "truth_claim_framing": truth_claim_framing,
+                "truth_claim_framing": True if truth_claim_framing else None,
+                "text": " ".join(
+                    [element.canonical_form, *(c.claim_text for c in element.claims)]
+                ),
             }
         )
 
@@ -232,7 +244,8 @@ class PrecedentIndex:
                 "polarity": str(claim.polarity),
                 "subject_alive": claim.subject_alive,
                 "named": True,
-                "truth_claim_framing": truth_claim_framing,
+                "truth_claim_framing": True if truth_claim_framing else None,
+                "text": f"{claim.subject_name} {claim.claim_text}",
             }
         )
 
@@ -257,6 +270,18 @@ class PrecedentIndex:
                     score=score,
                     matched_on=matched_on,
                     verified=shape.verified,
+                    court=shape.court,
+                    docket_number=shape.docket_number,
+                    citation=shape.citation,
+                    decision_date=shape.decision_date,
+                    procedural_posture=shape.procedural_posture,
+                    holding=shape.holding,
+                    source_url=shape.source_url,
+                    source_type=shape.source_type,
+                    document_number=shape.document_number,
+                    pin_cite=shape.pin_cite,
+                    quoted_passage=shape.quoted_passage,
+                    retrieved_at=shape.retrieved_at,
                 )
             )
 
@@ -286,10 +311,19 @@ def _score(
     matched: list[str] = []
 
     for dimension, weight in weights.items():
+        if dimension == "semantic_overlap":
+            if _semantic_overlap(query.get("text"), shape.semantic_text):
+                score += int(weight)
+                matched.append("judgment language")
+            continue
         theirs = getattr(shape, dimension, None)
         ours = query.get(dimension)
         if theirs is None or ours is None:
             continue
+        # A negative-assertion dispute is not a precedent match for neutral or
+        # positive copy merely because the person is alive and named.
+        if dimension in {"kind", "polarity"} and not _equal(theirs, ours):
+            return 0, ()
         if _equal(theirs, ours):
             score += int(weight)
             matched.append(dimension)
@@ -302,6 +336,35 @@ def _equal(a: Any, b: Any) -> bool:
     if isinstance(a, bool) or isinstance(b, bool):
         return bool(a) is bool(b)
     return str(a).strip().upper() == str(b).strip().upper()
+
+
+_STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "been", "by", "for", "from",
+    "had", "has", "have", "he", "her", "him", "his", "in", "is", "it", "of",
+    "on", "or", "she", "that", "the", "their", "they", "this", "to", "was",
+    "were", "with",
+}
+
+
+def _semantic_overlap(query_text: Any, case_text: str) -> bool:
+    """A conservative lexical-semantic signal over sourced judgment text.
+
+    This is intentionally not an embedding pretending to determine legal
+    similarity. Two non-trivial terms must overlap, or one unusually specific
+    term (nine or more characters). Shape remains the main retrieval signal.
+    """
+    if not query_text or not case_text:
+        return False
+
+    def terms(value: str) -> set[str]:
+        return {
+            token
+            for token in re.findall(r"[a-z0-9]+", value.lower())
+            if len(token) >= 4 and token not in _STOPWORDS
+        }
+
+    shared = terms(str(query_text)) & terms(case_text)
+    return len(shared) >= 2 or any(len(token) >= 9 for token in shared)
 
 
 def _keep_both_sides(scored: list[PrecedentMatch], limit: int) -> list[PrecedentMatch]:
@@ -341,7 +404,7 @@ def _to_shape(case: dict[str, Any]) -> PrecedentShape | None:
     if not case_id:
         return None
 
-    reconstruction = case.get("reconstruction") or {}
+    reconstruction = case.get("shape") or case.get("reconstruction") or {}
     if not isinstance(reconstruction, dict):
         reconstruction = {}
     expected = case.get("expected") or {}
@@ -363,18 +426,47 @@ def _to_shape(case: dict[str, Any]) -> PrecedentShape | None:
         if subject_alive is None:
             subject_alive = True  # a rollup case is about a person who can sue
 
+    source = case.get("source") or {}
+    verification = case.get("verification") or {}
+    issues = case.get("issues") or []
+    quoted_passage = str(source.get("quoted_passage") or "").strip()
+    source_url = str(source.get("url") or "").strip()
+    verified = (
+        str(verification.get("status") or "").strip().lower() == "verified"
+        and bool(source_url)
+        and bool(quoted_passage)
+    )
+
     return PrecedentShape(
         case_id=case_id,
         name=str(case.get("name") or case_id),
         # `failure_mode: null` is how the corpus marks the cases the studios
         # won. It is load bearing and it is the only side marker present.
-        side="defence" if case.get("failure_mode") is None else "plaintiff",
+        side=str(case.get("side") or (
+            "defence" if case.get("failure_mode") is None else "plaintiff"
+        )),
         outcome=str(case.get("outcome") or case.get("failure_mode") or "").strip(),
         lesson=_lesson(case),
-        # Every case carries `verify: required` today. Read rather than
-        # assumed, so confirming one in the corpus is enough to change what the
-        # report says about it.
-        verified=str(case.get("verify", "required")).strip().lower() != "required",
+        verified=verified,
+        court=str(case.get("court") or "").strip(),
+        docket_number=str(case.get("docket_number") or "").strip(),
+        citation=str(case.get("citation") or "").strip(),
+        decision_date=str(case.get("decision_date") or "").strip(),
+        procedural_posture=str(case.get("procedural_posture") or "").strip(),
+        holding=str(case.get("holding") or "").strip(),
+        source_url=source_url,
+        source_type=str(source.get("type") or "").strip(),
+        document_number=str(source.get("document_number") or "").strip(),
+        pin_cite=str(source.get("pin_cite") or "").strip(),
+        quoted_passage=quoted_passage,
+        retrieved_at=str(source.get("retrieved_at") or "").strip(),
+        semantic_text=" ".join(
+            [
+                str(case.get("holding") or ""),
+                quoted_passage,
+                *(str(issue) for issue in issues if issue),
+            ]
+        ),
         kind=kind,
         element_type=element_type,
         claim_type=reconstruction.get("claim_type") or _claim_type_of(expected),
@@ -408,6 +500,9 @@ def _lesson(case: dict[str, Any]) -> str:
     that is deliberate authorship rather than untidiness, so all of them are
     accepted instead of renaming the corpus to suit the code.
     """
+    direct = case.get("lesson")
+    if isinstance(direct, str) and direct.strip():
+        return " ".join(direct.split())
     for key, value in case.items():
         if key.startswith(("why_", "the_")) and isinstance(value, str) and value.strip():
             return " ".join(value.split())

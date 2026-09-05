@@ -93,7 +93,13 @@ function bandTone(band: string): string {
 }
 
 function ExposureCard({ assessment }: { assessment: ExposureAssessment }) {
-  const { modelled_exposure: modelled, cost_to_cure: cure, statutory_anchors: anchors, venue } = assessment;
+  const {
+    researched_exposure: researched,
+    modelled_exposure: modelled,
+    cost_to_cure: cure,
+    statutory_anchors: anchors,
+    venue,
+  } = assessment;
 
   return (
     <section className="risk-card">
@@ -104,28 +110,7 @@ function ExposureCard({ assessment }: { assessment: ExposureAssessment }) {
       </div>
       <p className="band-means">{assessment.band_means}</p>
 
-      {modelled && (
-        <div className="modelled-exposure">
-          <p className="modelled-range">
-            {modelled.negligible
-              ? "Negligible modelled exposure"
-              : `${formatUsd(modelled.expected_usd.low)} – ${formatUsd(modelled.expected_usd.high)}`}
-          </p>
-          <p className="citation-meta">
-            claim probability {(modelled.claim_probability * 100).toFixed(1)}%, uncalibrated
-          </p>
-          {modelled.drivers.length > 0 && (
-            <ul className="driver-list">
-              {modelled.drivers.map((d) => (
-                <li key={d.id}>
-                  ×{d.value} {d.id.replace(/_/g, " ")} — {d.because}
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="disclaimer">{modelled.caveat}</p>
-        </div>
-      )}
+      {researched && <ResearchEvidence research={researched} />}
 
       {cure && (
         <div className="cost-to-cure">
@@ -165,9 +150,95 @@ function ExposureCard({ assessment }: { assessment: ExposureAssessment }) {
         </div>
       )}
 
+      {modelled && (
+        <details className="planning-model">
+          <summary>Planning model — relative ranking only</summary>
+          <p className="planning-range">
+            {modelled.negligible
+              ? "Negligible in the planning model"
+              : `${formatUsd(modelled.expected_usd.low)} – ${formatUsd(modelled.expected_usd.high)}`}
+          </p>
+          <p className="citation-meta">
+            Uncalibrated prior · {(modelled.claim_probability * 100).toFixed(1)}% modelled claim frequency
+          </p>
+          {modelled.drivers.length > 0 && (
+            <ul className="driver-list">
+              {modelled.drivers.map((d) => (
+                <li key={d.id}>
+                  ×{d.value} {d.id.replace(/_/g, " ")} — {d.because}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="disclaimer">{modelled.caveat}</p>
+        </details>
+      )}
+
       <p className="citation-meta">{venue.note}</p>
       <p className="disclaimer">{assessment.disclaimer}</p>
     </section>
+  );
+}
+
+function moneyRange(value: { low: number | null; high: number | null }): string {
+  if (value.low != null && value.high != null) return `${formatUsd(value.low)} – ${formatUsd(value.high)}`;
+  if (value.high != null) return `Up to ${formatUsd(value.high)}`;
+  if (value.low != null) return `From ${formatUsd(value.low)}`;
+  return "No amount reported";
+}
+
+function ResearchEvidence({ research }: { research: NonNullable<ExposureAssessment["researched_exposure"]> }) {
+  const damages = research.damages_usd;
+  const defence = research.defence_cost_usd;
+
+  return (
+    <div className={`research-evidence research-${research.status}`}>
+      <div className="research-evidence-head">
+        <p className="panel-subhead">What public sources show</p>
+        <span className="source-tag source-researched">researched</span>
+      </div>
+
+      {research.status === "range_found" && damages ? (
+        <>
+          <p className="research-evidence-value">{moneyRange(damages)}</p>
+          <p className="research-evidence-label">
+            Reported {research.outcome?.replace(/_/g, " ") ?? "claimant-payment"} range
+          </p>
+        </>
+      ) : research.status === "defence_cost_only" ? (
+        <>
+          <p className="research-evidence-status">No defensible claimant-payment range found</p>
+          {defence && (
+            <div className="research-secondary-amount">
+              <span>Defence-cost evidence</span>
+              <strong>{moneyRange(defence)}</strong>
+            </div>
+          )}
+        </>
+      ) : research.status === "no_public_range" ? (
+        <p className="research-evidence-status">No public damages range found — this does not mean $0</p>
+      ) : (
+        <p className="research-evidence-status">The research response was not usable</p>
+      )}
+
+      <p className="citation-meta">
+        {research.source_kind.replace(/_/g, " ")}{research.basis ? ` · ${research.basis}` : ""}
+      </p>
+      {research.outlier_warning && <p className="research-warning">{research.outlier_warning}</p>}
+      {research.confidence_note && <p className="disclaimer">{research.confidence_note}</p>}
+      {research.sources.length > 0 && (
+        <ul className="research-source-list">
+          {research.sources.slice(0, 3).map((source) => (
+            <li key={source.url}>
+              <a href={source.url} target="_blank" rel="noreferrer">
+                {source.title || new URL(source.url).hostname} ↗
+              </a>
+              {source.excerpt && <p>{source.excerpt}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -179,10 +250,32 @@ function PrecedentList({ matches }: { matches: PrecedentMatch[] }) {
         <div key={m.case_id} className={`precedent-row side-${m.side}`}>
           <p className="precedent-name">
             {m.name} <span className={`side-tag side-${m.side}`}>{m.side}</span>
+            <span className={`precedent-verified ${m.verified ? "is-verified" : ""}`}>
+              {m.verified ? "source checked" : "unverified"}
+            </span>
+          </p>
+          <p className="citation-meta">
+            {[m.court, m.citation, m.docket_number && `Docket ${m.docket_number}`, m.decision_date]
+              .filter(Boolean)
+              .join(" · ")}
           </p>
           <p className="citation-meta">matched on {m.matched_on.join(", ")}</p>
           <p className="precedent-outcome">{m.outcome}</p>
-          {!m.verified && <p className="disclaimer">{m.caveat}</p>}
+          {m.holding && <p className="precedent-holding"><strong>Holding at this stage:</strong> {m.holding}</p>}
+          {m.quoted_passage && (
+            <blockquote className="precedent-quote">
+              “{m.quoted_passage}” {m.pin_cite && <cite>{m.pin_cite}</cite>}
+            </blockquote>
+          )}
+          {m.procedural_posture && <p className="disclaimer">{m.procedural_posture}</p>}
+          <p className="precedent-links">
+            {m.source_url && (
+              <a href={m.source_url} target="_blank" rel="noreferrer">
+                Open court document ↗
+              </a>
+            )}
+          </p>
+          <p className="disclaimer">{m.caveat}</p>
         </div>
       ))}
     </section>

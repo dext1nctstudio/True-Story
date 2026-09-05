@@ -1923,6 +1923,77 @@ button.apply:disabled {
   gap: var(--space-4);
 }
 
+.benchmark-dashboard-head {
+  margin-top: var(--space-7);
+}
+
+.benchmark-dashboard-link {
+  color: var(--accent);
+  font-size: var(--fs-tiny);
+  font-weight: 600;
+}
+
+.benchmark-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.benchmark-dashboard-card {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--amber);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.benchmark-dashboard-case,
+.benchmark-dashboard-stakes {
+  display: block;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.benchmark-dashboard-case {
+  color: var(--amber);
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+}
+
+.benchmark-dashboard-card strong {
+  display: block;
+  color: var(--text);
+  font-size: var(--fs-body);
+}
+
+.benchmark-dashboard-card p {
+  margin: var(--space-2) 0 var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-tiny);
+  line-height: 1.5;
+}
+
+.benchmark-dashboard-stakes {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+  color: var(--text-tertiary);
+}
+
+.benchmark-dashboard-note {
+  margin: var(--space-3) 0 0;
+  color: var(--text-quiet);
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .benchmark-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .risk-precedent.loading {
   font-size: var(--fs-tiny);
   color: var(--text-quiet);
@@ -1972,12 +2043,128 @@ button.apply:disabled {
   margin: 0 0 var(--space-2);
 }
 
-.modelled-range {
+.modelled-range,
+.planning-range {
   font-size: var(--fs-large, 1.05rem);
   font-weight: 600;
   color: var(--text);
   margin: 0;
   font-variant-numeric: tabular-nums;
+}
+
+.research-evidence {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.research-evidence-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.research-evidence-head .panel-subhead {
+  margin: 0;
+}
+
+.research-evidence-value {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums;
+}
+
+.research-evidence-label,
+.research-evidence-status {
+  margin: var(--space-1) 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-small);
+  line-height: 1.45;
+}
+
+.research-evidence-status {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.research-secondary-amount {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--space-2);
+  font-size: var(--fs-tiny);
+  color: var(--text-secondary);
+}
+
+.research-secondary-amount strong {
+  color: var(--text);
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.research-warning {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--amber-tint);
+  color: var(--amber);
+  font-size: var(--fs-tiny);
+  line-height: 1.5;
+}
+
+.research-source-list {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) 0 0;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.research-source-list li,
+.research-source-list p {
+  margin: 0;
+}
+
+.research-source-list a {
+  font-size: var(--fs-tiny);
+  font-weight: 600;
+}
+
+.research-source-list p {
+  margin-top: var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--fs-micro);
+  line-height: 1.45;
+}
+
+.planning-model {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.planning-model summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: var(--fs-tiny);
+  font-weight: 600;
+}
+
+.planning-model[open] summary {
+  margin-bottom: var(--space-2);
 }
 
 .driver-list {

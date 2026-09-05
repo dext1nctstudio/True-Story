@@ -1,0 +1,165 @@
+{
+  "source": "https://www.courtlistener.com/api/rest/v4/search/",
+  "retrieved_at": "2026-09-05T03:37:05.752499+00:00",
+  "authenticated": false,
+  "corpus": "eval\\precedent_corpus\\verified_cases.yaml",
+  "records": [
+    {
+      "case_id": "LS-003",
+      "courtlistener": {
+        "result_type": "docket",
+        "case_name": "Fairstein v. Netflix, Inc.",
+        "court": "S.D.N.Y.",
+        "docket_number": "1:20-cv-08042",
+        "docket_id": 18485000,
+        "opinion_cluster_id": null,
+        "citation": [],
+        "date_filed": "2020-09-29",
+        "date_terminated": "2024-06-04",
+        "url": "https://www.courtlistener.com/docket/18485000/fairstein-v-netflix-inc/",
+        "opinion_ids": []
+      },
+      "passage_verification": {
+        "status": "verified_now",
+        "method": "linked_court_document",
+        "text_sha256": "4b82681c028300e3f351b1ad4d9ba9882aa817110d55693fa983d51751bc32f6",
+        "text_characters": 142809
+      }
+    },
+    {
+      "case_id": "LS-101",
+      "courtlistener": {
+        "result_type": "opinion",
+        "case_name": "Louis Vuitton Mallatier S.A. v. Warner Bros. Entertainment Inc.",
+        "court": "S.D.N.Y.",
+        "docket_number": "No. 11 Civ. 9436(ALC)(HBP)",
+        "docket_id": 65982094,
+        "opinion_cluster_id": 8716177,
+        "citation": [
+          "868 F. Supp. 2d 172",
+          "105 U.S.P.Q. 2d (BNA) 1806",
+          "2012 U.S. Dist. LEXIS 83646",
+          "2012 WL 2248593"
+        ],
+        "date_filed": "2012-06-15",
+        "date_terminated": null,
+        "url": "https://www.courtlistener.com/opinion/8716177/louis-vuitton-mallatier-sa-v-warner-bros-entertainment-inc/",
+        "opinion_ids": [
+          8699370
+        ]
+      },
+      "passage_verification": {
+        "status": "verified_now",
+        "method": "linked_court_document",
+        "text_sha256": "fd93d05af075e895030e02c3ffd6f793c4d83b8d04a1d5c081bd1166003d538b",
+        "text_characters": 423655
+      }
+    },
+    {
+      "case_id": "LS-103",
+      "courtlistener": {
+        "result_type": "opinion",
+        "case_name": "De Havilland v. FX Networks, LLC",
+        "court": "Cal. Ct. App. 5th",
+        "docket_number": "B285629",
+        "docket_id": 62614786,
+        "opinion_cluster_id": 6239501,
+        "citation": [
+          "230 Cal. Rptr. 3d 625",
+          "21 Cal. App. 5th 845"
+        ],
+        "date_filed": "2018-03-26",
+        "date_terminated": null,
+        "url": "https://www.courtlistener.com/opinion/6239501/de-havilland-v-fx-networks-llc/",
+        "opinion_ids": [
+          6106417
+        ]
+      },
+      "passage_verification": {
+        "status": "verified_now",
+        "method": "courtlistener_exact_phrase_search",
+        "text_sha256": null,
+        "text_characters": null
+      }
+    },
+    {
+      "case_id": "LS-001",
+      "courtlistener": {
+        "result_type": "docket",
+        "case_name": "Nona Gaprindashvili v. Netflix, Inc.",
+        "court": "C.D. Cal.",
+        "docket_number": "2:21-cv-07408",
+        "docket_id": 60389470,
+        "opinion_cluster_id": null,
+        "citation": [],
+        "date_filed": "2021-09-16",
+        "date_terminated": "2022-06-08",
+        "url": "https://www.courtlistener.com/docket/60389470/nona-gaprindashvili-v-netflix-inc/",
+        "opinion_ids": []
+      },
+      "passage_verification": {
+        "status": "verified_now",
+        "method": "linked_court_document",
+        "text_sha256": "5a8b60f94b0d7a5266be9de68e0cc4e1f0066e40a460f84208658fa103b5c97b",
+        "text_characters": 47726
+      }
+    },
+    {
+      "case_id": "LS-104",
+      "courtlistener": {
+        "result_type": "opinion",
+        "case_name": "Sgt. Jeffrey Sarver v. Nicolas Chartier",
+        "court": "9th Cir.",
+        "docket_number": "11-56986, 12-55429",
+        "docket_id": 3036751,
+        "opinion_cluster_id": 3177903,
+        "citation": [
+          "813 F.3d 891",
+          "2016 WL 625362"
+        ],
+        "date_filed": "2016-02-17",
+        "date_terminated": null,
+        "url": "https://www.courtlistener.com/opinion/3177903/sgt-jeffrey-sarver-v-nicolas-chartier/",
+        "opinion_ids": [
+          3177885
+        ]
+      },
+      "passage_verification": {
+        "status": "verified_now",
+        "method": "linked_court_document",
+        "text_sha256": "fabc859a3e24013aec3edbae77dde721d9bc1c0358dfc8a32d25ca79f1f5e8eb",
+        "text_characters": 47755
+      }
+    },
+    {
+      "case_id": "LS-202",
+      "courtlistener": {
+        "result_type": "opinion",
+        "case_name": "Faith Ringgold v. Black Entertainment Television, Inc., Home Box Office, Inc.",
+        "court": "2d Cir.",
+        "docket_number": "1736, Docket 96-9329",
+        "docket_id": 695096,
+        "opinion_cluster_id": 746829,
+        "citation": [
+          "126 F.3d 70",
+          "150 A.L.R. Fed. 813",
+          "25 Media L. Rep. (BNA) 2387",
+          "44 U.S.P.Q. 2d (BNA) 1001",
+          "1997 U.S. App. LEXIS 24443"
+        ],
+        "date_filed": "1997-09-16",
+        "date_terminated": null,
+        "url": "https://www.courtlistener.com/opinion/746829/faith-ringgold-v-black-entertainment-television-inc-home-box-office/",
+        "opinion_ids": [
+          746829
+        ]
+      },
+      "passage_verification": {
+        "status": "verified_now",
+        "method": "courtlistener_exact_phrase_search",
+        "text_sha256": null,
+        "text_characters": null
+      }
+    }
+  ]
+}

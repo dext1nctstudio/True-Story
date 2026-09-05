@@ -12,6 +12,7 @@
  */
 
 import { useMemo } from "react";
+import Link from "next/link";
 import { RunList } from "@/components/RunList";
 import { UploadZone } from "@/components/UploadZone";
 import type { RunListItem } from "@/lib/types";
@@ -79,7 +80,7 @@ export function Dashboard({
 
       <div className="stat-grid">
         <div className="stat-card">
-          <span className="stat-card-label">Runs this session</span>
+          <span className="stat-card-label">Stored runs</span>
           <span className="stat-card-value">{stats.runCount}</span>
           <span className="stat-card-sub">
             {stats.live > 0 ? (
@@ -137,6 +138,31 @@ export function Dashboard({
         <span className="dashboard-section-count">{runs.length}</span>
       </div>
       <RunList runs={runs} onOpen={onOpen} />
+
+      <div className="dashboard-section-head benchmark-dashboard-head">
+        <h2 className="dashboard-section-title">Litigation benchmark</h2>
+        <Link href="/#benchmarks" className="benchmark-dashboard-link">
+          Full evidence and disclosure →
+        </Link>
+      </div>
+      <div className="benchmark-dashboard-grid">
+        <div className="benchmark-dashboard-card">
+          <span className="benchmark-dashboard-case">The Queen&rsquo;s Gambit</span>
+          <strong>Exact disputed proposition escalated</strong>
+          <p>1 supported claim · 1 unsupported negative claim · counsel required</p>
+          <span className="benchmark-dashboard-stakes">$5M demanded · settlement undisclosed</span>
+        </div>
+        <div className="benchmark-dashboard-card">
+          <span className="benchmark-dashboard-case">When They See Us</span>
+          <strong>Five distinct burdens surfaced</strong>
+          <p>5 of 5 unsupported · 100% amber density · counsel required</p>
+          <span className="benchmark-dashboard-stakes">Settled before trial · no claimant payment</span>
+        </div>
+      </div>
+      <p className="benchmark-dashboard-note">
+        Retrospective reconstructions show detection, not proof that litigation would have been
+        avoided or that the complaint amount would have been saved.
+      </p>
     </div>
   );
 }

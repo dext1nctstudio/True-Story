@@ -168,6 +168,33 @@ _Q_ENTITY = (
     "of complaint from a current occupant."
 )
 
+_Q_DAMAGES = (
+    "Establish what a claim of this shape against a film or television "
+    "production actually resolves for.\n\n"
+    "CLAIM TYPE: {claim_type}\n"
+    "AGAINST: {defendant}\n"
+    "JURISDICTION: {jurisdiction}\n\n"
+    "Find what these matters cost in practice. Insurance and errors and "
+    "omissions industry loss studies, media law commentary, practitioner "
+    "guidance, and reported verdict and settlement surveys are all usable. "
+    "Separate the ordinary case from the famous one: report the typical "
+    "figure where the record gives one, and say plainly when the only "
+    "numbers available come from a handful of headline matters, because "
+    "that is the usual condition in this field and presenting an outlier "
+    "as a norm is the specific error to avoid.\n\n"
+    "Report defence cost separately from any amount paid to a claimant. "
+    "Defence is billed hourly against published rates and is the most "
+    "knowable number here; indemnity usually is not, because most of these "
+    "matters resolve confidentially. Say which resolution your range "
+    "describes -- early dismissal, negotiated settlement, or a judgment "
+    "after trial -- since those are three different events and averaging "
+    "them produces a number about nothing.\n\n"
+    "If the public record supports no range, say so rather than "
+    "estimating. A missing figure is a real finding; a fabricated one is "
+    "worse than nothing."
+)
+
+
 _Q_CURE_COST = (
     "Establish the market cost of clearing or replacing one element of a "
     "production.\n\n"
@@ -644,6 +671,64 @@ class ClearanceTools:
         evidence = await provider.investigate(request)
         return evidence.to_dict()
 
+    async def research_damages_range(
+        self,
+        subject_id: str,
+        claim_type: str,
+        *,
+        defendant: str = "a film or television production",
+        jurisdiction: str = "United States",
+    ) -> dict[str, Any]:
+        """What a claim of this shape resolves for, asked rather than assumed.
+
+        The severity table in policy/exposure.yaml is the largest invented
+        number in the product: an adverse judgment priced at $100,000 to
+        $5,000,000 from general knowledge. Reading it out of court records was
+        tried first and does not work -- published opinions in this field are
+        dominated by awards being reversed on appeal, and settlements never
+        produce an opinion at all, so that corpus returns the wrong sample.
+
+        So this asks the same way `research_cure_cost` asks about a licence
+        fee, and for the same reason: a practitioner answering this question
+        reads industry loss studies and media law commentary rather than
+        pulling dockets. Those are secondary sources and the schema makes the
+        researcher say so, because a figure from an insurance study and a
+        figure from one famous verdict are not the same kind of evidence and
+        must never render as though they were.
+
+        LITE, like the cure cost lookup. This is a calibration input, not a
+        clearance finding, and it must never draw on the reserve that CRITICAL
+        subjects depend on.
+        """
+        decision = RoutingDecision(
+            rule_id="damages_range_lookup",
+            tier=RiskTier.LOW,
+            provider="parallel_task",
+            processor=Processor.LITE,
+            schema_name="damages_range_v1",
+        )
+        request = ResearchRequest(
+            subject_id=subject_id,
+            question=_Q_DAMAGES.format(
+                claim_type=claim_type,
+                defendant=defendant,
+                jurisdiction=jurisdiction,
+            ),
+            output_schema=load_schema("damages_range_v1"),
+            schema_name="damages_range_v1",
+            tier=RiskTier.LOW,
+            processor=Processor.LITE,
+            jurisdictions=self.jurisdictions,
+        )
+        evidence = await self.registry.investigate(decision, request)
+        payload = evidence.to_dict()
+        payload["routing"] = {
+            "rule": decision.rule_id,
+            "tier": str(decision.tier),
+            "escalated_by": [],
+        }
+        return payload
+
     async def research_cure_cost(
         self,
         subject_id: str,
@@ -761,5 +846,6 @@ TOOL_MANIFEST: dict[str, str] = {
     "enumerate_matching_entities": "Set valued enumeration returning one evidence record per matched entity.",
     "capture_evidence_page": "Capture a registry or docket page verbatim into the evidence pack.",
     "research_cure_cost": "Market cost of clearing or replacing one element, with sources.",
+    "research_damages_range": "What a claim of this shape resolves for, with sources.",
     "watch_subject": "Open a recurring Living Clearance watch on a subject.",
 }
