@@ -744,13 +744,19 @@ export default function Workspace() {
                     claims={claims}
                     elements={elements}
                     onSelectClaim={openSubject}
+                    runId={runId}
                   />
                 ))}
 
               {tab === "people" && <ClaimDashboard persons={persons} />}
 
               {tab === "queue" && (
-                <ReviewQueue claims={claims} elements={elements} onSelectClaim={openSubject} />
+                <ReviewQueue
+                  claims={claims}
+                  elements={elements}
+                  onSelectClaim={openSubject}
+                  runId={runId}
+                />
               )}
 
               {tab === "cost" && (

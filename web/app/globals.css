@@ -1981,6 +1981,12 @@ button.apply:disabled {
   color: var(--text-tertiary);
 }
 
+.run-persistence-note {
+  margin: var(--space-3) 0 0;
+  color: var(--text-quiet);
+  font-size: var(--fs-tiny);
+}
+
 .benchmark-dashboard-note {
   margin: var(--space-3) 0 0;
   color: var(--text-quiet);
@@ -2363,4 +2369,12 @@ button.apply:disabled {
 
 .risk-routine-note {
   padding: var(--space-3) 0 0;
+}
+
+/* ── band chip, inline in a queue row ────────────────────────────────────── */
+.band-chip-inline {
+  padding: 1px 6px;
+  font-size: 10px;
+  margin: 0;
+  vertical-align: middle;
 }
