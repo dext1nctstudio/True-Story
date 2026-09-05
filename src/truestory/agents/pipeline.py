@@ -718,12 +718,20 @@ class TrueStoryPipeline:
             assessment = assessments.get(claim.claim_id)
             if not assessment or assessment.get("band") == "routine" or claim.is_opinion:
                 continue
-            if str(claim.polarity) != "negative" and not claim.needs_counsel and str(claim.verdict) != "CONTRADICTED":
+            if (
+                str(claim.polarity) != "negative"
+                and not claim.needs_counsel
+                and str(claim.verdict) != "CONTRADICTED"
+            ):
                 continue
             shape = (
                 str(claim.claim_type),
                 str(claim.verdict or "unadjudicated"),
-                "living" if claim.subject_alive is True else "deceased" if claim.subject_alive is False else "life_status_unknown",
+                "living"
+                if claim.subject_alive is True
+                else "deceased"
+                if claim.subject_alive is False
+                else "life_status_unknown",
                 str(claim.subject_public_figure_status),
             )
             by_shape.setdefault(shape, []).append((claim, assessment))
@@ -818,8 +826,18 @@ class TrueStoryPipeline:
         """
         from truestory.api.messages import describe
 
-        failed = sum(1 for c in state.claims if getattr(c, "research_failed", False))
-        total = len(state.claims)
+        # Both halves of the ledger, because the outage hits both and counting
+        # only one produced a front page that argued with itself. A live run
+        # that lost fifteen *elements* to HTTP 402 reported "0 of 15 subjects
+        # were affected" directly beneath "it shows that nobody looked",
+        # because `failed` counted claims and `total` counted claims while the
+        # casualties were all elements.
+        from truestory.models.enums import ClearanceStatus
+
+        failed = sum(1 for c in state.claims if getattr(c, "research_failed", False)) + sum(
+            1 for e in state.elements if e.status is ClearanceStatus.RESEARCH_FAILED
+        )
+        total = len(state.claims) + len(state.elements)
 
         warnings: list[str] = []
         outages = getattr(self.registry, "outages", {}) or {}
