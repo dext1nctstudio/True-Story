@@ -30,7 +30,7 @@
 import type { Role } from "./types";
 
 export type HomeSurface = "docket" | "risk" | "desk" | "package";
-export type RailTab = "evidence" | "people" | "queue" | "cost" | "monitors" | "report";
+export type RailTab = "evidence" | "people" | "queue" | "cost" | "risk" | "monitors" | "report";
 
 export interface RoleCapabilities {
   /** The annotated script itself. */
@@ -81,7 +81,7 @@ export const ROLE_VIEWS: Record<Role, RoleView> = {
     sees: "Everything: the evidence behind every verdict, the person register, the review queue, and the audited overrides.",
     withheld: "Nothing is withheld from this role.",
     home: "docket",
-    rail: ["evidence", "people", "queue", "cost", "monitors", "report"],
+    rail: ["evidence", "people", "queue", "cost", "risk", "monitors", "report"],
     accent: "#2ec5b6",
     caps: {
       overlay: true,
@@ -191,6 +191,7 @@ export const TAB_LABEL: Record<RailTab, string> = {
   people: "People",
   queue: "Queue",
   cost: "Cost",
+  risk: "Risk",
   monitors: "Watches",
   report: "Package",
 };

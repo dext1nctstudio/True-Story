@@ -2066,3 +2066,114 @@ button.apply:disabled {
 
 .side-tag.side-plaintiff { background: var(--amber-tint); color: var(--amber); }
 .side-tag.side-defence   { background: var(--green-tint); color: var(--green); }
+
+.precedent-verified {
+  font-size: var(--fs-micro);
+  color: var(--text-quiet);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.precedent-verified.is-verified {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 35%, transparent);
+  background: var(--green-tint);
+}
+
+.precedent-holding {
+  font-size: var(--fs-tiny);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: var(--space-2) 0 0;
+}
+
+.precedent-quote {
+  font-size: var(--fs-tiny);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--line-strong);
+}
+
+.precedent-quote cite {
+  color: var(--text-tertiary);
+  font-style: normal;
+}
+
+.precedent-links {
+  font-size: var(--fs-tiny);
+  margin: var(--space-2) 0 0;
+}
+
+/* ── the risk board tab ───────────────────────────────────────────────────── */
+/* See components/RiskBoard.tsx. Reuses .board / .board-grid / .board-tile from
+   surfaces.css; only what is genuinely new to this view lives here. */
+
+.board-tile-value.wide {
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.risk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.risk-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border: none;
+  border-left: 2px solid var(--line-strong);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--ease);
+}
+
+.risk-row:hover {
+  background: var(--surface-sunken);
+}
+
+.risk-row-red   { border-left-color: var(--red); }
+.risk-row-amber { border-left-color: var(--amber); }
+
+.risk-row-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.risk-row-text {
+  font-size: var(--fs-small);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.risk-row-figure {
+  font-size: var(--fs-small);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.risk-routine-note {
+  padding: var(--space-3) 0 0;
+}

@@ -23,6 +23,7 @@ import { ClaimDashboard } from "@/components/ClaimDashboard";
 import { Calculator, CostPanel } from "@/components/CostPanel";
 import { CommandPalette, type Command } from "@/components/CommandPalette";
 import { CostMeter, VerdictCounters } from "@/components/CostMeter";
+import { RiskBoard } from "@/components/RiskBoard";
 import { Dashboard } from "@/components/Dashboard";
 import { EvidencePanel } from "@/components/EvidencePanel";
 import { MonitorPanel } from "@/components/MonitorPanel";
@@ -767,6 +768,15 @@ export default function Workspace() {
                 <CostPanel
                   runId={runId}
                   live={runStatus !== "COMPLETE" && runStatus !== "FAILED"}
+                />
+              )}
+
+              {tab === "risk" && (
+                <RiskBoard
+                  runId={runId}
+                  claims={claims}
+                  elements={elements}
+                  onOpenLine={openSubject}
                 />
               )}
 
