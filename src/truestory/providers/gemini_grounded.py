@@ -277,17 +277,30 @@ def _citations_from_grounding(response: Any) -> list[Citation]:
         for index, chunk in enumerate(getattr(metadata, "grounding_chunks", []) or []):
             web = getattr(chunk, "web", None)
             url = getattr(web, "uri", None)
-            if not url or url in seen:
+            if not url:
                 continue
-            seen.add(url)
 
             domain = getattr(web, "domain", None) or getattr(web, "title", None) or ""
+            # The stored citation url is the resolved domain, not the
+            # redirect, so dedup has to key on that same value. Checking
+            # `seen` against the redirect while storing the domain let two
+            # chunks with different vertexaisearch redirects that happened to
+            # resolve to the same real host both through -- two Citation
+            # entries with the identical final url, which is exactly the
+            # "two children with the same key" a citation list keyed on url
+            # then hits in the UI. Grounding search results routinely point
+            # several chunks at the same page for different supported spans.
+            resolved_url = f"https://{domain}" if domain else url
+            if resolved_url in seen:
+                continue
+            seen.add(resolved_url)
+
             citations.append(
                 Citation.classified(
                     # Classified on the domain the redirect points at, not on
                     # the redirect. The URL stays the redirect because that is
                     # what resolves; the pedigree comes from the real host.
-                    url=f"https://{domain}" if domain else url,
+                    url=resolved_url,
                     title=getattr(web, "title", None) or domain or url,
                     excerpt=" ".join(supports_by_chunk.get(index, []))[:1200],
                     declared_type="secondary",

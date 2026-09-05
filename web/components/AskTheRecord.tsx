@@ -87,8 +87,8 @@ export function AskTheRecord({ runId, subjectId, subject, suggestion }: Props) {
             <div className="empty">Nothing came back for that question.</div>
           )}
 
-          {answer.citations.map((citation) => (
-            <div className="citation" key={citation.url}>
+          {answer.citations.map((citation, index) => (
+            <div className="citation" key={`${citation.url}-${index}`}>
               <a
                 className="citation-title"
                 href={citation.url}

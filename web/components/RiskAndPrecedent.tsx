@@ -228,8 +228,8 @@ function ResearchEvidence({ research }: { research: NonNullable<ExposureAssessme
       {research.confidence_note && <p className="disclaimer">{research.confidence_note}</p>}
       {research.sources.length > 0 && (
         <ul className="research-source-list">
-          {research.sources.slice(0, 3).map((source) => (
-            <li key={source.url}>
+          {research.sources.slice(0, 3).map((source, index) => (
+            <li key={`${source.url}-${index}`}>
               <a href={source.url} target="_blank" rel="noreferrer">
                 {source.title || new URL(source.url).hostname} ↗
               </a>

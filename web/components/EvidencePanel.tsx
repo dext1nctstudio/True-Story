@@ -233,8 +233,8 @@ function EvidenceBlock({ evidence }: { evidence: Evidence }) {
         <span>{Math.round(evidence.effective_confidence * 100)}% confidence</span>
       </div>
 
-      {evidence.citations.map((citation) => (
-        <div className="citation" key={citation.url}>
+      {evidence.citations.map((citation, index) => (
+        <div className="citation" key={`${citation.url}-${index}`}>
           <a
             className="citation-title"
             href={citation.url}
