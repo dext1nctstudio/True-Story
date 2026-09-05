@@ -24,8 +24,10 @@ buyer trusts.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+from collections.abc import Awaitable
 from typing import Any
 
 from truestory.agents import corroboration as corr
@@ -162,15 +164,51 @@ class Adjudicator:
         elements: list[ClearableElement],
         evidence_by_subject: dict[str, list[Evidence]],
     ) -> list[dict[str, Any]]:
-        for claim in claims:
-            if claim.verdict is Verdict.OPINION:
-                continue  # settled at routing, no spend and no model call
-            if claim.settled_without_research:
-                continue  # settled at identity: no real subject, so no verdict to reach
-            await self.adjudicate_claim(claim, evidence_by_subject.get(claim.claim_id, []))
+        # Bounded fan out, in two phases. Every subject here is independent of
+        # every other, and the serial loop this replaces was the single largest
+        # block of wall clock in the system: on a two page script with a fully
+        # warm research cache, 938 seconds of which nearly all was spent here,
+        # one model call at a time.
+        #
+        # The two phases stay ordered rather than merged. Nothing in element
+        # adjudication reads a claim verdict today, but `_apply_amber_density`
+        # reads across both and the ordering is what makes that safe to keep
+        # assuming.
+        semaphore = asyncio.Semaphore(max(1, settings.adjudicate_max_concurrency))
 
-        for element in elements:
-            await self.adjudicate_element(element, evidence_by_subject.get(element.element_id, []))
+        async def guarded(coro: Awaitable[None], label: str) -> None:
+            async with semaphore:
+                try:
+                    await coro
+                except Exception as exc:
+                    # One subject that fails to adjudicate must not take the
+                    # other two hundred with it. The claim or element keeps the
+                    # verdict it arrived with, which for a claim is UNSUPPORTED.
+                    log.warning("adjudication failed for %s: %s", label, exc)
+
+        await asyncio.gather(
+            *(
+                guarded(
+                    self.adjudicate_claim(claim, evidence_by_subject.get(claim.claim_id, [])),
+                    claim.claim_id,
+                )
+                for claim in claims
+                # settled at routing, or at identity: no spend and no model call
+                if claim.verdict is not Verdict.OPINION and not claim.settled_without_research
+            )
+        )
+
+        await asyncio.gather(
+            *(
+                guarded(
+                    self.adjudicate_element(
+                        element, evidence_by_subject.get(element.element_id, [])
+                    ),
+                    element.element_id,
+                )
+                for element in elements
+            )
+        )
 
         # Person level rules run last, because they read across claims.
         self._apply_amber_density(elements)
@@ -509,6 +547,39 @@ class Adjudicator:
             # that is a clearance answer rather than a malfunction.
             errored = any(e.error for e in evidence)
             if not errored:
+                # Silence clears a generic set location. It does not clear a
+                # song, a painting, a brand or an allegation, and the original
+                # form of this branch made no distinction — which is how a live
+                # run put "IMAGINE" by John Lennon on a clearance report as
+                # CLEAR at confidence 0.0, and cleared the sentence "Tara Bedi
+                # embezzled forty thousand pounds from the department" on the
+                # same reasoning.
+                #
+                # For those categories the absence of a record is not evidence
+                # that no right exists; it is evidence that this run failed to
+                # find the right that almost certainly does. A rights bearing
+                # element that research could not resolve is an open question
+                # for counsel, never a clearance.
+                if element.element_type in _NEVER_CLEAR_ON_SILENCE:
+                    element.status = ClearanceStatus.NEEDS_COUNSEL
+                    element.rationale = (
+                        "Searched, and the public record returned nothing citable. For "
+                        "this category silence is not clearance: a rights holder or an "
+                        "injured party that research did not surface is not thereby "
+                        "absent. Cleared only by counsel, against the underlying "
+                        "licence or the facts."
+                    )
+                    element.confidence = 0.0
+                    element.needs_counsel = True
+                    element.counsel_reason = "no record found for a rights bearing element"
+                    self._queue(
+                        element.element_id,
+                        "element",
+                        element.rationale,
+                        element.canonical_form,
+                    )
+                    return
+
                 element.status = ClearanceStatus.CLEAR
                 element.rationale = (
                     "Searched, and the public record is silent. Nothing was found that "
@@ -969,13 +1040,7 @@ class Adjudicator:
 
     def _genai(self) -> Any:
         if self._client is None:
-            from google import genai
-
-            self._client = genai.Client(
-                vertexai=settings.use_vertex,
-                project=settings.gcp_project or None,
-                location=settings.gcp_location,
-            )
+            self._client = model_fallback.genai_client()
         return self._client
 
 
@@ -1057,6 +1122,33 @@ def _work_identified(evidence: list[Evidence]) -> bool:
 
 _DETERMINISTIC = frozenset(
     {ElementType.PHONE_NUMBER, ElementType.VEHICLE_PLATE, ElementType.URL_HANDLE}
+)
+
+#: Categories where "we found no record" must never be rendered as CLEAR.
+#:
+#: Two different reasons, same handling. A music cue, an artwork, a film clip,
+#: a print quote or a brand carries a right that exists whether or not this
+#: run's research surfaced it, so silence is a failed lookup rather than a
+#: clean result. A defamatory reference or a trade libel is an unproven
+#: allegation about somebody, and an unproven allegation is precisely what the
+#: absence of a record looks like — clearing it on silence inverts the
+#: epistemics this system exists to protect.
+_NEVER_CLEAR_ON_SILENCE = frozenset(
+    {
+        ElementType.MUSIC_CUE,
+        ElementType.ARTWORK_VISUAL,
+        ElementType.FILM_CLIP,
+        ElementType.PRINT_QUOTE,
+        ElementType.SOURCE_MATERIAL,
+        ElementType.BRAND_PRODUCT,
+        ElementType.TRADEMARK_LOGO,
+        ElementType.TATTOO,
+        ElementType.DEFAMATORY_REF,
+        ElementType.TRADE_LIBEL,
+        ElementType.REAL_PERSON_DEPICTED,
+        ElementType.REAL_PERSON_IDENTIFIABLE,
+        ElementType.DIGITAL_REPLICA,
+    }
 )
 
 
