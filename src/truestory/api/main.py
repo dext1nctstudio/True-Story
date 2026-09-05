@@ -170,11 +170,31 @@ class InterrogateRequest(BaseModel):
 
 @app.get("/healthz")
 async def healthz() -> dict[str, Any]:
+    """Liveness, plus which run store actually answered.
+
+    Added after a deployment returned `{"runs": []}` with no error anywhere
+    -- the ambiguous result get_store() produces both when there is a real
+    project with zero runs in it and when nothing is configured for it to
+    try. Distinguishing those from outside the process meant reading log
+    scrollback for a warning that only fires on an actual exception, which
+    said nothing when the true cause was a variable that was simply never
+    set. `store` here names the class directly, so the answer is one request
+    rather than a log archaeology exercise, and it never raises: a failure
+    to even construct the store is itself the finding, reported as its own
+    string rather than turning a liveness probe into a 500.
+    """
+    try:
+        store_name = type(get_store()).__name__
+    except Exception as exc:
+        store_name = f"unavailable: {type(exc).__name__}: {exc}"
+
     return {
         "ok": True,
         "mode": str(settings.mode),
         "env": settings.env_name,
         "version": app.version,
+        "store": store_name,
+        "gcp_project": settings.gcp_project or None,
     }
 
 
