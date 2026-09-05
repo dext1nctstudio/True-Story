@@ -905,6 +905,13 @@ button.counter {
   z-index: 2;
   overflow-x: auto;
   scrollbar-width: thin;
+  /* The rail is a flex column, and making this strip scrollable also made it a
+     scroll container, which changes what `min-height: auto` resolves to: a
+     content based minimum for a normal flex item, but zero for a scroll
+     container. So as soon as the rail held enough content to overflow, flex
+     shrink collapsed the whole strip to no height and the tabs vanished.
+     Refusing to shrink is what keeps them on screen. */
+  flex: 0 0 auto;
 }
 
 .tab {
