@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from truestory.models.enums import Processor, RiskTier
-from truestory.policy import load_routing, load_schema
+from truestory.policy import RoutingDecision, load_routing, load_schema
 from truestory.providers import ProviderRegistry, ResearchRequest
 
 # =============================================================================
@@ -670,8 +670,31 @@ class ClearanceTools:
         Deliberately LITE. This is a commercial estimate for a producer's
         budget, not a clearance finding, and it must never draw on the reserve
         that CRITICAL subjects depend on.
+
+        Bypasses `_run`'s subject type routing on purpose. `_run` resolves
+        `output_schema` from the *matched routing rule*, not from the
+        `schema_name` a caller passes in -- correct for every other tool here,
+        because the element type is meant to decide the schema. This question
+        has no element type; it is about a market, not about a script subject.
+        The first version passed `subject={"type": "REAL_LOCATION"}` to force
+        a cheap route, which matched `places_and_orgs` and silently swapped in
+        entity_v1's schema. The request text still asked the market cost
+        question, so Parallel and its grounded fallback both answered it
+        correctly in prose, in a schema with no `rate_found` or dollar fields
+        to hold the answer -- so a real, useful figure (confirmed on a live
+        run: "$8,000-$25,000" from an industry source) was found and then
+        discarded, and every call silently fell through to the policy table
+        while reporting nothing wrong. Building the decision directly here is
+        what `interrogate` already does for the same reason, one tool up.
         """
-        return await self._run(
+        decision = RoutingDecision(
+            rule_id="cure_cost_lookup",
+            tier=RiskTier.LOW,
+            provider="parallel_task",
+            processor=Processor.LITE,
+            schema_name="cure_cost_v1",
+        )
+        request = ResearchRequest(
             subject_id=subject_id,
             question=_Q_CURE_COST.format(
                 element=element,
@@ -679,13 +702,20 @@ class ClearanceTools:
                 scope=scope,
                 segment=segment,
             ),
+            output_schema=load_schema("cure_cost_v1"),
             schema_name="cure_cost_v1",
-            # Routed as an ordinary lookup rather than through the element
-            # rules. The question is about a market, not about whether this
-            # production may use the thing, so it must not inherit a CRITICAL
-            # tier from the element it happens to be about.
-            subject={"type": "REAL_LOCATION"},
+            tier=RiskTier.LOW,
+            processor=Processor.LITE,
+            jurisdictions=self.jurisdictions,
         )
+        evidence = await self.registry.investigate(decision, request)
+        payload = evidence.to_dict()
+        payload["routing"] = {
+            "rule": decision.rule_id,
+            "tier": str(decision.tier),
+            "escalated_by": [],
+        }
+        return payload
 
     async def watch_subject(
         self,
