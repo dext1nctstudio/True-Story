@@ -607,11 +607,7 @@ def normalise_researched_exposure(payload: dict[str, Any]) -> dict[str, Any]:
     range_found = bool(finding.get("range_found")) and complete_range
 
     typical = _non_negative_number(finding.get("typical_usd"))
-    damages = (
-        {"low": low, "high": high, "typical": typical}
-        if range_found
-        else None
-    )
+    damages = {"low": low, "high": high, "typical": typical} if range_found else None
 
     defence = None
     raw_defence = finding.get("defence_cost_usd")

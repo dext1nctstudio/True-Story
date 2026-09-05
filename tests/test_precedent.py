@@ -70,7 +70,12 @@ def _claim(
 def test_every_case_in_the_corpus_becomes_a_matchable_shape(index: PrecedentIndex) -> None:
     assert len(index.shapes) == 6
     assert {s.case_id for s in index.shapes} == {
-        "LS-001", "LS-003", "LS-101", "LS-103", "LS-104", "LS-202"
+        "LS-001",
+        "LS-003",
+        "LS-101",
+        "LS-103",
+        "LS-104",
+        "LS-202",
     }
 
 

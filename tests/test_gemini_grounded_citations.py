@@ -52,7 +52,9 @@ def test_distinct_domains_both_survive() -> None:
     response = _response(
         [
             _chunk("https://vertexaisearch.cloud.google.com/redirect/aaa", "en.wikipedia.org"),
-            _chunk("https://vertexaisearch.cloud.google.com/redirect/bbb", "sportstar.thehindu.com"),
+            _chunk(
+                "https://vertexaisearch.cloud.google.com/redirect/bbb", "sportstar.thehindu.com"
+            ),
         ]
     )
     citations = _citations_from_grounding(response)

@@ -227,9 +227,7 @@ class PrecedentIndex:
                     else None
                 ),
                 "truth_claim_framing": True if truth_claim_framing else None,
-                "text": " ".join(
-                    [element.canonical_form, *(c.claim_text for c in element.claims)]
-                ),
+                "text": " ".join([element.canonical_form, *(c.claim_text for c in element.claims)]),
             }
         )
 
@@ -339,10 +337,40 @@ def _equal(a: Any, b: Any) -> bool:
 
 
 _STOPWORDS = {
-    "a", "an", "and", "are", "as", "at", "be", "been", "by", "for", "from",
-    "had", "has", "have", "he", "her", "him", "his", "in", "is", "it", "of",
-    "on", "or", "she", "that", "the", "their", "they", "this", "to", "was",
-    "were", "with",
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "been",
+    "by",
+    "for",
+    "from",
+    "had",
+    "has",
+    "have",
+    "he",
+    "her",
+    "him",
+    "his",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "she",
+    "that",
+    "the",
+    "their",
+    "they",
+    "this",
+    "to",
+    "was",
+    "were",
+    "with",
 }
 
 
@@ -442,9 +470,9 @@ def _to_shape(case: dict[str, Any]) -> PrecedentShape | None:
         name=str(case.get("name") or case_id),
         # `failure_mode: null` is how the corpus marks the cases the studios
         # won. It is load bearing and it is the only side marker present.
-        side=str(case.get("side") or (
-            "defence" if case.get("failure_mode") is None else "plaintiff"
-        )),
+        side=str(
+            case.get("side") or ("defence" if case.get("failure_mode") is None else "plaintiff")
+        ),
         outcome=str(case.get("outcome") or case.get("failure_mode") or "").strip(),
         lesson=_lesson(case),
         verified=verified,

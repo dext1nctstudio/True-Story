@@ -150,7 +150,9 @@ def _opinion_text(result: dict[str, Any], *, token: str) -> tuple[str, str]:
     for key in ("html_with_citations", "html", "html_lawbox", "plain_text", "xml_harvard"):
         value = detail.get(key)
         if value:
-            return _text_from_bytes(str(value).encode(), "text/html", "detail.html"), "courtlistener_opinion_api"
+            return _text_from_bytes(
+                str(value).encode(), "text/html", "detail.html"
+            ), "courtlistener_opinion_api"
     return "", "opinion detail contained no text"
 
 
@@ -332,10 +334,7 @@ def main() -> int:
                 "courtlistener": _normalise_result(result, result_type) if result else None,
                 "passage_verification": verification,
             }
-            print(
-                f"  {'located' if result else 'not located'}; "
-                f"passage={verification['status']}"
-            )
+            print(f"  {'located' if result else 'not located'}; passage={verification['status']}")
             records.append(record)
         except Exception as exc:
             failures += 1
@@ -346,7 +345,9 @@ def main() -> int:
         "source": SEARCH_API,
         "retrieved_at": datetime.now(UTC).isoformat(),
         "authenticated": bool(token),
-        "corpus": str(args.corpus.relative_to(ROOT) if args.corpus.is_relative_to(ROOT) else args.corpus),
+        "corpus": str(
+            args.corpus.relative_to(ROOT) if args.corpus.is_relative_to(ROOT) else args.corpus
+        ),
         "records": records,
     }
     if args.case_id and args.out.exists():

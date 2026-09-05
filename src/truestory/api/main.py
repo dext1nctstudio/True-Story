@@ -516,9 +516,7 @@ def _persist_artifacts(project_id: str, run_id: str, state: RunState) -> None:
 
         claim_register = state.artifacts.get("report", {}).get("claim_register")
         if claim_register:
-            store.put_subject(
-                project_id, run_id, "artifacts", "claim_register", claim_register
-            )
+            store.put_subject(project_id, run_id, "artifacts", "claim_register", claim_register)
 
         eo_report = state.artifacts.get("report", {}).get("eo_report")
         if eo_report:
@@ -744,9 +742,7 @@ async def get_exposure(
         if assessments is None:
             raise HTTPException(status_code=404, detail="run not found")
         summary_rows = _stored_subjects(run_id, principal, "artifacts") or []
-        summary = next(
-            (r for r in summary_rows if "by_band" in r), {}
-        )
+        summary = next((r for r in summary_rows if "by_band" in r), {})
         payload = {**summary, "assessments": assessments}
         return apply_view(payload, principal)
 
@@ -770,9 +766,7 @@ async def get_precedents(
         if rows is None:
             raise HTTPException(status_code=404, detail="run not found")
         precedents = {
-            row["subject_id"]: row.get("matches", [])
-            for row in rows
-            if row.get("subject_id")
+            row["subject_id"]: row.get("matches", []) for row in rows if row.get("subject_id")
         }
         return apply_view({"precedents": precedents}, principal)
 

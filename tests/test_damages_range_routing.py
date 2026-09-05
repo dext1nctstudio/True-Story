@@ -56,4 +56,3 @@ async def test_damages_lookup_uses_dedicated_schema_and_lite_route() -> None:
     assert registry.decision.processor is Processor.LITE
     assert registry.decision.provider == "parallel_task"
     assert payload["schema_version"] == "damages_range_v1"
-

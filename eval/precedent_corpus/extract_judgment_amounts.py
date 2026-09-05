@@ -136,7 +136,14 @@ _SCHEMA: dict[str, Any] = {
                     },
                     "disposition": {
                         "type": "string",
-                        "enum": ["affirmed", "entered", "reversed", "vacated", "remitted", "unclear"],
+                        "enum": [
+                            "affirmed",
+                            "entered",
+                            "reversed",
+                            "vacated",
+                            "remitted",
+                            "unclear",
+                        ],
                         "description": (
                             "What this opinion did with the figure. reversed, "
                             "vacated and remitted all mean the number did not "
@@ -297,7 +304,9 @@ async def _read_passage(client: Any, passage: str, conclusion: str) -> dict[str,
 
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--per-category", type=int, default=20, help="candidate opinions per category")
+    parser.add_argument(
+        "--per-category", type=int, default=20, help="candidate opinions per category"
+    )
     parser.add_argument("--out", default=str(DEFAULT_OUT))
     args = parser.parse_args()
 
