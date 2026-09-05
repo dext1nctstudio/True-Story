@@ -1591,3 +1591,104 @@
   line-height: 1.5;
   color: var(--text-tertiary);
 }
+
+/* ── the palette's answer ────────────────────────────────────────────────────
+   ⌘K could find a subject and jump to it, which is most of what a palette is
+   for, but a reviewer's next thought after finding a line is a question about
+   it, and answering that meant closing the palette and finding the rail. The
+   answer now renders in place, above the results, so the question and what
+   came back occupy the same object.
+
+   Deliberately not styled as a verdict. It carries the provider's own capped
+   confidence and says what it is on its face, because a search round trip
+   presented with the authority of an adjudicated finding is the one thing this
+   product must never do.
+   ========================================================================= */
+
+.palette-answer {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-sunken);
+}
+
+.palette-answer-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.palette-answer-label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.palette-answer-conf {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--text-quiet);
+  font-variant-numeric: tabular-nums;
+}
+
+.palette-answer-q {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+.palette-answer-body {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-body);
+  line-height: 1.65;
+  color: var(--text);
+  max-width: 62ch;
+}
+
+.palette-answer-error {
+  margin: 0;
+  font-size: var(--fs-small);
+  line-height: 1.6;
+  color: var(--red);
+}
+
+.palette-answer-cite {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+  text-decoration: none;
+  color: var(--text-secondary);
+}
+
+.palette-answer-cite:hover .palette-answer-cite-title { color: var(--accent-hover); }
+
+.palette-answer-cite-title {
+  font-size: var(--fs-small);
+  line-height: 1.45;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-answer-cite-domain {
+  margin-left: auto;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--text-quiet);
+}
+
+.palette-answer-note {
+  margin: var(--space-3) 0 0;
+  font-size: var(--fs-micro);
+  line-height: 1.55;
+  color: var(--text-quiet);
+  max-width: 62ch;
+}

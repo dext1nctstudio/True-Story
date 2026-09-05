@@ -2378,3 +2378,393 @@ button.apply:disabled {
   margin: 0;
   vertical-align: middle;
 }
+
+/* NOTE ON ORDER: surfaces.css is @imported at the top of this file, so every
+   rule here wins over one there at equal specificity. Panel overrides
+   therefore live at the end of this file rather than beside the components
+   they restyle -- putting them in surfaces.css looked right and did nothing. */
+
+/* ============================================================================
+   THE EVIDENCE RAIL
+   ============================================================================
+   Everything below is scoped to `.panel`, so the docket, the review queue and
+   the writer's desk keep the styles they already had.
+
+   What was wrong with the rail was not any single rule, it was that four
+   independent status systems -- the verdict, the identity chip, the counsel
+   flag and the exposure band -- had each been given the same visual object: a
+   tinted fill, a coloured border, a radius, and text at the smallest size on
+   the scale. Stacked down a narrow column that produces a ladder of identical
+   lozenges in three colours, and a reader cannot tell which of them is the
+   finding and which is a footnote. The verdict, the single most important word
+   on the surface, was set two pixels smaller than the sentence under it.
+
+   So: one thing here is loud, and it is the verdict. It is set as type rather
+   than as a badge, because a word set large in the verdict's own colour is
+   more legible than the same word set small inside a coloured box. Every other
+   status drops to a quiet uppercase label that carries its colour in the text
+   alone. Colour still means exactly what it meant -- green, amber and red are
+   still reserved for a reached verdict -- there is simply far less of it.
+
+   The boxes go too. Sections are separated by hairlines and space instead of
+   being wrapped in bordered cards, which is what let seven stacked panels read
+   as one document rather than as seven competing objects. The one exception is
+   the script line itself, which stays recessed because it genuinely is a
+   quotation from another document.
+   ========================================================================= */
+
+/* ── the verdict, as a headline ──────────────────────────────────────────── */
+
+.panel .verdict-header {
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+/* No fill, no border, no box. The colour is on the word. */
+.panel .verdict-pill {
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  /* CLEAR, UNSUPPORTED, CONTRADICTED arrive uppercase from the rubric and are
+     shouting at this size. Small caps keeps the rubric's own wording intact
+     while letting it sit as a headline. */
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+}
+
+.panel .verdict-pill.green   { color: var(--green); }
+.panel .verdict-pill.amber   { color: var(--amber); }
+.panel .verdict-pill.red     { color: var(--red); }
+.panel .verdict-pill.grey,
+.panel .verdict-pill.pending { color: var(--text-secondary); }
+
+.panel .confidence {
+  font-size: var(--fs-tiny);
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+  margin-left: auto;
+}
+
+/* ── section headings ────────────────────────────────────────────────────── */
+
+.panel > .panel-title {
+  font-size: var(--fs-micro);
+  letter-spacing: 0.14em;
+  color: var(--text-quiet);
+  font-weight: 500;
+  margin-bottom: var(--space-3);
+}
+
+.panel .panel-title-section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+  color: var(--text-tertiary);
+}
+
+/* ── secondary status: a label, not a badge ──────────────────────────────── */
+
+.panel .signal-chip,
+.panel .counsel-flag,
+.panel .band-chip {
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 0;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.panel .signal-chip.green { color: var(--text-secondary); }
+.panel .signal-chip.amber { color: var(--amber); }
+.panel .signal-chip.red   { color: var(--red); }
+
+/* An identity that resolved is the expected case and does not need a colour.
+   A collision or a miss is the finding, and keeps one. */
+.panel .counsel-flag { color: var(--accent); }
+.panel .band-chip.band-red   { color: var(--red); }
+.panel .band-chip.band-amber { color: var(--amber); }
+.panel .band-chip.band-grey  { color: var(--text-tertiary); }
+
+/* ── the subject block ───────────────────────────────────────────────────── */
+
+.panel .identity {
+  margin: 0 0 var(--space-4);
+  padding: 0 0 var(--space-4) 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+}
+
+/* The left rail was the third green object in a column that already had two.
+   Status is carried by the label in the head instead. */
+.panel .identity-resolved,
+.panel .identity-collision,
+.panel .identity-unidentified { border-left: 0; }
+
+.panel .identity-head { margin-bottom: var(--space-3); }
+
+.panel .identity-name {
+  font-size: var(--fs-lead);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  border-bottom: 0;
+  color: var(--text);
+}
+
+.panel .identity-name:hover {
+  color: var(--text);
+  border-bottom: 1px solid var(--line-focus);
+}
+
+.panel .identity-desc {
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  max-width: 46ch;
+}
+
+/* Facts about the record, set as data: mono, tabular, evenly divided. */
+.panel .identity-meta {
+  gap: 0;
+  margin-top: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.02em;
+  color: var(--text-quiet);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel .identity-meta > * + * {
+  margin-left: var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--line);
+}
+
+/* ── the quoted line ─────────────────────────────────────────────────────── */
+
+/* The one thing on the rail that stays recessed, because it is a quotation
+   from the screenplay rather than a statement by this instrument. */
+.panel .claim-text {
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-sunken);
+  border: 0;
+  border-left: 2px solid var(--line-strong);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  margin: 0 0 var(--space-4);
+  color: var(--text-secondary);
+}
+
+/* ── the rubric sentence, and the reasoning ──────────────────────────────── */
+
+.panel .verdict-language {
+  font-size: var(--fs-body);
+  line-height: 1.65;
+  color: var(--text);
+  max-width: 52ch;
+}
+
+.panel .evidence-rationale {
+  font-size: var(--fs-small);
+  line-height: 1.65;
+  color: var(--text-secondary);
+  max-width: 52ch;
+}
+
+/* ── counsel line ────────────────────────────────────────────────────────── */
+
+.panel .queue-item-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: var(--space-4) 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--accent-line);
+}
+
+.panel .queue-item-subject {
+  font-size: var(--fs-small);
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* ── risk exposure ───────────────────────────────────────────────────────── */
+
+.panel .risk-card {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 0;
+  margin: var(--space-4) 0 0;
+}
+
+.panel .band-means {
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-width: 52ch;
+}
+
+/* ── sources ─────────────────────────────────────────────────────────────── */
+
+.panel .evidence-record {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 0;
+  margin: 0 0 var(--space-4);
+}
+
+.panel .evidence-record + .evidence-record {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+.panel .meta-strip {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.02em;
+  color: var(--text-quiet);
+  margin-bottom: var(--space-3);
+}
+
+.panel .citation-title {
+  font-size: var(--fs-body);
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.panel .citation-meta {
+  font-size: var(--fs-micro);
+  color: var(--text-quiet);
+  letter-spacing: 0.02em;
+}
+
+.panel .citation-excerpt {
+  font-size: var(--fs-small);
+  line-height: 1.6;
+  color: var(--text-tertiary);
+  max-width: 52ch;
+}
+
+/* ── remedy ──────────────────────────────────────────────────────────────── */
+
+.panel .remedy {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: var(--space-4) 0 0;
+  border-top: 1px solid var(--line);
+  margin: var(--space-4) 0 0;
+}
+
+.panel .remedy-label {
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.panel .remedy-proposal {
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  margin: var(--space-3) 0;
+}
+
+/* Two pills the first pass missed, because both are defined in this file and
+   the override was sitting in the imported one. */
+.panel .source-tag {
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 0;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--text-quiet);
+}
+
+.panel .source-tag.source-researched { color: var(--text-secondary); }
+
+.panel .band-chip.band-red   { background: none; border: 0; color: var(--red); }
+.panel .band-chip.band-amber { background: none; border: 0; color: var(--amber); }
+.panel .band-chip.band-grey  { background: none; border: 0; color: var(--text-tertiary); }
+
+/* The two summary blocks were bordered, filled cards sitting between the
+   verdict and the sources. Stacked with the identity block above them that
+   made three boxes in a column before a reader reached a single citation.
+   They are the same information; they just no longer announce themselves as
+   separate objects. */
+.panel .pedigree,
+.panel .attrib {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: var(--space-4) 0 0;
+  margin: var(--space-4) 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.panel .pedigree-title,
+.panel .attrib-head .pedigree-title {
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  color: var(--text-quiet);
+}
+
+.panel .pedigree-facts,
+.panel .attrib-facts {
+  font-size: var(--fs-small);
+  color: var(--text-secondary);
+}
+
+.panel .pedigree-notes,
+.panel .attrib-note {
+  font-size: var(--fs-small);
+  line-height: 1.6;
+  color: var(--text-tertiary);
+  max-width: 52ch;
+}
+
+/* Last of the lozenges. A source's pedigree is a fact about the source, and it
+   belongs beside the domain in the citation's own meta line rather than
+   competing with the verdict for attention. */
+.panel .source-badge {
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 0;
+  font-size: var(--fs-micro);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.panel .source-badge.green { color: var(--text-secondary); }
+.panel .source-badge.red { color: var(--red); }
