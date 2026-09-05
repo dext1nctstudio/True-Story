@@ -398,18 +398,41 @@ _store: RunStore | None = None
 
 
 def get_store() -> RunStore:
-    """Firestore when deployed, durable JSON locally, memory in tests/mock."""
+    """Firestore when it is configured and reachable, local JSON otherwise,
+    memory only in offline mode.
+
+    A prior version of this function selected `LocalJsonRunStore`
+    unconditionally whenever `env_name == "local"`, regardless of whether a
+    real project was configured and Firestore was actually reachable. That
+    was written to solve a real problem -- an unavailable optional Firestore
+    API turning into silent data loss -- but it solved it by never trying
+    Firestore at all on a developer machine, which is also where a developer
+    is most likely to have real credentials configured and the most reason to
+    see the Google Cloud service actually being exercised rather than quietly
+    bypassed. `TRUESTORY_ENV=local` is what a demo environment sets too, and
+    project runs made against a genuinely reachable Firestore were becoming
+    invisible to the app the moment this branch fired, not because Firestore
+    failed but because it was never asked.
+
+    So the choice is now about configuration and reachability, not about
+    which environment name is set. A configured project gets one cheap
+    liveness probe at startup; only a project with nothing configured, or a
+    probe that actually fails, falls back to the local file. That keeps the
+    original failure this function existed to prevent -- data loss when
+    Firestore has a bad day -- while no longer discarding a working
+    connection to a real service on every local run.
+    """
     global _store
     if _store is not None:
         return _store
 
     if settings.offline:
         _store = MemoryRunStore()
-    elif settings.env_name == "local" and not settings.firestore_emulator:
-        # Provider mode remains LIVE. This only selects local durability and
-        # avoids turning an unavailable optional Firestore API into data loss.
-        _store = LocalJsonRunStore()
     elif not settings.gcp_project:
+        # Nothing to try: no project configured at all, not a degrade from a
+        # failed attempt. Documented separately from the except branch below
+        # because a reader debugging "why local JSON" needs to know which of
+        # the two this run hit.
         _store = LocalJsonRunStore()
     else:
         try:
