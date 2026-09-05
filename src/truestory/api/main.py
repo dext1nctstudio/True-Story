@@ -18,6 +18,8 @@ import json
 import logging
 import tempfile
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +45,59 @@ from truestory.storage import get_store
 
 log = logging.getLogger("truestory.api")
 
+
+def _reconcile_orphaned_runs() -> None:
+    """Fail every run this process finds still in flight at boot.
+
+    A run's actual work happens inside a `BackgroundTasks` callback in this
+    same process, not a durable job queue -- nothing resumes it if the
+    process that owned it is gone. A redeploy or a free tier restart mid run
+    abandons that callback with no trace, and the run's stored status just
+    stays wherever it last landed: QUEUED forever if the process died before
+    ingest even produced a state, since nothing else ever revisits it. Any
+    run still non terminal when a fresh process starts up is, by
+    construction, one of those -- mark it FAILED so the dashboard reflects
+    reality and the user can resubmit, instead of it sitting there forever
+    looking like work is happening.
+    """
+    try:
+        store = get_store()
+        runs = store.list_all_runs()
+    except Exception:
+        log.warning("could not reconcile orphaned runs at startup", exc_info=True)
+        return
+
+    terminal = {str(RunStatus.COMPLETE), str(RunStatus.FAILED)}
+    for run in runs:
+        status = run.get("status")
+        if status in terminal:
+            continue
+        project_id, run_id = run.get("project_id"), run.get("run_id")
+        if not project_id or not run_id:
+            continue
+        try:
+            store.update_run(
+                project_id,
+                run_id,
+                {
+                    "status": str(RunStatus.FAILED),
+                    "error": (
+                        f"Interrupted while {status or 'QUEUED'}: the server restarted "
+                        "before this run finished. Please resubmit."
+                    ),
+                },
+            )
+            log.warning("marked orphaned run %s (was %s) as failed on startup", run_id, status)
+        except Exception:
+            log.warning("could not mark orphaned run %s as failed", run_id, exc_info=True)
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    _reconcile_orphaned_runs()
+    yield
+
+
 app = FastAPI(
     title="TRUE STORY",
     description=(
@@ -50,6 +105,7 @@ app = FastAPI(
         "Decision support for a clearance attorney. Not legal advice."
     ),
     version="0.1.0",
+    lifespan=_lifespan,
 )
 
 app.add_middleware(

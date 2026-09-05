@@ -52,6 +52,14 @@ class RunStore:
         """Every persisted run for a project, newest first."""
         raise NotImplementedError
 
+    def list_all_runs(self) -> list[dict[str, Any]]:
+        """Every persisted run across every project, order unspecified.
+
+        Used only for startup reconciliation, where the caller does not yet
+        know which projects exist.
+        """
+        raise NotImplementedError
+
     def put_subject(
         self, project_id: str, run_id: str, kind: str, subject_id: str, payload: dict[str, Any]
     ) -> None:
@@ -122,6 +130,9 @@ class MemoryRunStore(RunStore):
         prefix = f"{project_id}/"
         rows = [v for k, v in self._runs.items() if k.startswith(prefix)]
         return sorted(rows, key=lambda r: r.get("created_at") or "", reverse=True)
+
+    def list_all_runs(self) -> list[dict[str, Any]]:
+        return list(self._runs.values())
 
     def put_subject(
         self, project_id: str, run_id: str, kind: str, subject_id: str, payload: dict[str, Any]
@@ -305,6 +316,9 @@ class FirestoreRunStore(RunStore):
         docs = self.db.collection("projects").document(project_id).collection("runs").stream()
         rows = [d.to_dict() for d in docs]
         return sorted(rows, key=lambda r: str(r.get("created_at") or ""), reverse=True)
+
+    def list_all_runs(self) -> list[dict[str, Any]]:
+        return [d.to_dict() for d in self.db.collection_group("runs").stream()]
 
     # ── subjects ─────────────────────────────────────────────────────────────
     def put_subject(
