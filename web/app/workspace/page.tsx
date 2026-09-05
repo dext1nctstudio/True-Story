@@ -601,6 +601,45 @@ export default function Workspace() {
           )}
 
           <div className="header-controls">
+            {/* The report was reachable only through the command palette and
+                the last rail tab, and that tab was being clipped off the edge
+                of the strip. A finished run's deliverable should not be
+                something you have to know a keyboard shortcut to find. */}
+            {caps.reports && runId && (
+              <div className="export-actions">
+                {runStatus === "COMPLETE" ? (
+                  <>
+                    <a
+                      className="btn"
+                      href={reportPdfUrl(runId)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="The E&O clearance report for this draft"
+                    >
+                      Report
+                    </a>
+                    <a
+                      className="btn btn-quiet"
+                      href={clearanceLogUrl(runId)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="The clearance log, the insurer checklist, as CSV"
+                    >
+                      CSV
+                    </a>
+                  </>
+                ) : (
+                  <span
+                    className="btn btn-quiet is-disabled"
+                    aria-disabled="true"
+                    title="The report is written in the final stage of the run."
+                  >
+                    Report
+                  </span>
+                )}
+              </div>
+            )}
+
             <button suppressHydrationWarning
               className="btn btn-quiet"
               onClick={() => setPaletteOpen(true)}

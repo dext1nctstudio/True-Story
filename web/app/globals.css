@@ -360,6 +360,30 @@ body {
   gap: var(--space-2);
 }
 
+/* The run's deliverables, kept as one pair rather than two loose buttons. */
+.export-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Shown before the reporting stage has written anything, so the control is
+   discoverable while the run is still working without offering an empty file. */
+.btn.is-disabled {
+  opacity: 0.45;
+  cursor: default;
+  box-shadow: none;
+}
+
+/* It is a span, so it cannot be clicked regardless; the hover is suppressed
+   rather than the pointer events, which would take the tooltip explaining why
+   it is not available yet with them. */
+.btn.is-disabled:hover {
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+  transform: none;
+}
+
 /* Something is running. The dot carries the motion so the word does not have
    to blink, which would be unreadable next to live counters. */
 .stage-indicator {
@@ -864,6 +888,12 @@ button.counter {
   font-weight: 600;
 }
 
+/* Counsel carries seven tabs and the rail is a fixed column, so the strip
+   overflows. It used to overflow by simply clipping: Package, the last tab and
+   the only route to the clearance report and the log, was cut off past the
+   right edge with nothing to indicate it existed or any way to reach it. The
+   strip scrolls now, and the tabs keep their width rather than being squeezed
+   into illegibility to fit. */
 .tabs {
   display: flex;
   border-bottom: 1px solid var(--line);
@@ -873,6 +903,8 @@ button.counter {
   top: 0;
   background: var(--surface);
   z-index: 2;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .tab {
@@ -887,6 +919,8 @@ button.counter {
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   transition: color var(--ease);
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .tab:hover {
