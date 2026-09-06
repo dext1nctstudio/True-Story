@@ -346,6 +346,7 @@ class TrueStoryPipeline:
         # Claims inherit their subject's identity, and the ones whose subject
         # is nobody are settled here rather than researched.
         by_element = {e.element_id: e for e in state.elements}
+        _inherit_subject_alive(state.claims, state.elements)
         settled = 0
         for claim in state.claims:
             element = by_element.get(claim.subject_element_id)
@@ -1001,6 +1002,36 @@ def _identifiable_subjects(
 #: these is the finding; a collision on a person the script presents as real is
 #: an uncertain identification, which is a reason to research carefully.
 _INVENTED_BY_DESIGN = frozenset({"PERSON_NAME_FICTIONAL"})
+
+
+def _inherit_subject_alive(claims: list[FactualClaim], elements: list[ClearableElement]) -> None:
+    """Carry `subject_alive` from a resolved subject onto its claims.
+
+    Identity writes this onto the element, and the router reads it off the
+    claim. Nothing joined the two, so it was still None at routing time and
+    `claim_negative_living` -- the rule that sends a negative claim about a
+    living person to the deepest processor at CRITICAL tier, and whose own
+    note names Queen's Gambit, Baby Reindeer and Fairstein -- could not match.
+    Observed live: identity resolved Nona Gaprindashvili to Q231630 with
+    `deceased: False` and set the element to alive, while the claim that she
+    "had never faced men" routed to `parallel_task:base`. The run completed
+    and reported normally; the marquee rule had simply never fired.
+
+    The adjudicator does populate this later from the research payload, but
+    that is a stage after routing has already chosen the processor.
+
+    Unknown stays unknown, and a claim that already carries its own answer
+    keeps it: this fills a gap, it does not overrule a finding.
+    """
+    alive_by_element = {
+        e.element_id: e.subject_alive for e in elements if e.subject_alive is not None
+    }
+    for claim in claims:
+        if claim.subject_alive is not None:
+            continue
+        alive = alive_by_element.get(claim.subject_element_id)
+        if alive is not None:
+            claim.subject_alive = alive
 
 
 def _blocks_research(identity: dict[str, Any], element_type: str) -> bool:
