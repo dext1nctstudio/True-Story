@@ -340,6 +340,10 @@ async def list_runs(
     ]
 
     live = {r["run_id"] for r in rows}
+    if settings.hide_stored_runs:
+        rows.sort(key=lambda r: str(r["started_at"] or ""), reverse=True)
+        return {"runs": rows, "stored_hidden": True}
+
     try:
         for stored in get_store().list_runs(project_id):
             run_id = stored.get("run_id")
