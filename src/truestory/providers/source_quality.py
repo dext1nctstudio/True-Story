@@ -153,6 +153,16 @@ PRIMARY_DOMAINS: frozenset[str] = frozenset(
         "oscars.org",
         "bafta.org",
         "grammy.com",
+        # Chess governing bodies and the databases that hold the actual game
+        # and tournament record. Without these, a claim about who played whom
+        # resolves to a game database Parallel itself calls primary, the host
+        # is unrecognised, and a correct contradiction is downgraded to
+        # unsupported for want of a record that was sitting right there.
+        "fide.com",
+        "ratings.fide.com",
+        "olimpbase.org",
+        "worldchesshof.org",
+        "chessgames.com",
     }
 )
 
@@ -466,6 +476,13 @@ STATISTICAL_REGISTERS: frozenset[str] = frozenset(
         "bcci.tv",
         "ecb.co.uk",
         "cricketaustralia.com.au",
+        # Chess: the governing body, its rating and event archive, and the
+        # game databases that are the record of who played whom.
+        "fide.com",
+        "ratings.fide.com",
+        "olimpbase.org",
+        "worldchesshof.org",
+        "chessgames.com",
     }
 )
 

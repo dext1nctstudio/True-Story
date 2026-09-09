@@ -61,6 +61,13 @@ class Settings(BaseSettings):
     log_level: str = Field(default="info", alias="TRUESTORY_LOG_LEVEL")
     env_name: str = Field(default="local", alias="TRUESTORY_ENV")
 
+    # Hide previously stored runs from the project run list, leaving only the
+    # runs this process has seen. A demo or a test pass against a project with
+    # months of history otherwise opens on a docket of other people's runs.
+    # The runs are untouched: this hides them from one list, and a direct link
+    # to any of them still resolves from the store.
+    hide_stored_runs: bool = Field(default=False, alias="TRUESTORY_HIDE_STORED_RUNS")
+
     # ── google cloud ─────────────────────────────────────────────────────────
     gcp_project: str = Field(default="", alias="GOOGLE_CLOUD_PROJECT")
     # Vertex AI only. Firestore, Cloud Storage and BigQuery carry their own
